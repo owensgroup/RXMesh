@@ -11,6 +11,7 @@
 #include <Eigen/Sparse>
 #include <cholmod.h>
 #include "ordering.h"
+#include "gpu_ordering_v3.h"
 #include "gpu_ordering_v2.h"
 
 namespace RXMESH_SOLVER {

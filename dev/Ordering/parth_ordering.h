@@ -7,6 +7,7 @@
 #pragma once
 
 
+#ifdef USE_PARTH
 #include <Eigen/Core>
 #include <parth//parth.h>
 #include "ordering.h"
@@ -37,4 +38,7 @@ public:
     void computeTheStatisticsOfPatches();
 };
 
+
+
 }  // namespace PARTH_SOLVER
+#endif

@@ -21,12 +21,41 @@ GPUOrdering_V3::~GPUOrdering_V3()
 {
 }
 
-void GPUOrdering_V3::setGraph(int* Gp, int* Gi, int G_N, int NNZ)
+void GPUOrdering_V3::setGraph(const int* Gp, const int* Gi, int G_N, int NNZ)
 {
     this->Gp    = Gp;
     this->Gi    = Gi;
     this->G_n   = G_N;
     this->G_nnz = NNZ;
+#ifndef NDEBUG
+    spdlog::info("Checking that the graph has no diagonal entry...");
+    for (int i = 0; i < G_N; i ++) {
+        for (int nbr_ptr = Gp[i]; nbr_ptr < Gp[i + 1]; nbr_ptr++) {
+            int nbr_idx = Gi[nbr_ptr];
+            if (nbr_idx == i) {
+                spdlog::error("setGraph: Found diagonal entry at node {}!", i);
+                spdlog::error("  Gp[{}] = {}, Gp[{}] = {}", i, Gp[i], i + 1, Gp[i + 1]);
+                spdlog::error("  Full adjacency list:");
+                for (int ptr = Gp[i]; ptr < Gp[i + 1]; ++ptr) {
+                    spdlog::error("    Gi[{}] = {}", ptr, Gi[ptr]);
+                }
+            }
+            assert(nbr_idx != i);
+        }
+    }
+    spdlog::info("Graph has no diagonal entry");
+    
+    // Also specifically check node 3697 if it exists
+    if (G_N > 3697) {
+        spdlog::info("Specifically checking node 3697:");
+        spdlog::info("  Gp[3697] = {}, Gp[3698] = {}", Gp[3697], Gp[3698]);
+        spdlog::info("  Neighbors of node 3697:");
+        for (int ptr = Gp[3697]; ptr < Gp[3698]; ++ptr) {
+            spdlog::info("    Gi[{}] = {}", ptr, Gi[ptr]);
+        }
+    }
+#endif
+
 }
 
 
@@ -134,61 +163,168 @@ void GPUOrdering_V3::local_permute(Eigen::SparseMatrix<int>& local_graph,
     }
 }
 
-void GPUOrdering_V3::compute_separator(
-    Eigen::SparseMatrix<int>& quotient_graph,
-    std::vector<int>&         quotient_graph_node_weights,
-    std::vector<int>&         separator_nodes,
-    std::vector<std::pair<int, int>>&         left_assigned,
-    std::vector<std::pair<int, int>>&         right_assigned)
-{
-    //TODO: IMPLEMENT THIS FUNCTION
-  //General Flow:
-  // Step 1: Use the separator computation to find the patches that are separator
-  // Step 2: refine separator by converting the separator patches into the actual fine-grain graph
-  // Step 3: Create the patches related to left and right children
-  
 
-  
+void GPUOrdering_V3::refine_separator_with_metis_internals(
+    int  N,
+    int* Gp,
+    int* Gi,
+    int* where /* in/out {0,1,2} */)
+{
+    std::vector<idx_t> hmarker(N);
+    for (int i = 0; i < N; ++i) {
+        if (where[i] == 2) {
+            hmarker[i] = -1;
+        } else {
+            hmarker[i] = 2;
+        }
+    }
+
+    // Use METIS default imbalance tolerance: ufactor = 30  -> ratio 1.03
+    const real_t ub = 1.03;
+
+    // Run refinement (updates 'w' in place)
+    METIS_NodeRefine(N,
+                     Gp,
+                     /*vwgt*/ nullptr,  // unit weights
+                     Gi,
+                     where,
+                     hmarker.data(),
+                     ub);  // :contentReference[oaicite:28]{index=28}
 }
 
 
-void GPUOrdering_V3::compute_sub_graph(Eigen::SparseMatrix<int>& graph,
-                                       std::vector<int>& graph_node_weights,
-                                       Eigen::SparseMatrix<int>& sub_graph,
-                                       std::vector<int>& local_node_weights,
-                                       std::vector<int>& nodes) const
+void GPUOrdering_V3::compute_separator(
+    Eigen::SparseMatrix<int>& graph,           ///<[in] The local graph
+    Eigen::SparseMatrix<int>& quotient_graph,  ///<[in] The local quotient graph
+    std::vector<int>& quotient_graph_node_weights,  ///<[in] The node weights of
+                                                    ///<the local quotient graph
+    std::vector<int>& node_to_partition,   ///<[in] The node to partition map
+    std::vector<int>& separator_nodes,     ///<[out] The separator nodes
+    std::vector<int>& left_assigned_dofs,  ///<[out] The left assigned dofs
+    std::vector<int>& right_assigned_dofs  ///<[out] The right assigned dofs
+)
+{
+
+    // TODO: IMPLEMENT THIS FUNCTION
+    // General Flow:
+    //  Step 1: Use the separator computation to find the patches that are
+    //  separator Step 2: refine separator nodes using METIS logic Return left
+    //  and right assigned dofs with separator nodes
+    std::vector<int> where(graph.rows(), 0);
+    idx_t            Q_N = quotient_graph.rows();
+    if (Q_N < 2) {
+        // Call vertex separator on the actual graph
+        spdlog::info("Computing separator for actual graph");
+        std::vector<int> vweight(graph.rows(), 1);
+        idx_t            N = graph.rows();
+        idx_t            csp;
+        int              ret = METIS_ComputeVertexSeparator(&N,
+                                               graph.outerIndexPtr(),
+                                               graph.innerIndexPtr(),
+                                               vweight.data(),
+                                               NULL,
+                                               &csp,
+                                               where.data());
+    } else {
+        spdlog::info("Computing separator for quotient graph");
+        std::vector<int> q_where(Q_N, 0);
+        assert(Q_N == quotient_graph_node_weights.size());
+        idx_t csp;
+        int   ret =
+            METIS_ComputeVertexSeparator(&Q_N,
+                                         quotient_graph.outerIndexPtr(),
+                                         quotient_graph.innerIndexPtr(),
+                                         quotient_graph_node_weights.data(),
+                                         NULL,
+                                         &csp,
+                                         q_where.data());
+
+        // Map coarse to fine nodes
+        int  sep_size_before_refinement = 0;
+        bool has_separator              = false;
+        for (int i = 0; i < graph.rows(); i++) {
+            where[i] = q_where[node_to_partition[i]];
+            if (where[i] == 2) {
+                sep_size_before_refinement++;
+                has_separator = true;
+            }
+        }
+
+
+        // Refine separator nodes using METIS logic
+        spdlog::info("Refining separator nodes using METIS logic");
+        if (has_separator) {
+            refine_separator_with_metis_internals(graph.rows(),
+                                                  graph.outerIndexPtr(),
+                                                  graph.innerIndexPtr(),
+                                                  where.data());
+        }
+
+
+        // Assign the separator nodes to the left and right assigned dofs
+        spdlog::info("Assigning separator nodes to the left and right assigned dofs");
+        left_assigned_dofs.clear();
+        right_assigned_dofs.clear();
+        separator_nodes.clear();
+        for (int i = 0; i < graph.rows(); i++) {
+            if (where[i] == 0) {
+                left_assigned_dofs.push_back(i);
+            } else if (where[i] == 1) {
+                right_assigned_dofs.push_back(i);
+            } else if (where[i] == 2) {
+                separator_nodes.push_back(i);
+            }
+        }
+        spdlog::info("Separator size reduced from {} -> {}",
+                     sep_size_before_refinement,
+                     separator_nodes.size());
+    }
+}
+
+
+void GPUOrdering_V3::compute_sub_graph(
+    std::vector<int>&         nodes,
+    Eigen::SparseMatrix<int>& local_graph) const
 {
     // Compute global node to local node mapping
-    std::vector<int> global_to_local(graph.rows(), -1);
-    local_node_weights.resize(nodes.size(), 0);
+    std::vector<int> global_to_local(G_n, -1);
     for (int i = 0; i < nodes.size(); ++i) {
+        assert(global_to_local[nodes[i]] == -1);
         global_to_local[nodes[i]] = i;
-        local_node_weights[i]     = graph_node_weights[nodes[i]];
     }
 
     // Compute triplets for the sub graph
     std::vector<Eigen::Triplet<int>> triplets;
     for (int i = 0; i < nodes.size(); ++i) {
-        for (int nbr_ptr = graph.outerIndexPtr()[nodes[i]];
-             nbr_ptr < graph.outerIndexPtr()[nodes[i] + 1];
+        int node_id = nodes[i];
+        for (int nbr_ptr = Gp[node_id]; nbr_ptr < Gp[node_id + 1];
              ++nbr_ptr) {
-            int nbr_id = graph.innerIndexPtr()[nbr_ptr];
+            int nbr_id = Gi[nbr_ptr];
+            if (node_id == nbr_id) {
+                spdlog::info("node {} has a diagonal edge to itself", node_id);
+                spdlog::info("  Gp[{}] = {}, Gp[{}] = {}", node_id, Gp[node_id], node_id + 1, Gp[node_id + 1]);
+                spdlog::info("  nbr_ptr = {}, Gi[{}] = {}", nbr_ptr, nbr_ptr, nbr_id);
+                spdlog::info("  Full adjacency list for node {}:", node_id);
+                for (int ptr = Gp[node_id]; ptr < Gp[node_id + 1]; ++ptr) {
+                    spdlog::info("    Gi[{}] = {}", ptr, Gi[ptr]);
+                }
+            }
+
+
+            assert(node_id != nbr_id);
             if (global_to_local[nbr_id] == -1)
                 continue;
-            triplets.emplace_back(
-                i, global_to_local[nbr_id], graph.valuePtr()[nbr_ptr]);
+            triplets.emplace_back(i, global_to_local[nbr_id], 1);
             assert(i != global_to_local[nbr_id]);
             assert(i == global_to_local[nodes[i]]);
         }
     }
 
     // Form the sub graph
-    sub_graph.resize(nodes.size(), nodes.size());
-    sub_graph.setFromTriplets(triplets.begin(), triplets.end());
-    sub_graph.makeCompressed();
+    local_graph.resize(nodes.size(), nodes.size());
+    local_graph.setFromTriplets(triplets.begin(), triplets.end());
+    local_graph.makeCompressed();
 }
-
-
 
 
 int GPUOrdering_V3::post_order_offset_computation(int offset,
@@ -216,62 +352,83 @@ int GPUOrdering_V3::post_order_offset_computation(int offset,
 }
 
 
-void GPUOrdering_V3::normalize_node_to_patch(std::vector<std::pair<int, int>>& node_to_patch) {
-    std::set<int> unique_ids;
-    std::map<int, int>      node_per_patch_count;
-    std::map<int, int>      old_to_new_patch_id;
+void GPUOrdering_V3::normalize_node_to_patch(
+    std::vector<std::pair<int, int>>& node_to_patch)
+{
+    std::set<int>      unique_ids;
+    std::map<int, int> node_per_patch_count;
+    std::map<int, int> old_to_new_patch_id;
     for (int i = 0; i < node_to_patch.size(); ++i) {
         unique_ids.insert(node_to_patch[i].second);
         node_per_patch_count[node_to_patch[i].second]++;
     }
 
     int new_patch_id = 0;
-    for(auto& id : unique_ids) {
+    for (auto& id : unique_ids) {
         old_to_new_patch_id[id] = new_patch_id;
         new_patch_id++;
     }
 
-    for(int i = 0; i < node_to_patch.size(); ++i) {
+    for (int i = 0; i < node_to_patch.size(); ++i) {
         node_to_patch[i].second = old_to_new_patch_id[node_to_patch[i].second];
-        assert(node_to_patch[i].second >= 0 && node_to_patch[i].second < new_patch_id);
+        assert(node_to_patch[i].second >= 0 &&
+               node_to_patch[i].second < new_patch_id);
     }
 }
 
-void GPUOrdering_V3::compute_quotient_graph(std::vector<std::pair<int, int>>& node_to_patch,
-     Eigen::SparseMatrix<int>& quotient_graph,
-     std::vector<int>& quotient_graph_node_weights){
-        //TODO: IMPLEMENT THIS FUNCTION
-        int num_patches = 0;
-        std::unordered_set<int> unique_ids;
-        for(auto& node_to_patch : node_to_patch) {
-            unique_ids.insert(node_to_patch.second);
-        }
-        num_patches = unique_ids.size();
+void GPUOrdering_V3::compute_quotient_graph(
+    std::vector<int>&         assigned_dofs,
+    Eigen::SparseMatrix<int>& quotient_graph,
+    std::vector<int>&         quotient_graph_node_weights,
+    std::vector<int>&         global_to_local_patch_id)
+{
+    // TODO: IMPLEMENT THIS FUNCTION
+    std::vector<bool> in_assigned_dofs(this->G_n, false);
+    for (auto& dof : assigned_dofs) {
+        in_assigned_dofs[dof] = true;
+    }
+    std::set<int> unique_patch_ids;
+    for (auto& dof : assigned_dofs) {
+        unique_patch_ids.insert(this->node_to_patch[dof]);
+    }
+    global_to_local_patch_id.clear();
+    global_to_local_patch_id.resize(this->num_patches, -1);
+    int local_patch_id = 0;
+    for (auto& patch_id : unique_patch_ids) {
+        global_to_local_patch_id[patch_id] = local_patch_id;
+        local_patch_id++;
+    }
 
-        quotient_graph_node_weights.clear();
-        quotient_graph_node_weights.resize(num_patches, 0);
-        std::vector<int> global_node_to_local_patch_id(G_n, -1);
-        for(int i = 0; i < node_to_patch.size(); ++i) {
-            global_node_to_local_patch_id[node_to_patch[i].first] = node_to_patch[i].second;
+    quotient_graph_node_weights.clear();
+    quotient_graph_node_weights.resize(unique_patch_ids.size(), 0);
+    // Create triplet for sparse matrix creation
+    std::vector<Eigen::Triplet<int>> triplets;
+    for (int i = 0; i < assigned_dofs.size(); ++i) {
+        int node_id = assigned_dofs[i];
+        int local_patch_id =
+            global_to_local_patch_id[this->node_to_patch[node_id]];
+        assert(local_patch_id != -1);
+        quotient_graph_node_weights[local_patch_id]++;
+        for (int nbr_ptr = Gp[node_id]; nbr_ptr < Gp[node_id + 1]; ++nbr_ptr) {
+            int nbr_id = Gi[nbr_ptr];
+            if (!in_assigned_dofs[nbr_id])
+                continue;
+            int nbr_local_patch_id =
+                global_to_local_patch_id[this->node_to_patch[nbr_id]];
+            // The nbr is not part of this local graph
+            if (nbr_local_patch_id == -1)
+                continue;
+
+            if (nbr_local_patch_id == local_patch_id)
+                continue;  // Skip boundary vertices and self-loops
+            assert(nbr_local_patch_id != -1);
+            assert(local_patch_id != -1);
+            triplets.emplace_back(local_patch_id, nbr_local_patch_id, 1);
         }
-        // Create triplet for sparse matrix creation
-        std::vector<Eigen::Triplet<int>> triplets;
-        for (int i = 0; i < node_to_patch.size(); ++i) {
-            int node_id = node_to_patch[i].first;
-            int patch_id = node_to_patch[i].second;
-            quotient_graph_node_weights[patch_id]++;
-            for (int nbr_ptr = Gp[i]; nbr_ptr < Gp[i + 1]; ++nbr_ptr) {
-                int nbr_id    = Gi[nbr_ptr];
-                int nbr_patch_id = global_node_to_local_patch_id[nbr_id];
-                if (nbr_patch_id == patch_id)
-                    continue;  // Skip boundary vertices and self-loops
-                assert(nbr_patch_id != -1);
-                triplets.emplace_back(patch_id, nbr_patch_id, 1);
-            }
-        }
-        quotient_graph.resize(num_patches, num_patches);
-        quotient_graph.setFromTriplets(triplets.begin(), triplets.end());
-        quotient_graph.makeCompressed();
+    }
+    quotient_graph.resize(unique_patch_ids.size(), unique_patch_ids.size());
+    quotient_graph.setFromTriplets(triplets.begin(), triplets.end());
+    quotient_graph.makeCompressed();
 }
 
 void GPUOrdering_V3::decompose()
@@ -287,8 +444,7 @@ void GPUOrdering_V3::decompose()
     {
         int              decomposition_node_id        = -1;
         int              decomposition_node_parent_id = -1;
-        int              num_patches = -1;
-        std::vector<std::pair<int, int>> node_to_patch;
+        std::vector<int> assigned_dofs;
     };
 
     // Initialize the first call for the decomposition info stack
@@ -296,9 +452,8 @@ void GPUOrdering_V3::decompose()
         total_number_of_decomposition_nodes);
     decomposition_info_stack[0].decomposition_node_id        = 0;
     decomposition_info_stack[0].decomposition_node_parent_id = -1;
-    decomposition_info_stack[0].num_patches = this->init_num_patches;
-    for(int i = 0; i < this->initial_node_to_patch.size(); ++i) {
-        decomposition_info_stack[0].node_to_patch.push_back(std::make_pair(i, this->initial_node_to_patch[i]));
+    for (int i = 0; i < this->node_to_patch.size(); ++i) {
+        decomposition_info_stack[0].assigned_dofs.push_back(i);
     }
 
     // #pragma omp parallel
@@ -308,15 +463,23 @@ void GPUOrdering_V3::decompose()
             int end_level_idx   = (1 << (l + 1)) - 1;
             assert(end_level_idx < total_number_of_decomposition_nodes);
             // #pragma omp for schedule(dynamic)
-            for (int node_idx = start_level_idx; node_idx < end_level_idx; ++node_idx) {
+            for (int node_idx = start_level_idx; node_idx < end_level_idx;
+                 ++node_idx) {
                 // Get the input information for the current node
-                int decomposition_node_id = decomposition_info_stack[node_idx].decomposition_node_id;
-                int decomposition_node_parent_id = decomposition_info_stack[node_idx].decomposition_node_parent_id;
-                auto& assigned_nodes = decomposition_info_stack[node_idx].node_to_patch;
-                int num_patches = decomposition_info_stack[node_idx].num_patches;
-                auto& cur_decomposition_node = decomposition_tree.decomposition_nodes[decomposition_node_id];
-                //+++++++++++++ If there are no patches assigned to the node ++++++++++++++++
-                if (assigned_nodes.size() == 0)
+                spdlog::info("*********** Working on node {} ***********", node_idx);
+                int decomposition_node_id =
+                    decomposition_info_stack[node_idx].decomposition_node_id;
+                int decomposition_node_parent_id =
+                    decomposition_info_stack[node_idx]
+                        .decomposition_node_parent_id;
+                std::vector<int>& assigned_dofs =
+                    decomposition_info_stack[node_idx].assigned_dofs;
+                auto& cur_decomposition_node =
+                    decomposition_tree
+                        .decomposition_nodes[decomposition_node_id];
+                //+++++++++++++ If there are no patches assigned to the node
+                //++++++++++++++++
+                if (assigned_dofs.size() == 0)
                     continue;
 
                 if (decomposition_node_id == -1 ||
@@ -324,7 +487,9 @@ void GPUOrdering_V3::decompose()
                     if (decomposition_node_id != 0) {
                         spdlog::error("The info is not initialized correctly.");
                         spdlog::error("The level is {}", l);
-                        spdlog::error("The node_id {}, and parent_id {}", decomposition_node_id, decomposition_node_parent_id);
+                        spdlog::error("The node_id {}, and parent_id {}",
+                                      decomposition_node_id,
+                                      decomposition_node_parent_id);
                     }
                 }
 
@@ -332,15 +497,7 @@ void GPUOrdering_V3::decompose()
                 //+++++++++++++ If it is a leaf node ++++++++++++++++
                 if (l == wavefront_levels - 1) {
                     // Add all the nodes in the patches to the dofs
-                    std::vector<int> dofs;
-                    for (auto& node_to_patch : assigned_nodes) {
-                        int node_id = node_to_patch.first;
-                        int patch_id = node_to_patch.second;
-                        assert(patch_id >= 0 && patch_id < num_patches &&
-                               "Invalid patch_id");
-                        dofs.push_back(node_id);
-                    }
-                    assert(dofs.size() > 0 &&
+                    assert(assigned_dofs.size() > 0 &&
                            "Leaf node should have at least one DOF");
                     cur_decomposition_node.init_node(
                         -1,
@@ -348,100 +505,113 @@ void GPUOrdering_V3::decompose()
                         decomposition_node_id,
                         decomposition_node_parent_id,
                         l,
-                        dofs);
-                    continue;
-                }
-                //**** If there is only one patch assigned to the node */
-                if (num_patches == 1) {
-                    // Add all the nodes in the patch to the dofs
-                    std::vector<int> dofs;
-                    for (auto& node_to_patch : assigned_nodes) {
-                        int node_id = node_to_patch.first;
-                        int patch_id = node_to_patch.second;
-                        assert(patch_id >= 0 && patch_id < num_patches &&
-                               "Invalid patch_id in single patch case");
-                        dofs.push_back(node_id);
-                    }
-                    assert(dofs.size() > 0 &&
-                           "Single patch node should have at least one DOF");
-                    // Permute the dofs and initialize the decomposition node
-                    cur_decomposition_node.init_node(
-                        -1,
-                        -1,
-                        decomposition_node_id,
-                        decomposition_node_parent_id,
-                        l,
-                        dofs);
+                        assigned_dofs);
                     continue;
                 }
 
                 //+++++++++++++ If it is not a leaf node ++++++++++++++++
                 // Overall flow:
-                // Step 1: Use the separator computation to find the patches that are separator
-                // Step 2: refine separator by converting the separator patches into the actual fine-grain graph
-                // Step 3: Create a set of new local patches after separation of the separator patches
-                // Step 4: Initialize the input of the left and right
+                // Step 1: Create local graph and local quotient graph
+                // Step 2: Compute the separator nodes
+                // Step 3: Initialize the input of the left and right
                 // childeren for the next wavefront
+                // Local graph
+                Eigen::SparseMatrix<int> local_graph;
+                this->compute_sub_graph(assigned_dofs, local_graph);
 
-                //=========== Step 1 and 2 and 3: Use the separator computation to find the patches that are separator
-                // and refine separator by converting the separator patches into the actual fine-grain graph
+                Eigen::SparseMatrix<int> local_quotient_graph;
+                std::vector<int>         local_quotient_graph_node_weights;
+                std::vector<int>         global_to_local_patch_id;
+                this->compute_quotient_graph(assigned_dofs,
+                                             local_quotient_graph,
+                                             local_quotient_graph_node_weights,
+                                             global_to_local_patch_id);
 
-                Eigen::SparseMatrix<int> quotient_graph;
-                std::vector<int> quotient_graph_node_weights;
-                this->compute_quotient_graph(assigned_nodes, quotient_graph, quotient_graph_node_weights);
-                // Compute the bipartition of the local quotient graph
-                std::vector<std::pair<int, int>> left_assigned, right_assigned;
+                std::vector<int> local_node_to_partition(assigned_dofs.size(),
+                                                         -1);
+                for (int i = 0; i < assigned_dofs.size(); ++i) {
+                    local_node_to_partition[i] = global_to_local_patch_id
+                        [this->node_to_patch[assigned_dofs[i]]];
+                }
+
+                // Compute the separator nodes using the local graph and local
+                // quotient graph
+                std::vector<int> left_assigned_dofs, right_assigned_dofs;
                 std::vector<int> separator_nodes;
-                this->compute_separator(quotient_graph, quotient_graph_node_weights, separator_nodes, left_assigned, right_assigned);
+                this->compute_separator(local_graph,
+                                        local_quotient_graph,
+                                        local_quotient_graph_node_weights,
+                                        local_node_to_partition,
+                                        separator_nodes,
+                                        left_assigned_dofs,
+                                        right_assigned_dofs);
 
-                //=========== Step 4: Initialize the input of the left and right
-                //children for the next wavefront ============
-                int left_node_idx = decomposition_node_id * 2 + 1;
+                // Map the local nodes to the global nodes
+                std::vector<int> global_separator_nodes;
+                std::vector<int> global_left_assigned_dofs;
+                std::vector<int> global_right_assigned_dofs;
+                for (int i = 0; i < separator_nodes.size(); ++i) {
+                    global_separator_nodes.push_back(
+                        assigned_dofs[separator_nodes[i]]);
+                }
+                for (int i = 0; i < left_assigned_dofs.size(); ++i) {
+                    global_left_assigned_dofs.push_back(
+                        assigned_dofs[left_assigned_dofs[i]]);
+                }
+                for (int i = 0; i < right_assigned_dofs.size(); ++i) {
+                    global_right_assigned_dofs.push_back(
+                        assigned_dofs[right_assigned_dofs[i]]);
+                }
+
+                // Initialize the input of the left and right children for the
+                // next wavefront
+                int left_node_idx  = decomposition_node_id * 2 + 1;
                 int right_node_idx = decomposition_node_id * 2 + 2;
-                if (left_assigned.empty()) {
+                if (left_assigned_dofs.empty()) {
                     left_node_idx = -1;
                 }
-                if (right_assigned.empty()) {
+                if (right_assigned_dofs.empty()) {
                     right_node_idx = -1;
                 }
 
+                std::sort(global_separator_nodes.begin(),
+                          global_separator_nodes.end());
+                std::sort(global_left_assigned_dofs.begin(),
+                          global_left_assigned_dofs.end());
+                std::sort(global_right_assigned_dofs.begin(),
+                          global_right_assigned_dofs.end());
+                cur_decomposition_node.init_node(left_node_idx,
+                                                 right_node_idx,
+                                                 decomposition_node_id,
+                                                 decomposition_node_parent_id,
+                                                 l,
+                                                 global_separator_nodes);
 
-                cur_decomposition_node.init_node(
-                    left_node_idx,
-                    right_node_idx,
-                    decomposition_node_id,
-                    decomposition_node_parent_id,
-                    l,
-                    separator_nodes);
-
-                //=========== Step 4: Initialize the input of the left and right
-                //children for the next wavefront ============ Initialize the
-                // left child
                 if (left_node_idx != -1) {
                     assert(left_node_idx >= 0 &&
                            left_node_idx < decomposition_info_stack.size());
-                    assert(!left_assigned.empty() &&
+                    assert(!global_left_assigned_dofs.empty() &&
                            "Left child should have assigned patches");
                     decomposition_info_stack[left_node_idx]
                         .decomposition_node_id = left_node_idx;
                     decomposition_info_stack[left_node_idx]
                         .decomposition_node_parent_id = decomposition_node_id;
-                    decomposition_info_stack[left_node_idx]
-                        .node_to_patch = left_assigned;
+                    decomposition_info_stack[left_node_idx].assigned_dofs =
+                        global_left_assigned_dofs;
                 }
 
                 // Initialize the right child
                 if (right_node_idx != -1) {
                     assert(right_node_idx >= 0 &&
                            right_node_idx < decomposition_info_stack.size());
-                    assert(!right_assigned.empty() &&
+                    assert(!global_right_assigned_dofs.empty() &&
                            "Right child should have assigned patches");
                     decomposition_info_stack[right_node_idx]
                         .decomposition_node_id = right_node_idx;
                     decomposition_info_stack[right_node_idx]
                         .decomposition_node_parent_id = decomposition_node_id;
-                    decomposition_info_stack[right_node_idx]
-                        .node_to_patch = right_assigned;
+                    decomposition_info_stack[right_node_idx].assigned_dofs =
+                        global_right_assigned_dofs;
                 }
             }
         }
@@ -462,12 +632,12 @@ void GPUOrdering_V3::init_patches()
         rx.get_num_faces(),
         rx.get_num_patches());
 
-    initial_node_to_patch.resize(rx.get_num_vertices());
+    this->node_to_patch.resize(rx.get_num_vertices());
     rx.for_each_vertex(
         rxmesh::HOST,
         [&](const rxmesh::VertexHandle vh) {
-            uint32_t node_id       = rx.map_to_global(vh);
-            initial_node_to_patch[node_id] = static_cast<int>(vh.patch_id());
+            uint32_t node_id             = rx.map_to_global(vh);
+            this->node_to_patch[node_id] = static_cast<int>(vh.patch_id());
         },
         NULL,
         false);
@@ -480,9 +650,9 @@ void GPUOrdering_V3::step1_compute_node_to_patch()
     // Count the number of patch ids
     std::unordered_set<int> unique_ids;
     std::map<int, int>      node_per_patch_count;
-    for (int i = 0; i < initial_node_to_patch.size(); ++i) {
-        unique_ids.insert(initial_node_to_patch[i]);
-        node_per_patch_count[initial_node_to_patch[i]]++;
+    for (int i = 0; i < this->node_to_patch.size(); ++i) {
+        unique_ids.insert(this->node_to_patch[i]);
+        node_per_patch_count[this->node_to_patch[i]]++;
     }
     // Count the offset of each patch to create continuous patch ids
     std::vector<int> patch_offset(unique_ids.size(), 0);
@@ -495,70 +665,62 @@ void GPUOrdering_V3::step1_compute_node_to_patch()
         }
     }
     std::unordered_set<int> unique_ids_reduced;
-    for (int i = 0; i < initial_node_to_patch.size(); ++i) {
-        initial_node_to_patch[i] -= patch_offset[initial_node_to_patch[i]];
-        unique_ids_reduced.insert(initial_node_to_patch[i]);
+    for (int i = 0; i < this->node_to_patch.size(); ++i) {
+        this->node_to_patch[i] -= patch_offset[this->node_to_patch[i]];
+        unique_ids_reduced.insert(this->node_to_patch[i]);
     }
-    spdlog::info("Number of initial patches before and after reduction: {} -> {}", unique_ids.size(), unique_ids_reduced.size());
-    this->init_num_patches = unique_ids_reduced.size();
+    spdlog::info(
+        "Number of initial patches before and after reduction: {} -> {}",
+        unique_ids.size(),
+        unique_ids_reduced.size());
+    this->num_patches = unique_ids_reduced.size();
+    assert(node_to_patch.size() == G_n);
 }
 
 void GPUOrdering_V3::step2_create_decomposition_tree()
 {
     // Step 2.1: create the hierarchical partitioning
-    this->decomposition_max_level = std::ceil(std::log2(this->init_num_patches));
-    int total_number_of_decomposition_nodes =
-        (1 << (this->decomposition_max_level + 1)) - 1;
-    decomposition_tree.init_decomposition_tree(total_number_of_decomposition_nodes);
+    int num_levels = std::ceil(std::log2(this->num_patches));
+    int total_number_of_decomposition_nodes = (1 << (num_levels + 1)) - 1;
+    decomposition_tree.init_decomposition_tree(
+        total_number_of_decomposition_nodes, num_levels);
     spdlog::info("Decomposition tree creation .. ");
+    spdlog::info("Number of decomposition levels: {}", num_levels);
     spdlog::info("Using local permutation {}", local_permute_method);
 
     decompose();
     spdlog::info("Decomposition tree is created.");
-}
 
+
+#ifndef NDEBUG
+    //Check to see if all the nodes exist
+    spdlog::info("Checking decomposition validation.");
+    std::vector<bool> is_visited(this->G_n, false);
+    for(auto& node : decomposition_tree.decomposition_nodes) {
+        if (node.dofs.empty())
+            continue;
+        for (auto& dof : node.dofs) {
+            assert(is_visited[dof] == false);
+            is_visited[dof] = true;
+        }
+    }
+    for (int i = 0; i < is_visited.size(); ++i) {
+        assert(is_visited[i] == true);
+    }
+    spdlog::info("Decomposition contains all the nodes");
+
+    //Check for whether separators are valid
+#endif
+}
 
 void GPUOrdering_V3::step3_compute_local_permutations()
 {
-    auto compute_sub_graph = [](
-        int*              Gp,
-        int*              Gi,
-        int               G_N,
-        std::vector<int>& nodes) -> Eigen::SparseMatrix<int>
-    {
-        // Compute global node to local node mapping
-        std::sort(nodes.begin(), nodes.end());
-        std::vector<int> global_to_local(G_N, -1);
-        for (int i = 0; i < nodes.size(); ++i) {
-            global_to_local[nodes[i]] = i;
-        }
-    
-        // Compute triplets for the sub graph
-        std::vector<Eigen::Triplet<int>> triplets;
-        for (int i = 0; i < nodes.size(); ++i) {
-            for (int nbr_ptr = Gp[nodes[i]]; nbr_ptr < Gp[nodes[i] + 1];
-                 ++nbr_ptr) {
-                int nbr_id = Gi[nbr_ptr];
-                if (global_to_local[nbr_id] == -1)
-                    continue;
-                assert(i != global_to_local[nbr_id]);
-                assert(i == global_to_local[nodes[i]]);
-                triplets.emplace_back(i, global_to_local[nbr_id], 1);
-            }
-        }
-        // Form the sub graph
-        Eigen::SparseMatrix<int> sub_graph(nodes.size(), nodes.size());
-        sub_graph.setFromTriplets(triplets.begin(), triplets.end());
-        sub_graph.makeCompressed();
-        return sub_graph;
-    };
-
-
     spdlog::info("Computing local permutations .. ");
-    for(auto& node : decomposition_tree.decomposition_nodes) {
-        if(node.dofs.empty())
+    for (auto& node : decomposition_tree.decomposition_nodes) {
+        if (node.dofs.empty())
             continue;
-        Eigen::SparseMatrix<int> graph = compute_sub_graph(Gp, Gi, G_n, node.dofs);
+        Eigen::SparseMatrix<int> graph;
+        this->compute_sub_graph(node.dofs, graph);
         std::vector<int> local_permutation;
         local_permute(graph, local_permutation);
         node.set_local_permutation(local_permutation);
@@ -575,20 +737,22 @@ void GPUOrdering_V3::step4_assemble_final_permutation(std::vector<int>& perm)
 
     perm.clear();
     perm.resize(G_n, -1);
-    for(auto& node : decomposition_tree.decomposition_nodes) {
-        if(node.dofs.empty())
+    for (auto& node : decomposition_tree.decomposition_nodes) {
+        if (node.dofs.empty())
             continue;
-        for(auto& dof : node.dofs) {
-            int perm_index = node.local_new_labels[dof] + node.offset;
+        for (int local_node = 0; local_node < node.dofs.size(); local_node++) {
+            int global_node = node.dofs[local_node];
+            int perm_index  = node.local_new_labels[local_node] + node.offset;
+            assert(global_node >= 0 && global_node < G_n &&
+                   "Invalid global node index");
             assert(perm_index >= 0 && perm_index < perm.size() &&
                    "Permutation index out of bounds");
             assert(perm[perm_index] == -1 &&
                    "Permutation slot already filled - duplicate node!");
-            perm[perm_index] = dof;
+            perm[perm_index] = global_node;
         }
     }
 }
-
 
 void GPUOrdering_V3::compute_permutation(std::vector<int>& perm)
 {

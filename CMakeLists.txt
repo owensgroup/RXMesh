@@ -76,6 +76,11 @@ target_sources(RXMesh
 # ==============================================================================
 # External Dependencies
 # ==============================================================================
+# METIS
+#set(CMAKE_DISABLE_FIND_PACKAGE_METIS TRUE)
+include("cmake/recipes/metis.cmake")
+target_link_libraries(RXMesh INTERFACE metis)
+
 # GoogleTest
 include(cmake/recipes/googletest.cmake)
 include(GoogleTest)
@@ -160,12 +165,14 @@ target_compile_options(RXMesh INTERFACE
         $<$<COMPILE_LANGUAGE:CUDA>:${cuda_flags}>
 )
 
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g3")
+    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0 -g3")
+endif()
+
 # ==============================================================================
 # Required Libraries
 # ==============================================================================
-# METIS
-include("cmake/recipes/metis.cmake")
-target_link_libraries(RXMesh INTERFACE metis)
 
 # OpenMP
 find_package(OpenMP)
@@ -243,15 +250,15 @@ endif()
 
 # ==============================================================================
 # Subdirectories
-# ==============================================================================
+## ==============================================================================
 if(${RX_BUILD_TESTS})
-    add_subdirectory(tests)
+   add_subdirectory(tests)
 endif()
 
 if(${RX_BUILD_APPS})
-    add_subdirectory(apps)
+   add_subdirectory(apps)
 endif()
 
 if(${RX_WITH_DEV})
-    add_subdirectory(dev)
+   add_subdirectory(dev)
 endif()

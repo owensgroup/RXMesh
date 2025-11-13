@@ -5,6 +5,8 @@
 //  Created by Minchen Li on 6/22/18.
 //
 
+#ifdef USE_STRUMPACK
+
 #include <spdlog/spdlog.h>
 #include <cassert>
 #include <iostream>
@@ -12,6 +14,8 @@
 
 #include <spdlog/spdlog.h>
 #include "omp.h"
+
+
 
 namespace RXMESH_SOLVER {
 STRUMPACKSolver::~STRUMPACKSolver()
@@ -95,3 +99,5 @@ int STRUMPACKSolver::getFactorNNZ()
 }
 
 }  // namespace RXMESH_SOLVER
+
+#endif

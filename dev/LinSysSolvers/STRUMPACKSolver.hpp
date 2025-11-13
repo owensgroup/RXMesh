@@ -2,8 +2,10 @@
 #pragma once
 
 #include "LinSysSolver.hpp"
+#ifdef USE_STRUMPACK
 #include <StrumpackSparseSolver.hpp>
 #include <StrumpackSparseSolverMixedPrecision.hpp>
+
 #include <sparse/CSRMatrix.hpp>
 #include <Eigen/Eigen>
 #include <vector>
@@ -34,3 +36,4 @@ public:                // Access specifier
 };
 
 }
+#endif

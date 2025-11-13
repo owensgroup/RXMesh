@@ -207,29 +207,29 @@ int main(int argc, char* argv[])
             .count());
 
     // Factorization time
-    start = std::chrono::high_resolution_clock::now();
-    solver->factorize();
-    end = std::chrono::high_resolution_clock::now();
-    spdlog::info(
-        "Factorization time: {} ms",
-        std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
-            .count());
-
-    // Solve time
-    start = std::chrono::high_resolution_clock::now();
-    solver->solve(rhs, result);
-    end = std::chrono::high_resolution_clock::now();
-    spdlog::info(
-        "Solve time: {} ms",
-        std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
-            .count());
+    // start = std::chrono::high_resolution_clock::now();
+    // solver->factorize();
+    // end = std::chrono::high_resolution_clock::now();
+    // spdlog::info(
+    //     "Factorization time: {} ms",
+    //     std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
+    //         .count());
+    //
+    // // Solve time
+    // start = std::chrono::high_resolution_clock::now();
+    // solver->solve(rhs, result);
+    // end = std::chrono::high_resolution_clock::now();
+    // spdlog::info(
+    //     "Solve time: {} ms",
+    //     std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
+    //         .count());
 
     // Compute residual
-    assert(OL.rows() == OL.cols());
-    double residual = (rhs - OL * result).norm();
-    spdlog::info("Residual: {}", residual);
-    spdlog::info("Final factor/matrix NNZ ratio: {}",
-                 solver->getFactorNNZ() * 1.0 / OL.nonZeros());
+    // assert(OL.rows() == OL.cols());
+    // double residual = (rhs - OL * result).norm();
+    // spdlog::info("Residual: {}", residual);
+    // spdlog::info("Final factor/matrix NNZ ratio: {}",
+    //              solver->getFactorNNZ() * 1.0 / OL.nonZeros());
     delete solver;
     delete ordering;
     return 0;

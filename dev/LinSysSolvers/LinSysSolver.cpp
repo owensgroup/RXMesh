@@ -13,7 +13,10 @@
 #include "ParthSolver.hpp"
 #endif
 
+
+#ifdef USE_STRUMPACK
 #include <STRUMPACKSolver.hpp>
+#endif
 
 
 namespace RXMESH_SOLVER {
@@ -37,8 +40,10 @@ namespace RXMESH_SOLVER {
                 return new ParthSolver();
 #endif
 
+#ifdef USE_STRUMPACK
             case LinSysSolverType::GPU_STRUMPACK:
                 return new STRUMPACKSolver();
+#endif
             default:
                 std::cerr << "Uknown linear system solver type" << std::endl;
                 return nullptr;

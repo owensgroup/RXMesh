@@ -7,6 +7,7 @@ include(${CMAKE_SOURCE_DIR}/cmake/recipes/cli11.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/recipes/eigen.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/recipes/libigl.cmake)
 
+
 # Find MPI (required for parallel features, especially STRUMPACK)
 find_package(MPI REQUIRED COMPONENTS CXX)
 if(MPI_FOUND)
@@ -44,7 +45,7 @@ if (${PROJECT_NAME}_WITH_SUITESPARSE)
     target_link_libraries(${PROJECT_NAME} INTERFACE ${SUITESPARSE_LIBRARIES})
     target_include_directories(${PROJECT_NAME} INTERFACE ${SUITESPARSE_INCLUDE_DIRS})
     target_compile_definitions(${PROJECT_NAME} INTERFACE USE_SUITESPARSE)
-    
+
     # Add CHOLMOD_HAS_CUDA compile definition if GPU library is available
     if(CHOLMOD_CUDA_FOUND OR CHOLMOD_CUDA_LIBRARY)
         target_compile_definitions(${PROJECT_NAME} INTERFACE CHOLMOD_HAS_CUDA)
@@ -94,35 +95,35 @@ add_library(parallel_cholmod
 
 
 
-#        LeftLooking_Parth/custom_cholmod_files/parth_factorize.cpp
-#        LeftLooking_Parth/custom_cholmod_files/parth_numeric_supernode.cpp
-#        LeftLooking_Parth/custom_cholmod_files/parth_solve.cpp
-#        LeftLooking_Parth/custom_cholmod_files/parth_solve.cpp
-#        LeftLooking_Parth/custom_cholmod_files/parth_solve_supernode.cpp
-#        LeftLooking_Parth/custom_cholmod_files/parth_super_symbolic.cpp
+        #        LeftLooking_Parth/custom_cholmod_files/parth_factorize.cpp
+        #        LeftLooking_Parth/custom_cholmod_files/parth_numeric_supernode.cpp
+        #        LeftLooking_Parth/custom_cholmod_files/parth_solve.cpp
+        #        LeftLooking_Parth/custom_cholmod_files/parth_solve.cpp
+        #        LeftLooking_Parth/custom_cholmod_files/parth_solve_supernode.cpp
+        #        LeftLooking_Parth/custom_cholmod_files/parth_super_symbolic.cpp
 )
 
 if(${PROJECT_NAME}_WITH_SUITESPARSE)
     # Link SuiteSparse libraries - order matters for static linking!
     target_include_directories(parallel_cholmod PUBLIC ${SUITESPARSE_INCLUDE_DIRS})
-    
+
     # Ensure that SuiteSparse BLAS wrapper macros are available
     # This is needed for the lowercase BLAS wrapper definitions (SUITESPARSE_BLAS_dsyrk, etc.)
     # which are defined in SuiteSparse_config.h at line ~1814
     target_compile_definitions(parallel_cholmod PUBLIC SUITESPARSE_BLAS_DEFINITIONS)
-    
+
     # For static library linking with CHOLMOD, we need to use --whole-archive to ensure
     # all symbols (especially utility functions like cholmod_mult_size_t) are extracted
     if(TARGET CHOLMOD_static)
         # Use generator expression to properly wrap the library with linker flags
-        target_link_libraries(parallel_cholmod PUBLIC 
-            "-Wl,--whole-archive"
-            "$<TARGET_FILE:CHOLMOD_static>"
-            "-Wl,--no-whole-archive"
+        target_link_libraries(parallel_cholmod PUBLIC
+                "-Wl,--whole-archive"
+                "$<TARGET_FILE:CHOLMOD_static>"
+                "-Wl,--no-whole-archive"
         )
         # Link other SuiteSparse dependencies normally
-        target_link_libraries(parallel_cholmod PUBLIC 
-            AMD_static COLAMD_static CAMD_static CCOLAMD_static SuiteSparseConfig_static
+        target_link_libraries(parallel_cholmod PUBLIC
+                AMD_static COLAMD_static CAMD_static CCOLAMD_static SuiteSparseConfig_static
         )
         # Link BLAS and LAPACK libraries
         find_package(BLAS REQUIRED)
@@ -151,14 +152,6 @@ target_include_directories(parallel_cholmod PUBLIC
 
 target_link_libraries(parallel_cholmod PRIVATE  spdlog::spdlog)
 
-# Add debug information for parallel_cholmod
-target_compile_options(parallel_cholmod PUBLIC
-    $<$<COMPILE_LANGUAGE:CXX>:
-        $<$<CONFIG:Debug>:-O0>          # No optimization in Debug mode
-        $<$<CONFIG:Release>:-O3>        # Full optimization in Release mode
-        -g                               # Add debug information for C++ code
-    >
-)
 
 # Create rxmesh_dev_helpers library
 add_library(rxmesh_dev_helpers
@@ -174,6 +167,7 @@ add_library(rxmesh_dev_helpers
         utils/min_vertex_cover_bipartite.cpp
         GPUOrdering/gpu_ordering.cu
         GPUOrdering/gpu_ordering_v2.cu
+        GPUOrdering/gpu_ordering_v3.cu
         Ordering/ordering.cu
         Ordering/metis_ordering.cpp
         Ordering/rxmesh_ordering.cu
@@ -184,25 +178,25 @@ add_library(rxmesh_dev_helpers
 
 # Link additional dependencies required by dev helpers
 target_link_libraries(rxmesh_dev_helpers PUBLIC
-    igl::core
-    spdlog::spdlog
-    Eigen3::Eigen
-    CLI11::CLI11
-    parallel_cholmod
+        igl::core
+        spdlog::spdlog
+        Eigen3::Eigen
+        CLI11::CLI11
+        parallel_cholmod
 )
 target_link_libraries(rxmesh_dev_helpers PRIVATE ${PROJECT_NAME})
 
 
 # Add dev code include directories
-target_include_directories(rxmesh_dev_helpers PUBLIC 
-    LinSysSolvers
-    Ordering
-    utils
-    LeftLooking_Parth/include
-    LeftLooking_Parth/custom_cholmod_files/include
-    LeftLooking_Parth/custom_cholmod_files/include/Cholmod_Include
-    LeftLooking_Parth/custom_cholmod_files/util
-    GPUOrdering
+target_include_directories(rxmesh_dev_helpers PUBLIC
+        LinSysSolvers
+        Ordering
+        utils
+        LeftLooking_Parth/include
+        LeftLooking_Parth/custom_cholmod_files/include
+        LeftLooking_Parth/custom_cholmod_files/include/Cholmod_Include
+        LeftLooking_Parth/custom_cholmod_files/util
+        GPUOrdering
 )
 
 # Configure CUDA compilation for the dev helper library
@@ -217,33 +211,22 @@ if(MAIN_CUDA_ARCHITECTURES)
     set_property(TARGET rxmesh_dev_helpers PROPERTY CUDA_ARCHITECTURES ${MAIN_CUDA_ARCHITECTURES})
 endif()
 
-# Apply the same CUDA compiler flags as the main library
-target_compile_options(rxmesh_dev_helpers PUBLIC
-    $<$<COMPILE_LANGUAGE:CUDA>:
-        -lineinfo
-        $<$<CONFIG:Debug>:-O0>          # No optimization in Debug mode
-        $<$<CONFIG:Release>:-O3>        # Full optimization in Release mode
-        --use_fast_math
-        --ptxas-options=-v,-warn-lmem-usage,--warn-on-spills
-        -rdc=true
-        --expt-extended-lambda
-        --expt-relaxed-constexpr
-        $<$<CONFIG:Debug>:-G>           # Enable device debug in Debug mode
-        -g                               # Add debug information for CUDA code
-    >
-    $<$<COMPILE_LANGUAGE:CXX>:
-        $<$<CONFIG:Debug>:-O0>          # No optimization in Debug mode
-        $<$<CONFIG:Release>:-O3>        # Full optimization in Release mode
-        -g                               # Add debug information for C++ code
-    >
-)
-
 # Add debug definitions based on build type
 # In Debug builds: DEBUG is defined, NDEBUG is NOT defined
 # In Release builds: NDEBUG is defined, DEBUG is NOT defined
 target_compile_definitions(rxmesh_dev_helpers PUBLIC
-    $<$<CONFIG:Debug>:DEBUG>
-    $<$<CONFIG:Release>:NDEBUG>
+        $<$<CONFIG:Debug>:DEBUG>
+        $<$<CONFIG:Release>:NDEBUG>
+)
+
+# CUDA: real debug: disable device optimizations and keep line info
+target_compile_options(rxmesh_dev_helpers PUBLIC
+  $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-G;-O0;-Xptxas=-O0;-lineinfo;-Xcompiler=-O0,-g3>
+)
+
+# Host C++ files in the same target
+target_compile_options(rxmesh_dev_helpers PUBLIC
+  $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CXX>>:-O0;-g3;-fno-inline>
 )
 
 ################################################################################
@@ -268,29 +251,15 @@ target_link_libraries(${PROJECT_NAME}_benchmark PUBLIC rxmesh_dev_helpers)
 if(${PROJECT_NAME}_WITH_STRUMPACK)
     message(STATUS "Setting RPATH for ${PROJECT_NAME}_benchmark")
     set_target_properties(${PROJECT_NAME}_benchmark PROPERTIES
-        BUILD_RPATH "${STRUMPACK_RPATH_DIRS}"
-        INSTALL_RPATH "${STRUMPACK_RPATH_DIRS}"
-        INSTALL_RPATH_USE_LINK_PATH TRUE
-        # Use RPATH instead of RUNPATH to propagate to transitive dependencies
-        LINK_FLAGS "-Wl,--disable-new-dtags"
+            BUILD_RPATH "${STRUMPACK_RPATH_DIRS}"
+            INSTALL_RPATH "${STRUMPACK_RPATH_DIRS}"
+            INSTALL_RPATH_USE_LINK_PATH TRUE
+            # Use RPATH instead of RUNPATH to propagate to transitive dependencies
+            LINK_FLAGS "-Wl,--disable-new-dtags"
     )
     message(STATUS "  BUILD_RPATH: ${STRUMPACK_RPATH_DIRS}")
 endif()
 
-# Add debug information for benchmark executable
-target_compile_options(${PROJECT_NAME}_benchmark PUBLIC
-    $<$<COMPILE_LANGUAGE:CUDA>:
-        $<$<CONFIG:Debug>:-O0>          # No optimization in Debug mode
-        $<$<CONFIG:Release>:-O3>        # Full optimization in Release mode
-        $<$<CONFIG:Debug>:-G>           # Enable device debug in Debug mode
-        -g                               # Add debug information for CUDA code
-    >
-    $<$<COMPILE_LANGUAGE:CXX>:
-        $<$<CONFIG:Debug>:-O0>          # No optimization in Debug mode
-        $<$<CONFIG:Release>:-O3>        # Full optimization in Release mode
-        -g                               # Add debug information for C++ code
-    >
-)
 
 
 # Benchmark executable
@@ -310,30 +279,23 @@ target_link_libraries(${PROJECT_NAME}_detailed_ordering_benchmark PUBLIC rxmesh_
 if(${PROJECT_NAME}_WITH_STRUMPACK)
     message(STATUS "Setting RPATH for ${PROJECT_NAME}_detailed_ordering_benchmark")
     set_target_properties(${PROJECT_NAME}_detailed_ordering_benchmark PROPERTIES
-        BUILD_RPATH "${STRUMPACK_RPATH_DIRS}"
-        INSTALL_RPATH "${STRUMPACK_RPATH_DIRS}"
-        INSTALL_RPATH_USE_LINK_PATH TRUE
-        # Use RPATH instead of RUNPATH to propagate to transitive dependencies
-        LINK_FLAGS "-Wl,--disable-new-dtags"
+            BUILD_RPATH "${STRUMPACK_RPATH_DIRS}"
+            INSTALL_RPATH "${STRUMPACK_RPATH_DIRS}"
+            INSTALL_RPATH_USE_LINK_PATH TRUE
+            # Use RPATH instead of RUNPATH to propagate to transitive dependencies
+            LINK_FLAGS "-Wl,--disable-new-dtags"
     )
     message(STATUS "  BUILD_RPATH: ${STRUMPACK_RPATH_DIRS}")
 endif()
 
-# Add debug information for detailed_ordering_benchmark executable
-target_compile_options(${PROJECT_NAME}_detailed_ordering_benchmark PUBLIC
-    $<$<COMPILE_LANGUAGE:CUDA>:
-        $<$<CONFIG:Debug>:-O0>          # No optimization in Debug mode
-        $<$<CONFIG:Release>:-O3>        # Full optimization in Release mode
-        $<$<CONFIG:Debug>:-G>           # Enable device debug in Debug mode
-        -g                               # Add debug information for CUDA code
-    >
-    $<$<COMPILE_LANGUAGE:CXX>:
-        $<$<CONFIG:Debug>:-O0>          # No optimization in Debug mode
-        $<$<CONFIG:Release>:-O3>        # Full optimization in Release mode
-        -g                               # Add debug information for C++ code
-    >
-)
-
+# Do the same for your executables:
+foreach(tgt ${PROJECT_NAME}_benchmark ${PROJECT_NAME}_detailed_ordering_benchmark)
+  set_property(TARGET ${tgt} PROPERTY INTERPROCEDURAL_OPTIMIZATION_DEBUG OFF)
+  target_compile_options(${tgt} PUBLIC
+    $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CUDA>>:-G;-O0;-Xptxas=-O0;-lineinfo;-Xcompiler=-O0,-g3>
+    $<$<AND:$<CONFIG:Debug>,$<COMPILE_LANGUAGE:CXX>>:-O0;-g3;-fno-inline>
+  )
+endforeach()
 
 # Debug test for MinVertexCoverBipartite
 add_executable(debug_min_vertex_cover
@@ -346,12 +308,3 @@ target_link_libraries(debug_min_vertex_cover PUBLIC Eigen3::Eigen spdlog::spdlog
 
 # Add utils directory for headers
 target_include_directories(debug_min_vertex_cover PUBLIC utils)
-
-# Add debug information for debug_min_vertex_cover executable
-target_compile_options(debug_min_vertex_cover PUBLIC
-    $<$<COMPILE_LANGUAGE:CXX>:
-        $<$<CONFIG:Debug>:-O0>          # No optimization in Debug mode
-        $<$<CONFIG:Release>:-O3>        # Full optimization in Release mode
-        -g                               # Add debug information for C++ code
-    >
-)

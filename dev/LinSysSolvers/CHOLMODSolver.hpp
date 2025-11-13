@@ -21,7 +21,7 @@ public:                // Access specifier
 
     cholmod_dense *x_solve;
 
-    bool use_gpu = true;         // User-configured: whether to use GPU
+    bool use_gpu = false;         // User-configured: whether to use GPU
     bool gpu_available = false;  // Runtime check: whether GPU is actually available
     std::vector<long int> p_long;
     std::vector<long int> i_long;

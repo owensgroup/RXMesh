@@ -6,6 +6,7 @@
 
 #include <cassert>
 #include <iostream>
+#include <chrono>
 #include <spdlog/spdlog.h>
 #include <cuda_runtime.h>
 
@@ -108,7 +109,16 @@ void RXMeshOrdering::compute_permutation(std::vector<int>& perm)
     // Call RXMesh ND permutation
     spdlog::info("Computing ND permutation...");
     std::vector<int> rx_perm(rx.get_num_vertices(), 0);
+    
+    // Start wall clock timing
+    auto start_time = std::chrono::high_resolution_clock::now();
+    
     rxmesh::nd_permute(rx, rx_perm.data());
+    
+    // End wall clock timing
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+    spdlog::info("nd_permute wall clock time: {} ms", duration.count());
 
     //Converting rx permute into global permute
     std::vector<uint32_t> linear_to_global(rx.get_num_vertices(), -1);
