@@ -37,6 +37,7 @@ inline void rx_init(int                       device_id,
 class RXMesh
 {
    public:
+    bool patching_with_metis = true;
     /**
      * @brief Total number of vertices in the mesh
      */

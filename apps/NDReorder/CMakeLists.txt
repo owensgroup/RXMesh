@@ -1,14 +1,14 @@
 add_executable(NDReorder)
 
 set(SOURCE_LIST
-    test_all_permutations.cu     
-	count_nnz_fillin.h
-	render_permutation.h
+		test_all_permutations.cu
+		count_nnz_fillin.h
+		render_permutation.h
 )
 
-target_sources(NDReorder 
-    PRIVATE
-    ${SOURCE_LIST} ${COMMON_LIST}
+target_sources(NDReorder
+		PRIVATE
+		${SOURCE_LIST} ${COMMON_LIST}
 )
 
 set_target_properties(NDReorder PROPERTIES FOLDER "apps")
