@@ -323,8 +323,13 @@ struct TemplatedTermPairs
                 "supported for Hessians.");
             return;
         }
+        int size = pairs.size();
 
-        const int blocks = DIVIDE_UP(pairs.size(), blockThreads);
+        if (size == 0) {
+            return;
+        }
+
+        const int blocks = DIVIDE_UP(size, blockThreads);
 
         detail::diff_kernel_active_pair<blockThreads,
                                         LossHandleT,
@@ -347,7 +352,13 @@ struct TemplatedTermPairs
     void eval_active_grad_only(Attribute<T, ObjHandleT>& obj,
                                cudaStream_t              stream)
     {
-        const int blocks = DIVIDE_UP(pairs.size(), blockThreads);
+        int size = pairs.size();
+
+        if (size == 0) {
+            return;
+        }
+
+        const int blocks = DIVIDE_UP(size, blockThreads);
 
         detail::diff_kernel_active_pair<blockThreads,
                                         LossHandleT,
@@ -386,6 +397,11 @@ struct TemplatedTermPairs
                 "not supported for Hessians.");
             return;
         }
+        int size = pairs.size();
+
+        if (size == 0) {
+            return;
+        }
 
         // TODO
         RXMESH_ERROR(
@@ -397,7 +413,13 @@ struct TemplatedTermPairs
      */
     void eval_passive(Attribute<T, ObjHandleT>& obj, cudaStream_t stream)
     {
-        const int blocks = DIVIDE_UP(pairs.size(), blockThreads);
+        int size = pairs.size();
+
+        if (size == 0) {
+            return;
+        }
+
+        const int blocks = DIVIDE_UP(size, blockThreads);
 
         detail::diff_kernel_passive_pair<blockThreads,
                                          LossHandleT,
