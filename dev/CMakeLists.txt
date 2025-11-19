@@ -22,7 +22,8 @@ endif()
 ################################################################################
 option(${PROJECT_NAME}_WITH_PARTH "Use Parth for fill-reducing orderings" ON)
 option(${PROJECT_NAME}_WITH_SUITESPARSE "Use SuiteSparse for benchmark" ON)
-option(${PROJECT_NAME}_WITH_STRUMPACK "Use Strumpack for benchmark" ON)
+option(${PROJECT_NAME}_WITH_STRUMPACK "Use Strumpack for benchmark" OFF)
+option(${PROJECT_NAME}_WITH_PROFILE "Use Profile for benchmark" OFF)
 
 ################################################################################
 # SECTION 3: Configure RXMesh Library with Optional Development Dependencies
@@ -63,6 +64,10 @@ if(${PROJECT_NAME}_WITH_PARTH)
     # Add Parth to the main RXMesh library
     target_link_libraries(${PROJECT_NAME} INTERFACE Parth::parth)
     target_compile_definitions(${PROJECT_NAME} INTERFACE USE_PARTH)
+endif()
+
+if(${PROJECT_NAME}_WITH_PROFILE)
+    target_compile_definitions(${PROJECT_NAME} INTERFACE USE_PROFILE)
 endif()
 
 

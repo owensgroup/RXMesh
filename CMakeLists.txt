@@ -136,27 +136,34 @@ target_include_directories(RXMesh
 # C++ compiler flags
 set(cxx_flags
         $<$<CXX_COMPILER_ID:MSVC>:-D_SCL_SECURE_NO_WARNINGS /openmp:experimental /MP /std:c++17 /bigobj>  #Add MSVC-specific compiler flags here
-        $<$<CXX_COMPILER_ID:GNU>:-Wall -m64 -fopenmp -O3 -std=c++17 -Wno-unused-function> #Add GCC/Clang-specific compiler flags here
+        $<$<AND:$<CXX_COMPILER_ID:GNU>,$<CONFIG:Release>>:-Wall -m64 -fopenmp -O3 -std=c++20 -Wno-unused-function>
+        $<$<AND:$<CXX_COMPILER_ID:GNU>,$<CONFIG:Debug>>:-Wall -m64 -fopenmp -O0 -g3 -std=c++20 -Wno-unused-function>
 )
 
 # CUDA compiler flags
 set(MSVC_XCOMPILER_FLAGS "/openmp:experimental /MP /std:c++17 /Zi")
+
 set(cuda_flags
-        -Xcompiler=$<$<CXX_COMPILER_ID:GNU>:-rdynamic -Wall -fopenmp -O3 -Wno-unused-function>
+        #Windows stuff
         -Xcompiler=$<$<CXX_COMPILER_ID:MSVC>:${MSVC_XCOMPILER_FLAGS}>
-        #Disables warning
-        #177-D "function XXX was declared but never referenced"
-        #174-D "expression has no effect"
-        #20054-D "dynamic initialization is not supported for a function-scope static __shared__ variable within a __device__/__global__ function"
-        -Xcudafe "--display_error_number --diag_suppress=177 --diag_suppress=174 --diag_suppress=20054"
-        -rdc=true
+        # Release
+        $<$<AND:$<CXX_COMPILER_ID:GNU>,$<CONFIG:Release>>:
+        -Xcompiler=-rdynamic,-Wall,-fopenmp,-O3,-Wno-unused-function
+        -O3
+        >
+        # Debug
+        $<$<AND:$<CXX_COMPILER_ID:GNU>,$<CONFIG:Debug>>:
+        -G
+        -O0
+        -Xptxas=-O0
         -lineinfo
+        -Xcompiler=-rdynamic,-Wall,-fopenmp,-O0,-g3,-Wno-unused-function
+        >
+        # other common CUDA flags here (that are safe in both configs)
+        -rdc=true
         --expt-extended-lambda
-        #-use_fast_math
-        $<$<CXX_COMPILER_ID:GNU>:-O3>
         --expt-relaxed-constexpr
         -Xptxas -warn-spills -res-usage
-        #-Xptxas -dlcm=cg -dscm=cg
         --ptxas-options=-v
 )
 

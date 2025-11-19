@@ -26,6 +26,8 @@ struct CLIArgs
     std::string output_address;
     std::string solver_type   = "CHOLMOD";
     std::string ordering_type = "DEFAULT";
+    bool use_gpu = false;
+
     CLIArgs(int argc, char* argv[])
     {
         CLI::App app{"Separator analysis"};
@@ -33,6 +35,7 @@ struct CLIArgs
         app.add_option("-s,--solver", solver_type, "solver type");
         app.add_option("-o,--output", output_address, "output folder name");
         app.add_option("-i,--input", input_mesh, "input mesh name");
+        app.add_option("-g,--use_gpu", use_gpu, "use gpu");
 
         try {
             app.parse(argc, argv);
@@ -116,6 +119,8 @@ int main(int argc, char* argv[])
         spdlog::info("Using POC_ND ordering.");
         ordering = RXMESH_SOLVER::Ordering::create(
             RXMESH_SOLVER::RXMESH_Ordering_Type::POC_ND);
+        ordering->setOptions(
+            {{"use_gpu", args.use_gpu ? "1" : "0"}});
     } else if (args.ordering_type == "PARTH") {
         ordering = RXMESH_SOLVER::Ordering::create(
             RXMESH_SOLVER::RXMESH_Ordering_Type::PARTH);
@@ -207,29 +212,29 @@ int main(int argc, char* argv[])
             .count());
 
     // Factorization time
-    // start = std::chrono::high_resolution_clock::now();
-    // solver->factorize();
-    // end = std::chrono::high_resolution_clock::now();
-    // spdlog::info(
-    //     "Factorization time: {} ms",
-    //     std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
-    //         .count());
-    //
-    // // Solve time
-    // start = std::chrono::high_resolution_clock::now();
-    // solver->solve(rhs, result);
-    // end = std::chrono::high_resolution_clock::now();
-    // spdlog::info(
-    //     "Solve time: {} ms",
-    //     std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
-    //         .count());
+    start = std::chrono::high_resolution_clock::now();
+    solver->factorize();
+    end = std::chrono::high_resolution_clock::now();
+    spdlog::info(
+        "Factorization time: {} ms",
+        std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
+            .count());
+
+    // Solve time
+    start = std::chrono::high_resolution_clock::now();
+    solver->solve(rhs, result);
+    end = std::chrono::high_resolution_clock::now();
+    spdlog::info(
+        "Solve time: {} ms",
+        std::chrono::duration_cast<std::chrono::milliseconds>(end - start)
+            .count());
 
     // Compute residual
-    // assert(OL.rows() == OL.cols());
-    // double residual = (rhs - OL * result).norm();
-    // spdlog::info("Residual: {}", residual);
-    // spdlog::info("Final factor/matrix NNZ ratio: {}",
-    //              solver->getFactorNNZ() * 1.0 / OL.nonZeros());
+    assert(OL.rows() == OL.cols());
+    double residual = (rhs - OL * result).norm();
+    spdlog::info("Residual: {}", residual);
+    spdlog::info("Final factor/matrix NNZ ratio: {}",
+                 solver->getFactorNNZ() * 1.0 / OL.nonZeros());
     delete solver;
     delete ordering;
     return 0;

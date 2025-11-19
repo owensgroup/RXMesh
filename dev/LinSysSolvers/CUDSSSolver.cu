@@ -10,6 +10,7 @@
 #include <spdlog/spdlog.h>
 #include <cassert>
 #include <iostream>
+#include <limits>
 #include "CUDSSSolver.hpp"
 
 #include <spdlog/spdlog.h>
@@ -74,6 +75,8 @@ CUDSSSolver::CUDSSSolver()
     }
     
     is_allocated = false;
+    elimination_tree_bytes_     = 0;
+    elimination_tree_available_ = false;
 }
 
 void CUDSSSolver::clean_sparse_matrix_mem()
@@ -232,10 +235,14 @@ void CUDSSSolver::innerAnalyze_pattern(std::vector<int>& user_defined_perm)
         A,
         nullptr,
         nullptr);
+
     if (status != CUDSS_STATUS_SUCCESS) {
         spdlog::error("CUDSSSolver::symbolic analysis failed with status: {}", status);
         exit(EXIT_FAILURE);
     }
+
+    // Saving the elimination tree so it can be reused later if needed.
+    captureEliminationTree();
 }
 
 void CUDSSSolver::innerFactorize(void)
@@ -300,6 +307,126 @@ void CUDSSSolver::innerSolve(Eigen::VectorXd& rhs, Eigen::VectorXd& result)
                           result.rows() * sizeof(double),
                           cudaMemcpyDeviceToHost));
     clean_rhs_sol_mem();
+}
+
+void CUDSSSolver::captureEliminationTree()
+{
+    elimination_tree_bytes_     = 0;
+    elimination_tree_available_ = false;
+    elimination_tree_.clear();
+
+    auto infer_required_bytes = [this]() -> size_t {
+        int    nd_levels          = 0;
+        size_t cfg_bytes_returned = 0;
+        auto   cfg_status         = cudssConfigGet(
+            config,
+            CUDSS_CONFIG_ND_NLEVELS,
+            &nd_levels,
+            sizeof(nd_levels),
+            &cfg_bytes_returned);
+        if (cfg_status != CUDSS_STATUS_SUCCESS || nd_levels <= 0) {
+            return 0;
+        }
+        if (nd_levels >= static_cast<int>(std::numeric_limits<size_t>::digits)) {
+            spdlog::warn(
+                "CUDSSSolver::captureEliminationTree - nd_levels={} exceeds size_t capacity",
+                nd_levels);
+            return 0;
+        }
+        const size_t node_count = (size_t(1) << nd_levels) - 1;
+        return node_count * sizeof(int);
+    };
+
+    size_t size_returned = 0;
+    auto   status        = cudssDataGet(handle,
+                                 data,
+                                 CUDSS_DATA_ELIMINATION_TREE,
+                                 nullptr,
+                                 0,
+                                 &size_returned);
+
+    size_t required_bytes = 0;
+    if (status == CUDSS_STATUS_SUCCESS) {
+        required_bytes = size_returned;
+    } else if (status == CUDSS_STATUS_NOT_SUPPORTED) {
+        spdlog::info("CUDSSSolver::captureEliminationTree - cuDSS reported "
+                     "that elimination tree export is not supported for the "
+                     "current configuration");
+        return;
+    } else {
+        required_bytes = infer_required_bytes();
+        if (required_bytes == 0) {
+            spdlog::warn(
+                "CUDSSSolver::captureEliminationTree - cudssDataGet(size) "
+                "failed with status {}; unable to infer tree size",
+                status);
+            return;
+        }
+    }
+
+    if (required_bytes == 0) {
+        spdlog::info("CUDSSSolver::captureEliminationTree - cuDSS returned an "
+                     "empty elimination tree");
+        return;
+    }
+
+    elimination_tree_.resize(required_bytes / sizeof(int));
+    size_t bytes_written = 0;
+    status               = cudssDataGet(handle,
+                          data,
+                          CUDSS_DATA_ELIMINATION_TREE,
+                          elimination_tree_.data(),
+                          required_bytes,
+                          &bytes_written);
+    if (status != CUDSS_STATUS_SUCCESS) {
+        spdlog::warn("CUDSSSolver::captureEliminationTree - cudssDataGet(data) "
+                     "failed with status {}",
+                     status);
+        elimination_tree_.clear();
+        return;
+    }
+
+    if (bytes_written < required_bytes) {
+        const size_t nodes_written = bytes_written / sizeof(int);
+        elimination_tree_.resize(nodes_written);
+        spdlog::warn(
+            "CUDSSSolver::captureEliminationTree - cuDSS returned fewer bytes "
+            "({}) than requested ({}); truncating to {} nodes",
+            bytes_written,
+            required_bytes,
+            nodes_written);
+    }
+
+    elimination_tree_bytes_     = bytes_written;
+    elimination_tree_available_ = !elimination_tree_.empty();
+
+    if (!elimination_tree_available_) {
+        spdlog::warn("CUDSSSolver::captureEliminationTree - cuDSS returned zero "
+                     "bytes for the elimination tree");
+        return;
+    }
+
+    int    nd_levels          = 0;
+    size_t cfg_bytes_returned = 0;
+    auto   cfg_status         = cudssConfigGet(
+        config,
+        CUDSS_CONFIG_ND_NLEVELS,
+        &nd_levels,
+        sizeof(nd_levels),
+        &cfg_bytes_returned);
+
+    if (cfg_status == CUDSS_STATUS_SUCCESS) {
+        spdlog::info(
+            "CUDSSSolver::captureEliminationTree - saved elimination tree "
+            "({} nodes, nd_levels={})",
+            elimination_tree_.size(),
+            nd_levels);
+    } else {
+        spdlog::info(
+            "CUDSSSolver::captureEliminationTree - saved elimination tree ({} "
+            "nodes)",
+            elimination_tree_.size());
+    }
 }
 
 
