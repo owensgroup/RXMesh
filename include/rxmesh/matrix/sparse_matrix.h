@@ -10,6 +10,7 @@
 
 
 #include <Eigen/Sparse>
+#include <unsupported/Eigen/SparseExtra>
 
 namespace rxmesh {
 
@@ -63,7 +64,7 @@ struct SparseMatrix
      * @brief Constructor using specific mesh query
      */
     SparseMatrix(const RXMeshStatic& rx, Op op = Op::VV)
-        : SparseMatrix(rx, 1.f, op, 1) {};
+        : SparseMatrix(rx, 1.f, 0, op, 1) {};
 
 
     /**
@@ -402,6 +403,21 @@ struct SparseMatrix
             file << r + 1 << " " << c + 1 << " " << val << std::endl;
         });
         file.close();
+    }
+
+    /**
+     * @brief export the matrix to MatrixMarket file
+     */
+    __host__ void to_mtx(std::string file_name)
+    {
+        std::ofstream file(file_name);
+        if (!file.is_open()) {
+            RXMESH_ERROR("SparseMatrix::to_mtx() Can not open file {}",
+                         file_name);
+            return;
+        }
+
+        Eigen::saveMarket(to_eigen(), file_name);
     }
 
     /**
