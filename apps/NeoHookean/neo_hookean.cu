@@ -81,6 +81,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     volume.reset(0, DEVICE);
 
     auto is_dbc_satisfied = *rx.add_vertex_attribute<int>("DBCSatisfied", 1);
+    is_dbc_satisfied.reset(0, DEVICE);
 
     VertexReduceHandle<int> rh(is_dbc_satisfied);
 
@@ -107,12 +108,12 @@ void neo_hookean(RXMeshStatic& rx, T dx)
 
     NetwtonSolver newton_solver(problem, &solver);
 
-    auto x = *rx.get_input_vertex_coordinates();
+    auto& x = *problem.objective;
+    x.copy_from(*rx.get_input_vertex_coordinates(), DEVICE, DEVICE);
 
-    auto x_n = *rx.add_vertex_attribute_like("x_n", x);
+    auto x_n     = *rx.add_vertex_attribute_like("x_n", x);
+    auto x_tilde = *rx.add_vertex_attribute_like("x_tilde", x);
 
-    auto& x_tilde = *problem.objective;
-    x_tilde.copy_from(x, DEVICE, DEVICE);
 
     // Initializations
     init_volume_inverse_b(rx, x, volume, inv_b);
@@ -130,7 +131,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
 
 
     typename ProblemT::DenseMatT alpha(
-        rx, std::max(rx.get_num_vertices(), rx.get_num_faces()), DEVICE);
+        rx, std::max(rx.get_num_vertices(), rx.get_num_faces()), 1, DEVICE);
 
 #if USE_POLYSCOPE
     // add BC to polyscope
@@ -142,10 +143,10 @@ void neo_hookean(RXMeshStatic& rx, T dx)
 #endif
 
     // add inertial energy term OK
-    inertial_energy(problem, x, is_dbc, mass);
+    inertial_energy(problem, x, x_tilde, is_dbc, mass);
 
     // add spring energy term
-    spring_energy(problem, dbc_target, is_dbc, mass, dbc_stiff);
+    spring_energy(problem, x, dbc_target, is_dbc, mass, dbc_stiff);
 
 
     // add gravity energy OK
@@ -154,7 +155,6 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     // add barrier energy
     floor_barrier_energy(problem,
                          contact_area,
-                         v_dbc[0],
                          x,
                          time_step,
                          is_dbc,
@@ -206,7 +206,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
         x_n.copy_from(x, DEVICE, DEVICE);
 
         // compute mu * lambda for each node using x_n
-        compute_mu_lambda(rx,
+        /*compute_mu_lambda(rx,
                           fricition_coef,
                           dhat,
                           kappa,
@@ -214,19 +214,20 @@ void neo_hookean(RXMeshStatic& rx, T dx)
                           ground_o,
                           x,
                           contact_area,
-                          mu_lambda);
+                          mu_lambda);*/
 
         // target position for each DBC in the current time step
         update_dbc(
             rx, is_dbc, x, v_dbc_vel, v_dbc_limit, time_step, dbc_target);
 
         // evaluate energy
-        add_contact(rx, problem.vv_pairs, v_dbc[0], x_tilde, dhat);
+        add_contact(rx, problem.vv_pairs, v_dbc[0], is_dbc, x, dhat);
+        problem.update_hessian();
         problem.eval_terms();
 
         // DBC satisfied
         check_dbc_satisfied(
-            rx, is_dbc_satisfied, x_tilde, is_dbc, dbc_target, time_step, tol);
+            rx, is_dbc_satisfied, x, is_dbc, dbc_target, time_step, tol);
 
         // how many DBC are satisfied
         int num_satisfied = rh.reduce(is_dbc_satisfied, cub::Sum(), 0);
@@ -239,7 +240,6 @@ void neo_hookean(RXMeshStatic& rx, T dx)
         // get newton direction
         newton_solver.compute_direction();
 
-
         // residual is abs_max(newton_dir)/ h
         T residual = newton_solver.dir.abs_max() / time_step;
 
@@ -248,7 +248,6 @@ void neo_hookean(RXMeshStatic& rx, T dx)
 
         int iter = 0;
         while (residual > tol || num_satisfied != num_dbc_vertices) {
-
 
             if (residual <= tol && num_satisfied != num_dbc_vertices) {
                 dbc_stiff.multiply(T(2));
@@ -271,17 +270,16 @@ void neo_hookean(RXMeshStatic& rx, T dx)
             newton_solver.line_search(line_search_init_step, 0.5);
 
             // evaluate energy
-            add_contact(rx, problem.vv_pairs, v_dbc[0], x_tilde, dhat);
+            add_contact(rx, problem.vv_pairs, v_dbc[0], is_dbc, x, dhat);
+            problem.update_hessian();
             problem.eval_terms();
 
+            // T f = problem.get_current_loss();
+            // RXMESH_INFO("Subsetp, Energy: {}", f);
+
             // DBC satisfied
-            check_dbc_satisfied(rx,
-                                is_dbc_satisfied,
-                                x_tilde,
-                                is_dbc,
-                                dbc_target,
-                                time_step,
-                                tol);
+            check_dbc_satisfied(
+                rx, is_dbc_satisfied, x, is_dbc, dbc_target, time_step, tol);
 
             // how many DBC are satisfied
             num_satisfied = rh.reduce(is_dbc_satisfied, cub::Sum(), 0);
@@ -301,13 +299,12 @@ void neo_hookean(RXMeshStatic& rx, T dx)
         //  update velocity
         rx.for_each_vertex(
             DEVICE,
-            [x, x_tilde, velocity, inv_time_step = 1.0 / time_step] __device__(
+            [x, x_n, velocity, inv_time_step = 1.0 / time_step] __device__(
                 VertexHandle vh) mutable {
                 for (int i = 0; i < 3; ++i) {
-                    velocity(vh, i) =
-                        inv_time_step * (x_tilde(vh, i) - x(vh, i));
+                    velocity(vh, i) = inv_time_step * (x(vh, i) - x_n(vh, i));
 
-                    x(vh, i) = x_tilde(vh, i);
+                    // x(vh, i) = x_tilde(vh, i);
                 }
             });
 
@@ -316,7 +313,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     };
 
 #if USE_POLYSCOPE
-    draw(rx, x_tilde, velocity, step_forward, steps);
+    draw(rx, x, velocity, step_forward, steps);
 #else
     while (steps < 5) {
         step_forward();
@@ -344,7 +341,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
 
 int main(int argc, char** argv)
 {
-    Log::init(spdlog::level::info);
+    rx_init(0, spdlog::level::info);
 
 
     std::vector<std::vector<T>>        verts;

@@ -10,11 +10,14 @@ template <typename ProblemT,
           typename MatT,
           typename T>
 void spring_energy(ProblemT&     problem,
+                   const VAttrT& x,
                    const VAttrT& dbc_target,
                    const VAttrI& is_dbc,
                    const T       mass,
                    const MatT&   dbc_stiff)
 {
+    // obj here is x
+
     problem.template add_term<Op::V, true>([=] __device__(const auto& vh,
                                                           auto& obj) mutable {
         using ActiveT = ACTIVE_TYPE(vh);
@@ -22,7 +25,7 @@ void spring_energy(ProblemT&     problem,
         ActiveT E;
 
         if (is_dbc(vh) == 1) {
-            const Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(vh, obj);
+            const Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(vh, x);
 
             const Eigen::Vector3<T> x_target =
                 dbc_target.template to_eigen<3>(vh);

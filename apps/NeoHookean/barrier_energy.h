@@ -9,16 +9,15 @@ template <typename ProblemT,
           typename VAttrT,
           typename VAttrI,
           typename T = typename VAttrT::Type>
-void floor_barrier_energy(ProblemT&          problem,
-                          VAttrT&            contact_area,
-                          const VertexHandle dbc_vertex,
-                          const VAttrT&      x,
-                          const T            h,  // time_step
-                          const VAttrI&      is_dbc,
-                          const vec3<T>&     ground_n,
-                          const vec3<T>&     ground_o,
-                          const T            dhat,
-                          const T            kappa)
+void floor_barrier_energy(ProblemT&      problem,
+                          VAttrT&        contact_area,
+                          const VAttrT&  x,
+                          const T        h,  // time_step
+                          const VAttrI&  is_dbc,
+                          const vec3<T>& ground_n,
+                          const vec3<T>& ground_o,
+                          const T        dhat,
+                          const T        kappa)
 {
 
     const T h_sq = h * h;
@@ -32,9 +31,7 @@ void floor_barrier_energy(ProblemT&          problem,
         [=] __device__(const auto& vh, auto& obj) mutable {
             using ActiveT = ACTIVE_TYPE(vh);
 
-            const Eigen::Vector3<T> x_dbc = x.template to_eigen<3>(dbc_vertex);
-
-            const Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(vh, obj);
+            const Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(vh, x);
 
             ActiveT E;
 
@@ -45,36 +42,34 @@ void floor_barrier_energy(ProblemT&          problem,
                 if (d < dhat) {
                     ActiveT s = d / dhat;
 
+                    if (s <= T(0)) {
+                        using PassiveT = PassiveType<ActiveT>;
+                        return ActiveT(std::numeric_limits<PassiveT>::max());
+                    }
+
                     E = h_sq * contact_area(vh) * dhat * T(0.5) * kappa *
                         (s - 1) * log(s);
                 }
-
-
-                // ceiling
-                // d = (xi - x_dbc).dot(normal);
-                //
-                // if (d < dhat) {
-                //    ActiveT s = d / dhat;
-                //
-                //    E += h_sq * contact_area(vh) * dhat * T(0.5) * kappa *
-                //         (s - 1) * log(s);
-                //}
             }
 
             return E;
         });
 }
 
-template <typename VAttrT, typename T = typename VAttrT::Type>
+template <typename VAttrT, typename VAttrB, typename T = typename VAttrT::Type>
 void add_contact(RXMeshStatic&      rx,
                  CandidatePairsVV&  contact_pairs,
                  const VertexHandle dbc_vertex,
+                 const VAttrB&      is_dbc,
                  const VAttrT&      x,
                  const T            dhat)
 {
     contact_pairs.reset();
 
     rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) mutable {
+        if (vh == dbc_vertex || is_dbc(vh)) {
+            return;
+        }
         const Eigen::Vector3<T> x_dbc = x.template to_eigen<3>(dbc_vertex);
         const Eigen::Vector3<T> xi    = x.template to_eigen<3>(vh);
         const Eigen::Vector3<T> normal(0.0, -1.0, 0.0);
@@ -82,7 +77,7 @@ void add_contact(RXMeshStatic&      rx,
         T d = (xi - x_dbc).dot(normal);
 
         if (d < dhat) {
-            contact_pairs.insert(vh, dbc_vertex);            
+            contact_pairs.insert(vh, dbc_vertex);        
         }
     });
 }
@@ -101,9 +96,6 @@ void ceiling_barrier_energy(ProblemT&      problem,
 {
     const T h_sq = h * h;
 
-    const Eigen::Vector3<T> o(ground_o[0], ground_o[1], ground_o[2]);
-    const Eigen::Vector3<T> n(ground_n[0], ground_n[1], ground_n[2]);
-
     const Eigen::Vector3<T> normal(0.0, -1.0, 0.0);
 
     problem.template add_term<true>([=] __device__(const auto& id,
@@ -115,10 +107,10 @@ void ceiling_barrier_energy(ProblemT&      problem,
 
         const VertexHandle c1 = iter[1];
 
+        //???
+        const Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(id, iter, x, 0);
 
         const Eigen::Vector3<T> x_dbc = x.template to_eigen<3>(c1);
-
-        const Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(c0, obj);
 
 
         // ceiling
@@ -175,6 +167,7 @@ T barrier_step_size(RXMeshStatic&      rx,
         }
 
         // ceiling
+        //TODO this should be generalized 
         if (!is_dbc(vh)) {
             p_n = glm::dot(n, (pi - p_dbc));
             if (p_n < 0) {
