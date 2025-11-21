@@ -43,7 +43,8 @@ struct CandidatePairs
               max_capacity * variable_dim * variable_dim * 2,
               2)),
           m_pairs_handle(DenseMatrix<PairT, Eigen::ColMajor>(max_capacity, 1)),
-          m_current_size(DenseMatrix<int>(1, 1)),
+          m_current_num_pairs(DenseMatrix<int>(1, 1)),
+          m_current_num_index(DenseMatrix<int>(1, 1)),
           m_context(ctx)
     {
         reset();
@@ -85,18 +86,21 @@ struct CandidatePairs
         };
 
 #ifdef __CUDA_ARCH__
-        int id = ::atomicAdd(m_current_size.data(DEVICE), 1);
+        int id = ::atomicAdd(m_current_num_pairs.data(DEVICE), 1);
         if (id < m_pairs_handle.rows()) {
+            ::atomicAdd(m_current_num_index.data(DEVICE),
+                        m_variable_dim * m_variable_dim * 2);
             add_candidate(id);
             return true;
         } else {
-            ::atomicAdd(m_current_size.data(DEVICE), -1);
+            ::atomicAdd(m_current_num_pairs.data(DEVICE), -1);
             return false;
         }
 #else
-        if (m_current_size(0) < m_pairs_handle.rows()) {
-            int id = m_current_size(0);
-            m_current_size(0)++;
+        if (m_current_num_pairs(0) < m_pairs_handle.rows()) {
+            int id = m_current_num_pairs(0);
+            m_current_num_pairs(0)++;
+            m_current_num_index(0) += m_variable_dim * m_variable_dim * 2;
             add_candidate(id);
             return true;
         } else {
@@ -111,8 +115,8 @@ struct CandidatePairs
     __device__ __host__ const PairT& get_pair(int id) const
     {
         assert(id < m_pairs_handle.rows());
-        assert(id < m_current_size(0));
-        assert(m_current_size(0) > 0);
+        assert(id < m_current_num_pairs(0));
+        assert(m_current_num_pairs(0) > 0);
 
         return m_pairs_handle(id, 0);
     }
@@ -121,13 +125,27 @@ struct CandidatePairs
      * @brief return the current number of the candidates (i.e., number of
      * handles, not indices)
      */
-    __device__ __host__ int size()
+    __device__ __host__ int num_pairs()
     {
 #ifdef __CUDA_ARCH__
-        return m_current_size(0);
+        return m_current_num_pairs(0);
 #else
-        m_current_size.move(DEVICE, HOST);
-        return m_current_size(0);
+        m_current_num_pairs.move(DEVICE, HOST);
+        return m_current_num_pairs(0);
+#endif
+    }
+
+
+    /**
+     * @brief return the current number of the new indices
+     */
+    __device__ __host__ int num_index()
+    {
+#ifdef __CUDA_ARCH__
+        return m_current_num_index(0);
+#else
+        m_current_num_index.move(DEVICE, HOST);
+        return m_current_num_index(0);
 #endif
     }
 
@@ -145,11 +163,13 @@ struct CandidatePairs
      */
     __device__ __host__ void reset()
     {
-        m_current_size(0) = 0;
+        m_current_num_pairs(0) = 0;
+        m_current_num_index(0) = 0;
 
 #ifndef __CUDA_ARCH__
 
-        m_current_size.move(HOST, DEVICE);
+        m_current_num_pairs.move(HOST, DEVICE);
+        m_current_num_index.move(HOST, DEVICE);
 #endif
     }
 
@@ -161,7 +181,8 @@ struct CandidatePairs
     {
         m_pairs_id.release();
         m_pairs_handle.release();
-        m_current_size.release();
+        m_current_num_pairs.release();
+        m_current_num_index.release();
     }
 
 
@@ -170,7 +191,8 @@ struct CandidatePairs
     DenseMatrix<PairT, Eigen::ColMajor>  m_pairs_handle;
 
     // track the number of pairs (not the number of indices)
-    DenseMatrix<int> m_current_size;
+    DenseMatrix<int> m_current_num_pairs;
+    DenseMatrix<int> m_current_num_index;
     int              m_variable_dim;
 
     Context m_context;

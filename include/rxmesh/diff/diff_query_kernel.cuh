@@ -338,7 +338,7 @@ __global__ static void diff_kernel_passive_pair(
 
     const uint32_t stride = blockThreads * gridDim.x;
 
-    const int size = pairs.size();
+    const int size = pairs.num_pairs();
 
     for (int id = threadIdx.x + blockThreads * blockIdx.x; id < size;
          id += stride) {
@@ -383,7 +383,7 @@ __global__ static void diff_kernel_active_pair(
 
     const uint32_t stride = blockThreads * gridDim.x;
 
-    const int size = pairs.size();
+    const int size = pairs.num_pairs();
 
     for (int id = threadIdx.x + blockThreads * blockIdx.x; id < size;
          id += stride) {

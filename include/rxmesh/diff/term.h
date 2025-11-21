@@ -323,7 +323,7 @@ struct TemplatedTermPairs
                 "supported for Hessians.");
             return;
         }
-        int size = pairs.size();
+        int size = pairs.num_pairs();
 
         if (size == 0) {
             return;
@@ -352,7 +352,7 @@ struct TemplatedTermPairs
     void eval_active_grad_only(Attribute<T, ObjHandleT>& obj,
                                cudaStream_t              stream)
     {
-        int size = pairs.size();
+        int size = pairs.num_pairs();
 
         if (size == 0) {
             return;
@@ -397,7 +397,7 @@ struct TemplatedTermPairs
                 "not supported for Hessians.");
             return;
         }
-        int size = pairs.size();
+        int size = pairs.num_pairs();
 
         if (size == 0) {
             return;
@@ -413,7 +413,7 @@ struct TemplatedTermPairs
      */
     void eval_passive(Attribute<T, ObjHandleT>& obj, cudaStream_t stream)
     {
-        int size = pairs.size();
+        int size = pairs.num_pairs();
 
         if (size == 0) {
             return;
