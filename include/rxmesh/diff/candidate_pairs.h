@@ -77,10 +77,11 @@ struct CandidatePairs
 
                     m_pairs_id(id, 0) = r_id;
                     m_pairs_id(id, 1) = c_id;
-
                     id++;
+
                     m_pairs_id(id, 0) = c_id;
                     m_pairs_id(id, 1) = r_id;
+                    id++;
                 }
             }
         };
