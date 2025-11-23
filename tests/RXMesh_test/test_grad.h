@@ -47,7 +47,7 @@ TEST(Diff, SmoothingNewton)
 
     using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle, true>;
 
-    ProblemT problem(rx);
+    ProblemT problem(rx, true);
 
     auto v_input_pos = *rx.get_input_vertex_coordinates();
 
