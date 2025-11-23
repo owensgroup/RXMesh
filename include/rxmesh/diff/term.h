@@ -38,6 +38,8 @@ struct Term
         cudaStream_t                           stream) = 0;
 
     virtual T get_loss(cudaStream_t stream) = 0;
+
+    virtual void update_hessian(void* hess_ptr) = 0;
 };
 
 /**
@@ -65,8 +67,8 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
     TemplatedTerm(RXMeshStatic&                        rx,
                   LambdaT                              t,
                   bool                                 oreinted,
-                  DenseMatrix<T, Eigen::RowMajor>&     grad,
-                  HessianSparseMatrix<T, VariableDim>& hess)
+                  DenseMatrix<T, Eigen::RowMajor>*     grad,
+                  HessianSparseMatrix<T, VariableDim>* hess)
         : term(t), rx(rx), grad(grad), hess(hess), oreinted(oreinted)
     {
         // To avoid the clash that happens from adding many losses.
@@ -149,8 +151,8 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
                                                  VariableDim,
                                                  LambdaT>,
                       stream,
-                      grad,
-                      hess,
+                      *grad,
+                      *hess,
                       *loss,
                       obj,
                       oreinted,
@@ -175,8 +177,8 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
                                                  VariableDim,
                                                  LambdaT>,
                       stream,
-                      grad,
-                      hess,
+                      *grad,
+                      *hess,
                       *loss,
                       obj,
                       oreinted,
@@ -253,6 +255,14 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
         return reducer->reduce(*loss, cub::Sum(), 0, INVALID32, stream);
     }
 
+    /**
+     * @brief update the pointer to hessian stored in this class
+     */
+    void update_hessian(void* hess_ptr)
+    {
+        hess = static_cast<HessianSparseMatrix<T, VariableDim>*>(hess_ptr);
+    }
+
     LambdaT term;
 
     std::shared_ptr<Attribute<T, LossHandleT>>    loss;
@@ -266,8 +276,8 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
     bool oreinted;
 
     RXMeshStatic&                        rx;
-    DenseMatrix<T, Eigen::RowMajor>&     grad;
-    HessianSparseMatrix<T, VariableDim>& hess;
+    DenseMatrix<T, Eigen::RowMajor>*     grad;
+    HessianSparseMatrix<T, VariableDim>* hess;
 };
 
 
@@ -296,8 +306,8 @@ struct TemplatedTermPairs
 
     TemplatedTermPairs(RXMeshStatic&                            rx,
                        LambdaT                                  t,
-                       DenseMatrix<T, Eigen::RowMajor>&         grad,
-                       HessianSparseMatrix<T, VariableDim>&     hess,
+                       DenseMatrix<T, Eigen::RowMajor>*         grad,
+                       HessianSparseMatrix<T, VariableDim>*     hess,
                        CandidatePairs<HandleT0, HandleT1, int>& pairs)
         : term(t), grad(grad), hess(hess), pairs(pairs)
     {
@@ -341,7 +351,7 @@ struct TemplatedTermPairs
                                         VariableDim,
                                         LambdaT>
             <<<blocks, blockThreads, 0, stream>>>(
-                pairs, grad, hess, *loss, obj, term);
+                pairs, *grad, *hess, *loss, obj, term);
     }
 
 
@@ -370,7 +380,7 @@ struct TemplatedTermPairs
                                         VariableDim,
                                         LambdaT>
             <<<blocks, blockThreads, 0, stream>>>(
-                pairs, grad, hess, *loss, obj, term);
+                pairs, *grad, *hess, *loss, obj, term);
     }
 
 
@@ -440,13 +450,21 @@ struct TemplatedTermPairs
         return reducer->reduce(*loss, cub::Sum(), 0, INVALID32, stream);
     }
 
+    /**
+     * @brief update the pointer to hessian stored in this class
+     */
+    void update_hessian(void* hess_ptr)
+    {
+        hess = static_cast<HessianSparseMatrix<T, VariableDim>*>(hess_ptr);
+    }
+
     LambdaT term;
 
     std::shared_ptr<Attribute<T, LossHandleT>>    loss;
     std::shared_ptr<ReduceHandle<T, LossHandleT>> reducer;
 
-    DenseMatrix<T, Eigen::RowMajor>&         grad;
-    HessianSparseMatrix<T, VariableDim>&     hess;
+    DenseMatrix<T, Eigen::RowMajor>*         grad;
+    HessianSparseMatrix<T, VariableDim>*     hess;
     CandidatePairs<HandleT0, HandleT1, int>& pairs;
 };
 }  // namespace rxmesh

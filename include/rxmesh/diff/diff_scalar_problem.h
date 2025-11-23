@@ -108,7 +108,7 @@ struct DiffScalarProblem
                                                            ProjectHess,
                                                            VariableDim,
                                                            LambdaT>>(
-                rx, t, oreinted, grad, *hess);
+                rx, t, oreinted, &grad, hess.get());
             terms.push_back(
                 std::dynamic_pointer_cast<Term<T, ObjHandleT>>(new_term));
         }
@@ -123,7 +123,7 @@ struct DiffScalarProblem
                                                            ProjectHess,
                                                            VariableDim,
                                                            LambdaT>>(
-                rx, t, oreinted, grad, *hess);
+                rx, t, oreinted, &grad, hess.get());
             terms.push_back(
                 std::dynamic_pointer_cast<Term<T, ObjHandleT>>(new_term));
         }
@@ -138,7 +138,7 @@ struct DiffScalarProblem
                                                            ProjectHess,
                                                            VariableDim,
                                                            LambdaT>>(
-                rx, t, oreinted, grad, *hess);
+                rx, t, oreinted, &grad, hess.get());
             terms.push_back(
                 std::dynamic_pointer_cast<Term<T, ObjHandleT>>(new_term));
         }
@@ -173,7 +173,7 @@ struct DiffScalarProblem
                                                 ProjectHess,
                                                 VariableDim,
                                                 LambdaT>>(
-                rx, t, grad, *hess, vv_pairs);
+                rx, t, &grad, hess.get(), vv_pairs);
 
         terms.push_back(
             std::dynamic_pointer_cast<Term<T, ObjHandleT>>(new_term));
@@ -188,6 +188,10 @@ struct DiffScalarProblem
                          vv_pairs.m_pairs_id.col_data(0),
                          vv_pairs.m_pairs_id.col_data(1));
         hess_new.swap(hess);
+
+        for (size_t i = 0; i < terms.size(); ++i) {
+            terms[i]->update_hessian(hess.get());
+        }
     }
 
     /**

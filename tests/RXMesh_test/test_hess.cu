@@ -6,11 +6,12 @@
 
 #include "rxmesh/diff/diff_scalar_problem.h"
 
-template <typename ProblemT, typename T>
-void add_term(ProblemT& problem, rxmesh::VertexAttribute<T>& x, T mass)
-{
-    using namespace rxmesh;
+using namespace rxmesh;
+using PairT = std::pair<VertexHandle, VertexHandle>;
 
+template <typename ProblemT, typename T>
+void add_inertia_term(ProblemT& problem, rxmesh::VertexAttribute<T>& x, T mass)
+{
     problem.template add_term<Op::V, true>(
         [x, mass] __device__(const auto& vh, auto& obj) mutable {
             using ActiveT = ACTIVE_TYPE(vh);
@@ -27,39 +28,96 @@ void add_term(ProblemT& problem, rxmesh::VertexAttribute<T>& x, T mass)
         });
 }
 
-void new_entries(int*     d_new_rows,
-                 int*     d_new_cols,
-                 uint32_t new_size,
-                 uint32_t num_v)
+template <typename ProblemT>
+void new_entries(RXMeshStatic& rx,
+                 ProblemT&     problem,
+                 size_t        num_new_pairs,
+                 PairT*        d_pairs)
 {
-    using namespace rxmesh;
+    problem.vv_pairs.reset();
 
-    for_each_item<<<1, new_size>>>(
-        new_size,
-        [d_new_rows, d_new_cols, num_v] __device__(int i) mutable {
-            int id0 = i * 2 + 0;
-            int id1 = i * 2 + 1;
+    constexpr uint32_t blockThreads = 256;
 
-            int v0 = i;
+    uint32_t blocks = DIVIDE_UP(num_new_pairs, blockThreads);
 
-            int v1 = num_v - i - 1;
-
-            d_new_rows[id0] = v0;
-            d_new_cols[id0] = v1;
-
-            d_new_rows[id1] = v1;
-            d_new_cols[id1] = v0;
+    for_each_item<<<blocks, blockThreads>>>(
+        num_new_pairs,
+        [d_pairs, contact_pairs = problem.vv_pairs] __device__(int i) mutable {
+            bool inserted =
+                contact_pairs.insert(d_pairs[i].first, d_pairs[i].second);
+            assert(inserted);
         }
 
     );
+}
+
+
+std::pair<PairT*, size_t> generate_pairs(RXMeshStatic& rx)
+{
+    auto x = *rx.get_input_vertex_coordinates();
+
+    std::vector<VertexHandle> bottom;
+
+    rx.for_each_vertex(
+        HOST,
+        [&](const VertexHandle& vh) {
+            if (x(vh, 1) < 0.0001) {
+                bottom.push_back(vh);
+            }
+        },
+        NULL,
+        false);
+
+
+    std::vector<PairT> pairs;
+
+    rx.for_each_vertex(
+        HOST,
+        [&](const VertexHandle& vh) {
+            if (x(vh, 1) > 0.99) {
+                for (int i = 0; i < bottom.size(); ++i) {
+                    VertexHandle nh(bottom[i]);
+
+                    if (std::abs(x(vh, 0) - x(nh, 0)) < 0.00001) {
+                        PairT p(vh, nh);
+                        pairs.push_back(p);
+                    }
+                }
+            }
+        },
+        NULL,
+        false);
+
+    PairT* d_pairs = nullptr;
+
+    CUDA_ERROR(cudaMalloc((void**)&d_pairs, sizeof(PairT) * pairs.size()));
+
+    CUDA_ERROR(cudaMemcpy(d_pairs,
+                          pairs.data(),
+                          sizeof(PairT) * pairs.size(),
+                          cudaMemcpyHostToDevice));
+
+    return {d_pairs, pairs.size()};
+}
+
+template <typename ProblemT, typename T>
+void verify_inertia_hess(ProblemT& problem, T mass)
+{
+    problem.hess->move(DEVICE, HOST);
+
+    problem.hess->for_each([&](int i, int j, auto val) {
+        if (i == j) {
+            EXPECT_NEAR(val, mass, 1e-3);
+        } else {
+            EXPECT_NEAR(val, 0, 1e-3);
+        }
+    });
 }
 
 TEST(Diff, Hess)
 {
     // Test the hessian of the inertia term of a mass-spring system
     // https://phys-sim-book.github.io/lec4.2-inertia.html
-
-    using namespace rxmesh;
 
     using T = float;
 
@@ -81,7 +139,7 @@ TEST(Diff, Hess)
 
     using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle, true>;
 
-    ProblemT problem(rx);
+    ProblemT problem(rx, true);
 
     // mass per vertex = rho * volume /num_vertices
     T mass = 0.01;
@@ -89,33 +147,20 @@ TEST(Diff, Hess)
     auto x = *rx.get_input_vertex_coordinates();
 
     // add inertial energy term
-    add_term(problem, x, mass);
-
-
+    add_inertia_term(problem, x, mass);
     problem.eval_terms();
-
-    problem.hess->move(DEVICE, HOST);
-
-    problem.hess->for_each([&](int i, int j, T val) {
-        if (i == j) {
-            EXPECT_NEAR(val, mass, 1e-3);
-        } else {
-            EXPECT_NEAR(val, 0, 1e-3);
-        }
-    });
+    verify_inertia_hess(problem, mass);
 }
 
 TEST(Diff, HessUpdate)
 {
-    using namespace rxmesh;
-
     using T = float;
 
     std::vector<std::vector<T>> verts;
 
     std::vector<std::vector<uint32_t>> fv;
 
-    int n = 12;
+    int n = 5;
 
     T dx = 1 / T(n - 1);
 
@@ -126,43 +171,52 @@ TEST(Diff, HessUpdate)
 
     constexpr int VariableDim = 3;
 
-    constexpr uint32_t blockThreads = 256;
 
     using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle, true>;
 
-    ProblemT problem(rx, true, 1.f);
+    int expected_num_new_pairs = n;
 
-    // mass per vertex = rho * volume /num_vertices
+    ProblemT problem(rx, true, expected_num_new_pairs);
+
     T mass = 0.01;
 
     auto x = *rx.get_input_vertex_coordinates();
 
-    // add inertial energy term
-    add_term(problem, x, mass);
-
+    add_inertia_term(problem, x, mass);
     problem.eval_terms();
+    T prv_loss = problem.get_current_loss();
+    verify_inertia_hess(problem, mass);
 
-    // new pairs to insert
-    int *d_new_rows, *d_new_cols;
-
-    int new_size = n;
-
-    // the 2 is because if v0 adds v1 then v1 should add v0 to make the hessian
-    // symmetric
-    CUDA_ERROR(cudaMalloc((void**)&d_new_rows, 2 * new_size * sizeof(int)));
-    CUDA_ERROR(cudaMalloc((void**)&d_new_cols, 2 * new_size * sizeof(int)));
-
-    new_entries(d_new_rows, d_new_cols, new_size, rx.get_num_vertices());
+    int prev_nnz = problem.hess->non_zeros();
 
     // problem.hess->reset(0, HOST);
-    // problem.hess->to_file("old_hess");
+    problem.hess->move(DEVICE, HOST);
+    problem.hess->to_file("old_hess");
 
-    problem.update_hessian(2 * new_size, d_new_rows, d_new_cols);
+    auto [d_pairs, num_new_pairs] = generate_pairs(rx);
 
+    EXPECT_EQ(num_new_pairs, expected_num_new_pairs);
+
+    new_entries(rx, problem, num_new_pairs, d_pairs);
+    problem.update_hessian();
+      
+    problem.eval_terms();
+    T   new_loss = problem.get_current_loss();
+    int new_nnz  = problem.hess->non_zeros();
+
+    EXPECT_NEAR(prv_loss, new_loss, 0.00001);
+
+    EXPECT_EQ(new_nnz,
+              prev_nnz + 2 * num_new_pairs * VariableDim * VariableDim);
 
     // problem.hess->reset(0, HOST);
-    // problem.hess->to_file("new_hess");
+    problem.hess_new->move(DEVICE, HOST);
+    problem.hess_new->to_file("new_hess");
 
-    GPU_FREE(d_new_rows);
-    GPU_FREE(d_new_cols);
+    // Note that we did not add any new term for the contact pairs. So Hessian
+    // still evaluate to the same Hessian without these new contact pairs--we
+    // basically just a few new entries that are zeros
+    verify_inertia_hess(problem, mass);
+
+    GPU_FREE(d_pairs);
 }
