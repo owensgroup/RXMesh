@@ -23,7 +23,7 @@ endif()
 option(${PROJECT_NAME}_WITH_PARTH "Use Parth for fill-reducing orderings" ON)
 option(${PROJECT_NAME}_WITH_SUITESPARSE "Use SuiteSparse for benchmark" ON)
 option(${PROJECT_NAME}_WITH_STRUMPACK "Use Strumpack for benchmark" OFF)
-option(${PROJECT_NAME}_WITH_PROFILE "Use Profile for benchmark" OFF)
+option(${PROJECT_NAME}_WITH_PROFILE "Use Profile for benchmark" ON)
 
 ################################################################################
 # SECTION 3: Configure RXMesh Library with Optional Development Dependencies

@@ -183,7 +183,7 @@ public:
     std::vector<std::vector<uint32_t>> fv;
     std::vector<std::vector<float>> vertices;
 
-    bool _use_gpu = true;
+    bool _use_gpu = false;
     std::unique_ptr<rxmesh::RXMeshStatic> _rxmesh;
     double _separator_ratio = 0.0;
 

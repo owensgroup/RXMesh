@@ -586,6 +586,7 @@ void GPUOrdering_V2::decompose()
     // auto omp_parallel_start = std::chrono::high_resolution_clock::now();
     #pragma omp parallel
     {
+        int tid = omp_get_thread_num();
         for (int l = 0; l < this->_decomposition_tree.decomposition_level; l++) {
             int start_level_idx = (1 << l) - 1;
             int end_level_idx   = (1 << (l + 1)) - 1;
@@ -648,7 +649,7 @@ void GPUOrdering_V2::decompose()
                 // auto two_way_start = std::chrono::high_resolution_clock::now();
                 #ifdef USE_PROFILE
                 {
-                    NVTX_RANGE_COLOR("two_way_Q_partition", 0xFFFF0000);  // Red
+                    NVTX_RANGE_COLOR("two_way_Q_partition_" + std::to_string(tid), 0xFFFF0000);  // Red
                 #endif
                     this->two_way_Q_partition(tree_node_id,
                         assigned_g_nodes);
@@ -660,7 +661,7 @@ void GPUOrdering_V2::decompose()
                 if(_use_gpu) {
                     #ifdef USE_PROFILE
                     {
-                            NVTX_RANGE_COLOR("gpu_copy_q", 0xFF0000FF);  // Blue
+                            NVTX_RANGE_COLOR("gpu_copy_q_" + std::to_string(tid), 0xFF0000FF);  // Blue
                     #endif
                         THRUST_CALL(thrust::copy(this->_decomposition_tree.q_node_to_tree_node.begin(),
                             this->_decomposition_tree.q_node_to_tree_node.end(),
@@ -675,7 +676,7 @@ void GPUOrdering_V2::decompose()
                 auto three_way_start = std::chrono::high_resolution_clock::now();
                 #ifdef USE_PROFILE
                 {
-                    NVTX_RANGE_COLOR("three_way_G_partition", 0xFFFFFF00);  // Yellow
+                    NVTX_RANGE_COLOR("three_way_G_partition_" + std::to_string(tid), 0xFFFFFF00);  // Yellow
                 #endif
                     this->three_way_G_partition(tree_node_id, assigned_g_nodes, separator_g_nodes);
                 #ifdef USE_PROFILE
@@ -685,7 +686,7 @@ void GPUOrdering_V2::decompose()
                 auto three_way_duration = std::chrono::duration_cast<std::chrono::milliseconds>(three_way_end - three_way_start).count();
                 #ifdef USE_PROFILE
                 {
-                    NVTX_RANGE_COLOR("assign_separator", 0xFFFFFF00);
+                    NVTX_RANGE_COLOR("assign_separator_" + std::to_string(tid), 0xFFFFFF00);
                 #endif
                     this->_decomposition_tree.assign_nodes_to_tree(separator_g_nodes, tree_node_id);
                 #ifdef USE_PROFILE
@@ -696,7 +697,7 @@ void GPUOrdering_V2::decompose()
                 // spdlog::info("three_way_G_partition time: {} ms", three_way_duration);
                 #ifdef USE_PROFILE
                 {
-                    NVTX_RANGE_COLOR("init_next_level", 0xFFFFFF00);
+                    NVTX_RANGE_COLOR("init_next_level_" + std::to_string(tid), 0xFFFFFF00);
                 #endif
                 std::vector<int> left_assigned_g_nodes, right_assigned_g_nodes;
 

@@ -55,14 +55,10 @@ void POCOrdering::setOptions(const std::map<std::string, std::string>& options)
 {
     if (options.find("local_permute_method") != options.end()) {
         this->gpu_order.local_permute_method = options.at("local_permute_method");
-    } else {
-        this->gpu_order.local_permute_method = "metis";
     }
 
     if (options.find("use_gpu") != options.end()) {
         this->gpu_order._use_gpu = std::stoi(options.at("use_gpu"));
-    } else {
-        this->gpu_order._use_gpu = false;
     }
 
     // if(options.find("separator_finding_method") != options.end()) {

@@ -11,5 +11,5 @@ nsys profile \
   ./RXMesh_benchmark \
   -i /media/behrooz/FarazHard/Last_Project/MIT_meshes/nefertiti.obj \
   -s CHOLMOD \
-  -a POC_ND
-  -g false
+  -a POC_ND \
+  -g 1
