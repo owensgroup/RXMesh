@@ -9,6 +9,44 @@
 namespace rxmesh {
 
 template <typename HandleT>
+struct PairIterator
+{
+    using LocalT = typename HandleT::LocalT;
+    using Handle = HandleT;
+
+    __device__ __inline__ PairIterator(const HandleT& in0, const HandleT& in1)
+        : h0(in0), h1(in1)
+    {
+    }
+
+    PairIterator(const PairIterator& orig) = default;
+
+
+    __device__ __inline__ int size() const
+    {
+        return 2;
+    }
+
+    __device__ __inline__ HandleT operator[](const int i) const
+    {
+        assert(i < size());
+        if (i == 0) {
+            return h0;
+        } else if (i == 1) {
+            return h1;
+        } else {
+            HandleT();
+        }
+    }
+
+
+   private:
+    HandleT h0;
+    HandleT h1;
+};
+
+
+template <typename HandleT>
 struct Iterator
 {
     using LocalT = typename HandleT::LocalT;

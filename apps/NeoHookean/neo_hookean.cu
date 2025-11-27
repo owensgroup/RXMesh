@@ -35,17 +35,21 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     using HessMatT = typename ProblemT::HessMatT;
 
     // Problem parameters
-    const T density        = 1000;  // rho
-    const T young_mod      = 1e5;   // E
-    const T poisson_ratio  = 0.4;   // nu
-    const T time_step      = 0.01;  // h
-    const T fricition_coef = 0.11;  // mu
-    const T stiffness_coef = 4e4;
-    const T tol            = 0.01;
-    const T inv_time_step  = T(1) / time_step;
-    T       dbc_stiff      = 1000;
-    const T dhat           = 0.01;
-    const T kappa          = 1e5;
+    const int max_vv_candidate_pairs = 50;
+
+    const T        density        = 1000;  // rho
+    const T        young_mod      = 1e5;   // E
+    const T        poisson_ratio  = 0.4;   // nu
+    const T        time_step      = 0.01;  // h
+    const T        fricition_coef = 0.11;  // mu
+    const T        stiffness_coef = 4e4;
+    const T        tol            = 0.01;
+    const T        inv_time_step  = T(1) / time_step;
+    DenseMatrix<T> dbc_stiff(1, 1);
+    dbc_stiff(0) = 1000;
+    dbc_stiff.move(HOST, DEVICE);
+    const T dhat  = 0.01;
+    const T kappa = 1e5;
 
     // TODO the limits and velocity should be different for different Dirichlet
     // nodes
@@ -66,7 +70,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     glm::vec3 bb = bb_upper - bb_lower;
 
     // mass per vertex = rho * volume /num_vertices
-    T mass = density * bb[0] * bb[1] /
+    T mass = density * bb[0] * bb[0] /
              (rx.get_num_vertices() - num_dbc_vertices);  // m
 
     // Attributes
@@ -77,6 +81,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     volume.reset(0, DEVICE);
 
     auto is_dbc_satisfied = *rx.add_vertex_attribute<int>("DBCSatisfied", 1);
+    is_dbc_satisfied.reset(0, DEVICE);
 
     VertexReduceHandle<int> rh(is_dbc_satisfied);
 
@@ -84,10 +89,10 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     mu_lambda.reset(0, DEVICE);
 
     auto inv_b =
-        *rx.add_face_attribute<Eigen::Matrix<T, 2, 3>>("InvB", 1);  // IB
+        *rx.add_face_attribute<Eigen::Matrix<T, 3, 3>>("InvB", 1);  // IB
 
     auto is_dbc = *rx.add_vertex_attribute<int8_t>("isBC", 1);
-    is_dbc.reset(0, DEVICE);
+
 
     auto dbc_target = *rx.add_vertex_attribute<T>("DBCTarget", 3);
     dbc_target.reset(0, DEVICE);
@@ -96,28 +101,29 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     contact_area.reset(dx, DEVICE);  // perimeter split to each vertex
 
     // Diff problem and solvers
-    ProblemT problem(rx);
+    ProblemT problem(rx, true, max_vv_candidate_pairs);
 
     CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(
         problem.hess.get());
 
     NetwtonSolver newton_solver(problem, &solver);
 
-    auto x = *rx.get_input_vertex_coordinates();
+    auto& x = *problem.objective;
+    x.copy_from(*rx.get_input_vertex_coordinates(), DEVICE, DEVICE);
 
-    auto x_n = *rx.add_vertex_attribute_like("x_n", x);
+    auto x_n     = *rx.add_vertex_attribute_like("x_n", x);
+    auto x_tilde = *rx.add_vertex_attribute_like("x_tilde", x);
 
-    auto& x_tilde = *problem.objective;
-    x_tilde.copy_from(x, DEVICE, DEVICE);
 
     // Initializations
     init_volume_inverse_b(rx, x, volume, inv_b);
 
     rx.for_each_vertex(HOST, [&](VertexHandle vh) mutable {
         // doing it on the host since v_dbc is an array on the host
+        is_dbc(vh) = 0;
         for (int i = 0; i < num_dbc_vertices; ++i) {
             if (vh == v_dbc[i]) {
-                is_dbc(vh) = true;
+                is_dbc(vh) = 1;
             }
         }
     });
@@ -125,50 +131,58 @@ void neo_hookean(RXMeshStatic& rx, T dx)
 
 
     typename ProblemT::DenseMatT alpha(
-        rx, std::max(rx.get_num_vertices(), rx.get_num_faces()), DEVICE);
+        rx, std::max(rx.get_num_vertices(), rx.get_num_faces()), 1, DEVICE);
 
 #if USE_POLYSCOPE
     // add BC to polyscope
     rx.get_polyscope_mesh()->addVertexScalarQuantity("DBC", is_dbc);
+
+    // add volume to polyscope
+    volume.move(DEVICE, HOST);
+    rx.get_polyscope_mesh()->addFaceScalarQuantity("Volume", volume);
 #endif
 
-    // add inertial energy term
-    inertial_energy(problem, x, mass);
+    // add inertial energy term OK
+    inertial_energy(problem, x, x_tilde, is_dbc, mass);
 
     // add spring energy term
-    spring_energy(problem, dbc_target, is_dbc, mass, dbc_stiff);
+    spring_energy(problem, x, dbc_target, is_dbc, mass, dbc_stiff);
 
 
-    // add gravity energy
-    gravity_energy(problem, x, time_step, mass);
+    // add gravity energy OK
+    gravity_energy(problem, x, is_dbc, time_step, mass);
 
     // add barrier energy
-    barrier_energy(problem,
-                   contact_area,
-                   v_dbc[0],
-                   x,
-                   time_step,
-                   is_dbc,
-                   ground_n,
-                   ground_o,
-                   dhat,
-                   kappa);
+    floor_barrier_energy(problem,
+                         contact_area,
+                         x,
+                         time_step,
+                         is_dbc,
+                         ground_n,
+                         ground_o,
+                         dhat,
+                         kappa);
+
+    ceiling_barrier_energy(
+        problem, contact_area, x, time_step, ground_n, ground_o, dhat, kappa);
 
 
     T line_search_init_step = 0;
 
     // add friction energy
-    friction_energy(problem,
-                    x,
-                    x_n,
-                    newton_solver.dir,
-                    line_search_init_step,
-                    mu_lambda,
-                    time_step,
-                    ground_n);
+    // TODO alpha should change during different runs (e.g., in the line search)
+    // friction_energy(problem,
+    //                x,
+    //                x_n,
+    //                newton_solver.dir,
+    //                line_search_init_step,
+    //                mu_lambda,
+    //                time_step,
+    //                ground_n);
 
     // add neo hooken energy
-    neo_hookean_energy(problem, x, volume, inv_b, mu_lame, time_step, lam);
+    neo_hookean_energy(
+        problem, x, is_dbc, volume, inv_b, mu_lame, time_step, lam);
 
 
     int steps = 0;
@@ -192,7 +206,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
         x_n.copy_from(x, DEVICE, DEVICE);
 
         // compute mu * lambda for each node using x_n
-        compute_mu_lambda(rx,
+        /*compute_mu_lambda(rx,
                           fricition_coef,
                           dhat,
                           kappa,
@@ -200,13 +214,15 @@ void neo_hookean(RXMeshStatic& rx, T dx)
                           ground_o,
                           x,
                           contact_area,
-                          mu_lambda);
+                          mu_lambda);*/
 
         // target position for each DBC in the current time step
         update_dbc(
             rx, is_dbc, x, v_dbc_vel, v_dbc_limit, time_step, dbc_target);
 
         // evaluate energy
+        add_contact(rx, problem.vv_pairs, v_dbc[0], is_dbc, x, dhat);
+        problem.update_hessian();
         problem.eval_terms();
 
         // DBC satisfied
@@ -224,7 +240,6 @@ void neo_hookean(RXMeshStatic& rx, T dx)
         // get newton direction
         newton_solver.compute_direction();
 
-
         // residual is abs_max(newton_dir)/ h
         T residual = newton_solver.dir.abs_max() / time_step;
 
@@ -234,11 +249,8 @@ void neo_hookean(RXMeshStatic& rx, T dx)
         int iter = 0;
         while (residual > tol || num_satisfied != num_dbc_vertices) {
 
-
             if (residual <= tol && num_satisfied != num_dbc_vertices) {
-                // TODO: the updated values of dbc_stiff is not observed in the
-                // spring_energy kernel since it was copied by value
-                dbc_stiff *= 2;
+                dbc_stiff.multiply(T(2));
             }
 
             T nh_step = neo_hookean_step_size(rx, x, newton_solver.dir, alpha);
@@ -258,7 +270,12 @@ void neo_hookean(RXMeshStatic& rx, T dx)
             newton_solver.line_search(line_search_init_step, 0.5);
 
             // evaluate energy
+            add_contact(rx, problem.vv_pairs, v_dbc[0], is_dbc, x, dhat);
+            problem.update_hessian();
             problem.eval_terms();
+
+            // T f = problem.get_current_loss();
+            // RXMESH_INFO("Subsetp, Energy: {}", f);
 
             // DBC satisfied
             check_dbc_satisfied(
@@ -282,13 +299,12 @@ void neo_hookean(RXMeshStatic& rx, T dx)
         //  update velocity
         rx.for_each_vertex(
             DEVICE,
-            [x, x_tilde, velocity, inv_time_step = 1.0 / time_step] __device__(
+            [x, x_n, velocity, inv_time_step = 1.0 / time_step] __device__(
                 VertexHandle vh) mutable {
                 for (int i = 0; i < 3; ++i) {
-                    velocity(vh, i) =
-                        inv_time_step * (x_tilde(vh, i) - x(vh, i));
+                    velocity(vh, i) = inv_time_step * (x(vh, i) - x_n(vh, i));
 
-                    x(vh, i) = x_tilde(vh, i);
+                    // x(vh, i) = x_tilde(vh, i);
                 }
             });
 
@@ -297,7 +313,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     };
 
 #if USE_POLYSCOPE
-    draw(rx, x_tilde, velocity, step_forward, steps);
+    draw(rx, x, velocity, step_forward, steps);
 #else
     while (steps < 5) {
         step_forward();
@@ -325,7 +341,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
 
 int main(int argc, char** argv)
 {
-    Log::init(spdlog::level::info);
+    rx_init(0, spdlog::level::info);
 
 
     std::vector<std::vector<T>>        verts;

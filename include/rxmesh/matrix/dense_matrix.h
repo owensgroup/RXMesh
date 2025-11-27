@@ -859,7 +859,7 @@ struct DenseMatrix
     }
 
     /**
-     * @brief return the raw pointer pf a column.
+     * @brief return the raw pointer of a column.
      */
     __host__ const T* col_data(const IndexT ld_idx,
                                locationT    location = DEVICE) const

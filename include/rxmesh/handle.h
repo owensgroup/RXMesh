@@ -60,7 +60,7 @@ struct VertexHandle
     /**
      * @brief Constructor with known (packed) handle
      */
-    constexpr __device__ __host__ VertexHandle(uint64_t handle)
+    explicit constexpr __device__ __host__ VertexHandle(uint64_t handle)
         : m_handle(handle)
     {
     }
@@ -161,7 +161,8 @@ struct EdgeHandle
     /**
      * @brief Constructor with known (packed) handle
      */
-    constexpr __device__ __host__ EdgeHandle(uint64_t handle) : m_handle(handle)
+    explicit constexpr __device__ __host__ EdgeHandle(uint64_t handle)
+        : m_handle(handle)
     {
     }
 
@@ -408,7 +409,8 @@ struct FaceHandle
     /**
      * @brief Constructor with known (packed) handle
      */
-    constexpr __device__ __host__ FaceHandle(uint64_t handle) : m_handle(handle)
+    explicit constexpr __device__ __host__ FaceHandle(uint64_t handle)
+        : m_handle(handle)
     {
     }
 

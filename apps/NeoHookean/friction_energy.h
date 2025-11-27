@@ -14,6 +14,7 @@ void friction_energy(ProblemT&        problem,
                      const T          h,
                      const vec3<T>&   ground_n)
 {
+    // TODO alpha should change for different runs (e.g., line search)
     const Eigen::Vector3<T> n(ground_n[0], ground_n[1], ground_n[2]);
 
     const Eigen::Matrix3<T> tangent =

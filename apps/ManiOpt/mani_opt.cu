@@ -406,7 +406,7 @@ int main(int argc, char** argv)
     if (Arg.solver == "newton") {
 
         using ProblemT = DiffScalarProblem<T, 2, VertexHandle, true>;
-        ProblemT problem(rx);
+        ProblemT problem(rx, true);
         using HessMatT = typename ProblemT::HessMatT;
         LUSolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(
             problem.hess.get());
