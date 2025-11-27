@@ -265,7 +265,3 @@ endif()
 if(${RX_BUILD_APPS})
    add_subdirectory(apps)
 endif()
-
-if(${RX_WITH_DEV})
-   add_subdirectory(dev)
-endif()
