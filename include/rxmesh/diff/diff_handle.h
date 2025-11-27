@@ -42,7 +42,8 @@ struct DiffHandle : public HandleT
     /**
      * @brief Constructor with known (packed) handle
      */
-    constexpr __device__ __host__ DiffHandle(uint64_t handle) : Handle(handle)
+    explicit constexpr __device__ __host__ DiffHandle(uint64_t handle)
+        : Handle(handle)
     {
     }
 

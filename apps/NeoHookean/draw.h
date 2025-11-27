@@ -6,7 +6,7 @@ using namespace rxmesh;
 
 template <typename FunT, typename VAttrT>
 void draw(RXMeshStatic& rx,
-          VAttrT&       x_tilde,
+          VAttrT&       x,
           VAttrT&       velocity,
           FunT&         step_forward,
           int&          step)
@@ -19,11 +19,11 @@ void draw(RXMeshStatic& rx,
     auto ps_callback = [&]() mutable {
         auto step_and_update = [&]() {
             step_forward();
-            x_tilde.move(DEVICE, HOST);
+            x.move(DEVICE, HOST);
             velocity.move(DEVICE, HOST);
             auto vel = rx.get_polyscope_mesh()->addVertexVectorQuantity(
                 "Velocity", velocity);
-            rx.get_polyscope_mesh()->updateVertexPositions(x_tilde);
+            rx.get_polyscope_mesh()->updateVertexPositions(x);
         };
         if (ImGui::Button("Step")) {
             step_and_update();
@@ -41,8 +41,7 @@ void draw(RXMeshStatic& rx,
 
         ImGui::SameLine();
         if (ImGui::Button("Export")) {
-            rx.export_obj("NeoHookean_" + std::to_string(step) + ".obj",
-                          x_tilde);
+            rx.export_obj("NeoHookean_" + std::to_string(step) + ".obj", x);
         }
 
         if (is_running) {

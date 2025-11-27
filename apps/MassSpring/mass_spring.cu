@@ -48,7 +48,7 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario)
     // mass per vertex = rho * volume /num_vertices
     T mass = rho * bb[0] * bb[1] / rx.get_num_vertices();
 
-    ProblemT problem(rx);
+    ProblemT problem(rx, true);
 
     CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(
         problem.hess.get());

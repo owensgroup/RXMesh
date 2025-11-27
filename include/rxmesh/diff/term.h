@@ -42,7 +42,8 @@ struct Term
 
 /**
  * @brief concrete class that defines energy terms for specific mesh type,
- * specific number of variable, etc.
+ * specific number of variable, etc. Used to define energy terms that require
+ * local query operations, e.g., FV
  */
 template <typename LossHandleT,
           typename ObjHandleT,
@@ -68,13 +69,12 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
                   HessianSparseMatrix<T, VariableDim>& hess)
         : term(t), rx(rx), grad(grad), hess(hess), oreinted(oreinted)
     {
-        // TODO is it always 1
-
         // To avoid the clash that happens from adding many losses.
         std::ostringstream address;
         address << (void const*)this;
         std::string name = address.str();
 
+        // TODO is it always 1
         loss = rx.add_attribute<T, LossHandleT>("Loss" + name, 1);
 
         reducer = std::make_shared<ReduceHandle<T, LossHandleT>>(*loss);
@@ -268,5 +268,185 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
     RXMeshStatic&                        rx;
     DenseMatrix<T, Eigen::RowMajor>&     grad;
     HessianSparseMatrix<T, VariableDim>& hess;
+};
+
+
+/**
+ * @brief concrete class that defines energy terms for specific mesh type,
+ * specific number of variable, etc. Used to define energy terms that requires
+ * pairs of mesh elements
+ */
+template <typename LossHandleT,
+          typename ObjHandleT,
+          uint32_t blockThreads,
+          typename HandleT0,
+          typename HandleT1,
+          typename ScalarT,
+          bool ProjectHess,
+          int  VariableDim,
+          typename LambdaT>
+struct TemplatedTermPairs
+    : public Term<typename ScalarT::PassiveType, ObjHandleT>
+{
+    using T = typename ScalarT::PassiveType;
+
+    // Scalar type that only store the 1st derivative
+    // This will be the same as ScalarT if ScalarT has WithHessian=false
+    using ScalarGradOnlyT = Scalar<T, ScalarT::k_, false>;
+
+    TemplatedTermPairs(RXMeshStatic&                            rx,
+                       LambdaT                                  t,
+                       DenseMatrix<T, Eigen::RowMajor>&         grad,
+                       HessianSparseMatrix<T, VariableDim>&     hess,
+                       CandidatePairs<HandleT0, HandleT1, int>& pairs)
+        : term(t), grad(grad), hess(hess), pairs(pairs)
+    {
+        // To avoid the clash that happens from adding many losses.
+        std::ostringstream address;
+        address << (void const*)this;
+        std::string name = address.str();
+
+        // TODO is it always 1
+        loss = rx.add_attribute<T, LossHandleT>("Loss" + name, 1);
+
+        reducer = std::make_shared<ReduceHandle<T, LossHandleT>>(*loss);
+    }
+
+    /**
+     * @brief Evaluate the energy term using active/differentiable type
+     */
+    void eval_active(Attribute<T, ObjHandleT>& obj, cudaStream_t stream)
+    {
+        if (ScalarT::k_ == -1) {
+            RXMESH_ERROR(
+                "TemplatedTermPairs::eval_active() Dynamic Scalar is not "
+                "supported for Hessians.");
+            return;
+        }
+        int size = pairs.num_pairs();
+
+        if (size == 0) {
+            return;
+        }
+
+        const int blocks = DIVIDE_UP(size, blockThreads);
+
+        detail::diff_kernel_active_pair<blockThreads,
+                                        LossHandleT,
+                                        ObjHandleT,
+                                        HandleT0,
+                                        HandleT1,
+                                        ScalarT,
+                                        ProjectHess,
+                                        VariableDim,
+                                        LambdaT>
+            <<<blocks, blockThreads, 0, stream>>>(
+                pairs, grad, hess, *loss, obj, term);
+    }
+
+
+    /**
+     * @brief Evaluate the energy term using active/differentiable type for the
+     * 1st derivative only
+     */
+    void eval_active_grad_only(Attribute<T, ObjHandleT>& obj,
+                               cudaStream_t              stream)
+    {
+        int size = pairs.num_pairs();
+
+        if (size == 0) {
+            return;
+        }
+
+        const int blocks = DIVIDE_UP(size, blockThreads);
+
+        detail::diff_kernel_active_pair<blockThreads,
+                                        LossHandleT,
+                                        ObjHandleT,
+                                        HandleT0,
+                                        HandleT1,
+                                        ScalarGradOnlyT,
+                                        ProjectHess,
+                                        VariableDim,
+                                        LambdaT>
+            <<<blocks, blockThreads, 0, stream>>>(
+                pairs, grad, hess, *loss, obj, term);
+    }
+
+
+    /**
+     * @brief Evaluate the energy term using active/differentiable type but
+     * without constructing the Hessian. Instead, we do matvec with the Hessian
+     */
+    void eval_active_matvec(Attribute<T, ObjHandleT>&              obj,
+                            const DenseMatrix<T, Eigen::RowMajor>& input,
+                            DenseMatrix<T, Eigen::RowMajor>&       output,
+                            cudaStream_t                           stream)
+    {
+        if (!ScalarT::WithHessian_) {
+            RXMESH_ERROR(
+                "TemplatedTermPairs::eval_active_matvec() can not run with "
+                "scalar type that does not have Hessians. Returning without "
+                "evolution.");
+            return;
+        }
+
+        if (ScalarT::k_ == -1) {
+            RXMESH_ERROR(
+                "TemplatedTermPairs::eval_active_matvec() Dynamic Scalar is "
+                "not supported for Hessians.");
+            return;
+        }
+        int size = pairs.num_pairs();
+
+        if (size == 0) {
+            return;
+        }
+
+        // TODO
+        RXMESH_ERROR(
+            "TemplatedTermPairs::eval_active_matvec() Not implemented.");
+    }
+
+    /**
+     * @brief Evaluate the energy term using non-active/non-differentiable type
+     */
+    void eval_passive(Attribute<T, ObjHandleT>& obj, cudaStream_t stream)
+    {
+        int size = pairs.num_pairs();
+
+        if (size == 0) {
+            return;
+        }
+
+        const int blocks = DIVIDE_UP(size, blockThreads);
+
+        detail::diff_kernel_passive_pair<blockThreads,
+                                         LossHandleT,
+                                         ObjHandleT,
+                                         HandleT0,
+                                         HandleT1,
+                                         ScalarT,
+                                         LambdaT>
+            <<<blocks, blockThreads, 0, stream>>>(pairs, *loss, obj, term);
+    }
+
+    /**
+     * @brief get the current loss of the energy. Should be called evaluating
+     * the term using active type
+     */
+    T get_loss(cudaStream_t stream = NULL)
+    {
+        return reducer->reduce(*loss, cub::Sum(), 0, INVALID32, stream);
+    }
+
+    LambdaT term;
+
+    std::shared_ptr<Attribute<T, LossHandleT>>    loss;
+    std::shared_ptr<ReduceHandle<T, LossHandleT>> reducer;
+
+    DenseMatrix<T, Eigen::RowMajor>&         grad;
+    HessianSparseMatrix<T, VariableDim>&     hess;
+    CandidatePairs<HandleT0, HandleT1, int>& pairs;
 };
 }  // namespace rxmesh
