@@ -298,7 +298,7 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
                                                            m_edges_map,
                                                            m_num_vertices,
                                                            m_num_edges,
-                                                           patching_with_metis);
+                                                           false);
         } else {
             m_patcher = std::make_unique<patcher::Patcher>(patcher_file);
         }
@@ -310,7 +310,7 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
                                                        m_edges_map,
                                                        m_num_vertices,
                                                        m_num_edges,
-                                                       patching_with_metis);
+                                                       false);
     }
 
 

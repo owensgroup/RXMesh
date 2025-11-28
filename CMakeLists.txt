@@ -15,12 +15,10 @@ project(RXMesh
 
 # Build options
 set(RX_USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")
-set(RX_BUILD_TESTS "ON" CACHE BOOL "Build RXMesh unit test")
-set(RX_BUILD_APPS "ON" CACHE BOOL "Build RXMesh applications")
+set(RX_BUILD_TESTS "OFF" CACHE BOOL "Build RXMesh unit test")
+set(RX_BUILD_APPS "OFF" CACHE BOOL "Build RXMesh applications")
 set(RX_USE_SUITESPARSE "OFF" CACHE BOOL "Use SuiteSparse for benchmark")
 set(RX_USE_CUDSS "ON" CACHE BOOL "Use cuDSS - CUDA Library for Direct Sparse Solvers")
-
-set(RX_WITH_DEV "ON" CACHE BOOL "Add DEV folder to build (for development purposes)")
 
 message(STATUS "Polyscope is ${RX_USE_POLYSCOPE}")
 message(STATUS "Build RXMesh unit test is ${RX_BUILD_TESTS}")
