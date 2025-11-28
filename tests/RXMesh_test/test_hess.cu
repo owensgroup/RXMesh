@@ -190,8 +190,8 @@ TEST(Diff, HessUpdate)
     int prev_nnz = problem.hess->non_zeros();
 
     // problem.hess->reset(0, HOST);
-    problem.hess->move(DEVICE, HOST);
-    problem.hess->to_file("old_hess");
+    // problem.hess->move(DEVICE, HOST);
+    // problem.hess->to_file("old_hess");
 
     auto [d_pairs, num_new_pairs] = generate_pairs(rx);
 
@@ -210,8 +210,8 @@ TEST(Diff, HessUpdate)
               prev_nnz + 2 * num_new_pairs * VariableDim * VariableDim);
 
     // problem.hess->reset(0, HOST);
-    problem.hess_new->move(DEVICE, HOST);
-    problem.hess_new->to_file("new_hess");
+    // problem.hess_new->move(DEVICE, HOST);
+    // problem.hess_new->to_file("new_hess");
 
     // Note that we did not add any new term for the contact pairs. So Hessian
     // still evaluate to the same Hessian without these new contact pairs--we

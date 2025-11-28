@@ -22,7 +22,7 @@ void spring_energy(ProblemT&     problem,
                                                           auto& obj) mutable {
         using ActiveT = ACTIVE_TYPE(vh);
 
-        ActiveT E;
+        ActiveT E(T(0));
 
         if (is_dbc(vh) == 1) {
             const Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(vh, x);

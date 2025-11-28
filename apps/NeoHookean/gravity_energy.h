@@ -17,18 +17,17 @@ void gravity_energy(ProblemT&     problem,
 
     const T neg_mass_times_h_sq = -mass * h * h;
 
-    problem.template add_term<Op::V, true>(
-        [=] __device__(const auto& vh, auto& obj) mutable {
-            using ActiveT = ACTIVE_TYPE(vh);
-            ActiveT E;
+    problem.template add_term<Op::V, true>([=] __device__(const auto& vh,
+                                                          auto& obj) mutable {
+        using ActiveT = ACTIVE_TYPE(vh);
 
-            if (int(is_dbc(vh)) == 0) {
-                Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(vh, x);
+        ActiveT E(T(0));
 
-                E = neg_mass_times_h_sq * xi.dot(g);
-            }
+        if (int(is_dbc(vh)) == 0) {
+            Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(vh, x);
 
-
-            return E;
-        });
+            E = neg_mass_times_h_sq * xi.dot(g);            
+        } 
+        return E;
+    });
 }

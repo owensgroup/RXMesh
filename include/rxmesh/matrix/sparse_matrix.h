@@ -712,6 +712,7 @@ struct SparseMatrix
     {
         release(LOCATION_ALL);
         CUSPARSE_ERROR(cusparseDestroy(m_cusparse_handle));
+        CUSPARSE_ERROR(cusparseDestroySpMat(m_spdescr));
 
         GPU_FREE(m_d_cusparse_spmm_buffer);
         GPU_FREE(m_d_cusparse_spmv_buffer);
@@ -769,9 +770,9 @@ struct SparseMatrix
             rows(),
             [in_d_row_ptr = in_d_row_ptr,
              m_d_row_ptr  = m_d_row_ptr] __device__(int i) mutable {
-                m_d_row_ptr[i] = in_d_row_ptr[i + 1] - in_d_row_ptr[i];                
+                m_d_row_ptr[i] = in_d_row_ptr[i + 1] - in_d_row_ptr[i];
             });
-        
+
 
         // add contribution of the new entries in the row sum
         for_each_item<<<DIVIDE_UP(size, blockThreads), blockThreads>>>(
@@ -781,7 +782,7 @@ struct SparseMatrix
                 const int row = d_new_rows[i];
 
                 ::atomicAdd(m_d_row_ptr + row, 1);
-            });        
+            });
 
         // prefix sum using CUB.
         CUDA_ERROR(
@@ -797,7 +798,7 @@ struct SparseMatrix
         CUDA_ERROR(cudaMemcpy(&m_nnz,
                               (m_d_row_ptr + m_num_rows),
                               sizeof(IndexT),
-                              cudaMemcpyDeviceToHost));        
+                              cudaMemcpyDeviceToHost));
 
 
         if (m_nnz > m_max_nnz) {
@@ -859,9 +860,8 @@ struct SparseMatrix
                 assert(stop >= start);
 
                 m_d_row_acc[r] = stop - start;
-        
             });
-        
+
 
         // fill in the col_idx with the new entries information
         for_each_item<<<DIVIDE_UP(size, blockThreads), blockThreads>>>(
@@ -891,6 +891,8 @@ struct SparseMatrix
                               m_d_row_ptr,
                               (m_num_rows + 1) * sizeof(IndexT),
                               cudaMemcpyDeviceToHost));
+
+        init_cusparse(*this);
     }
 
     /*__host__ void insert(RXMeshStatic&    rx,
@@ -1065,6 +1067,44 @@ struct SparseMatrix
                               (m_num_rows + 1) * sizeof(IndexT),
                               cudaMemcpyDeviceToHost));
     }*/
+
+
+    /**
+     * @brief swap this matrix with another on
+     */
+    __host__ void swap(SparseMatrix<T>& in)
+    {
+        std::swap(m_context, in.m_context);
+        std::swap(m_cusparse_handle, in.m_cusparse_handle);
+        std::swap(m_spdescr, in.m_spdescr);
+        std::swap(m_d_cub_temp_storage, in.m_d_cub_temp_storage);
+        std::swap(m_cub_temp_storage_bytes, in.m_cub_temp_storage_bytes);
+        std::swap(m_replicate, in.m_replicate);
+        std::swap(m_num_rows, in.m_num_rows);
+        std::swap(m_num_cols, in.m_num_cols);
+        std::swap(m_nnz, in.m_nnz);
+        std::swap(m_max_nnz, in.m_max_nnz);
+        std::swap(m_capacity_factor, in.m_capacity_factor);
+        std::swap(m_extra_nnz_entires, in.m_extra_nnz_entires);
+        std::swap(m_d_row_ptr, in.m_d_row_ptr);
+        std::swap(m_d_col_idx, in.m_d_col_idx);
+        std::swap(m_d_val, in.m_d_val);
+        std::swap(m_d_row_acc, in.m_d_row_acc);
+        std::swap(m_h_row_ptr, in.m_h_row_ptr);
+        std::swap(m_h_col_idx, in.m_h_col_idx);
+        std::swap(m_h_val, in.m_h_val);
+        std::swap(m_spmm_buffer_size, in.m_spmm_buffer_size);
+        std::swap(m_spmv_buffer_size, in.m_spmv_buffer_size);
+        std::swap(m_d_cusparse_spmm_buffer, in.m_d_cusparse_spmm_buffer);
+        std::swap(m_d_cusparse_spmv_buffer, in.m_d_cusparse_spmv_buffer);
+        std::swap(m_allocated, in.m_allocated);
+        std::swap(m_is_user_managed, in.m_is_user_managed);
+        std::swap(m_op, in.m_op);
+
+#ifdef USE_CUDSS
+        std::swap(m_cudss_matrix, in.m_cudss_matrix);
+#endif
+    }
 
     /**
      * @brief return another SparseMatrix that is the transpose of this
@@ -1577,6 +1617,9 @@ struct SparseMatrix
     void init_cusparse(SparseMatrix<T>& mat) const
     {
         // cuSparse CSR matrix
+        if (mat.m_spdescr) {
+            CUSPARSE_ERROR(cusparseDestroySpMat(mat.m_spdescr));
+        }
         CUSPARSE_ERROR(cusparseCreateCsr(&mat.m_spdescr,
                                          mat.m_num_rows,
                                          mat.m_num_cols,
@@ -1590,6 +1633,9 @@ struct SparseMatrix
                                          cuda_type<T>()));
 
         // cuSparse handle
+        if (mat.m_cusparse_handle) {
+            CUSPARSE_ERROR(cusparseDestroy(m_cusparse_handle));
+        }
         CUSPARSE_ERROR(cusparseCreate(&mat.m_cusparse_handle));
         CUSPARSE_ERROR(cusparseSetPointerMode(mat.m_cusparse_handle,
                                               CUSPARSE_POINTER_MODE_HOST));

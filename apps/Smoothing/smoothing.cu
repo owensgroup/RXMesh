@@ -35,7 +35,7 @@ void smoothing(RXMeshStatic& rx)
 
     using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle, false>;
 
-    ProblemT problem(rx);
+    ProblemT problem(rx, false);
 
     auto v_input_pos = *rx.get_input_vertex_coordinates();
 

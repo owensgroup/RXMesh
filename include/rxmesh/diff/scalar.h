@@ -55,11 +55,11 @@ struct Scalar
     GradType m_grad;
 
     // Avoid calling the default constructor of Eigen::Map
-    //alignas(16) std::byte m_map_grad[sizeof(GradMapType)];
+    // alignas(16) std::byte m_map_grad[sizeof(GradMapType)];
 
     // Hessian (second derivative) of val w.r.t. the active variable vector.
     HessType m_hess;
-    //alignas(16) std::byte m_map_hess[sizeof(HessMapType)];
+    // alignas(16) std::byte m_map_hess[sizeof(HessMapType)];
 
    public:
     // ///////////////////////////////////////////////////////////////////////
@@ -101,7 +101,7 @@ struct Scalar
     __device__ __host__ constexpr const auto& grad() const
     {
         if constexpr (k == Eigen::Dynamic) {
-           // return *reinterpret_cast<const GradMapType*>(&m_map_grad);
+            // return *reinterpret_cast<const GradMapType*>(&m_map_grad);
         } else {
             return m_grad;
         }
@@ -113,7 +113,7 @@ struct Scalar
     __device__ __host__ constexpr auto& grad()
     {
         if constexpr (k == Eigen::Dynamic) {
-            //return *reinterpret_cast<GradMapType*>(&m_map_grad);
+            // return *reinterpret_cast<GradMapType*>(&m_map_grad);
         } else {
             return m_grad;
         }
@@ -125,7 +125,7 @@ struct Scalar
     __device__ __host__ constexpr const auto& hess() const
     {
         if constexpr (k == Eigen::Dynamic) {
-            //return *reinterpret_cast<const HessMapType*>(&m_map_hess);
+            // return *reinterpret_cast<const HessMapType*>(&m_map_hess);
         } else {
             return m_hess;
         }
@@ -137,7 +137,7 @@ struct Scalar
     __device__ __host__ constexpr auto& hess()
     {
         if constexpr (k == Eigen::Dynamic) {
-            //return *reinterpret_cast<HessMapType*>(&m_map_hess);
+            // return *reinterpret_cast<HessMapType*>(&m_map_hess);
         } else {
             return m_hess;
         }
@@ -148,7 +148,7 @@ struct Scalar
     // ///////////////////////////////////////////////////////////////////////
 
     /// Default constructor, copy, move, assignment
-    __host__ __device__ Scalar() : dk(-1)
+    __host__ __device__ Scalar() : m_val(0), dk(-1)
     {
         if constexpr (k != Eigen::Dynamic) {
             m_grad = GradType::Zero(k);
@@ -184,7 +184,7 @@ struct Scalar
 
             PassiveT* shmem_g = shrd_alloc.alloc<PassiveT>(dk);
 
-            //new (&m_map_grad) GradMapType(shmem_g, dk);
+            // new (&m_map_grad) GradMapType(shmem_g, dk);
 
 
             //// grad allocation

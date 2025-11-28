@@ -25,7 +25,7 @@ void barrier_energy(ProblemT& problem,
 
             Eigen::Vector3<ActiveT> xx = iter_val<ActiveT, 3>(vh, obj);
 
-            ActiveT E;
+            ActiveT E (T(0));
 
             ActiveT d = xx[1] - y_ground;
 

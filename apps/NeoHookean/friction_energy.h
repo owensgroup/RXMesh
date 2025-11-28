@@ -42,7 +42,7 @@ void friction_energy(ProblemT&        problem,
                 }
             };
 
-            ActiveT E;
+            ActiveT E(T(0));
 
             T ml = mu_lambda(vh);
             if (ml > 0) {
@@ -70,4 +70,29 @@ void friction_energy(ProblemT&        problem,
 
             return E;
         });
+}
+
+template <typename VAttrT, typename T = typename VAttrT::Type>
+void compute_mu_lambda(RXMeshStatic&  rx,
+                       const T        fricition_coef,
+                       const T        dhat,
+                       const T        kappa,
+                       const vec3<T>& ground_n,
+                       const vec3<T>& ground_o,
+                       const VAttrT&  x,
+                       const VAttrT&  contact_area,
+                       VAttrT&        mu_lambda)
+{
+    rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) mutable {
+        const vec3<T> xi = x.to_glm<3>(vh);
+
+        T d = glm::dot(ground_n, (xi - ground_o));
+
+        if (d < dhat) {
+            T s = d / dhat;
+
+            mu_lambda(vh) = fricition_coef * -contact_area(vh) * dhat *
+                            (kappa / 2 * (log(s) / dhat + (s - 1) / d));
+        }
+    });
 }

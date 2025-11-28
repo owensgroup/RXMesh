@@ -16,7 +16,7 @@ void inertial_energy(ProblemT&     problem,
         [=] __device__(const auto& vh, auto& obj) mutable {
             using ActiveT = ACTIVE_TYPE(vh);
 
-            ActiveT E;
+            ActiveT E(T(0));
 
             if (is_dbc(vh) == 0) {
 
