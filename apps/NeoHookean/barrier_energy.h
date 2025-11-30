@@ -99,7 +99,6 @@ template <typename ProblemT,
           typename T = typename VAttrT::Type>
 void ceiling_barrier_energy(ProblemT&      problem,
                             VAttrT&        contact_area,
-                            const VAttrT&  x,
                             const T        h,  // time_step
                             const vec3<T>& ground_n,
                             const vec3<T>& ground_o,
@@ -119,10 +118,10 @@ void ceiling_barrier_energy(ProblemT&      problem,
 
         const VertexHandle c1 = iter[1];
 
-        //???
-        const Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(id, iter, x, 0);
+        const Eigen::Vector3<ActiveT> xi =
+            iter_val<ActiveT, 3>(id, iter, obj, 0);
 
-        const Eigen::Vector3<T> x_dbc = x.template to_eigen<3>(c1);
+        const Eigen::Vector3<T> x_dbc = obj.template to_eigen<3>(c1);
 
 
         // ceiling
@@ -136,15 +135,6 @@ void ceiling_barrier_energy(ProblemT&      problem,
             if (s <= T(0)) {
                 using PassiveT = PassiveType<ActiveT>;
                 return ActiveT(std::numeric_limits<PassiveT>::max());
-            }
-
-            if constexpr (is_scalar_v<ActiveT>) {
-                printf("\n Ceil AC: T= %d, d= %f, s= %f",
-                       threadIdx.x,
-                       d.val(),
-                       s.val());
-            } else {
-                printf("\n Ceil PA: T= %d, d= %f, s= %f", threadIdx.x, d, s);
             }
 
             E = h_sq * contact_area(c0) * dhat * T(0.5) * kappa * (s - 1) *

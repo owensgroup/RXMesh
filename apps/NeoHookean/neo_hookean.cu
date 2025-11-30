@@ -53,7 +53,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
 
     // TODO the limits and velocity should be different for different Dirichlet
     // nodes
-    const vec3<T> v_dbc_vel(0, -0.9, 0);        // Dirichlet node velocity
+    const vec3<T> v_dbc_vel(0, -1.0, 0);        // Dirichlet node velocity
     const vec3<T> v_dbc_limit(0, -0.7, 0);      // Dirichlet node limit position
     const vec3<T> ground_o(0.0f, -1.0f, 0.0f);  // a point on the slope
     const vec3<T> ground_n =
@@ -166,7 +166,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
                          kappa);
 
     ceiling_barrier_energy(
-        problem, contact_area, x, time_step, ground_n, ground_o, dhat, kappa);
+        problem, contact_area, time_step, ground_n, ground_o, dhat, kappa);
 
 
     T line_search_init_step = 0;
@@ -182,8 +182,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     //                ground_n);
 
     // add neo hooken energy
-    neo_hookean_energy(
-        problem, x, is_dbc, volume, inv_b, mu_lame, time_step, lam);
+    neo_hookean_energy(problem, is_dbc, volume, inv_b, mu_lame, time_step, lam);
 
 
     int steps = 0;
@@ -273,9 +272,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
             line_search_init_step = std::min(nh_step, bar_step);
 
             // TODO: line search should pass the step to the friction energy
-            if (!newton_solver.line_search(line_search_init_step, 0.5, 5)) {
-                break;
-            }
+            newton_solver.line_search(line_search_init_step, 0.5);
 
             // evaluate energy
             add_contact(rx, problem.vv_pairs, v_dbc[0], is_dbc, x, dhat);
@@ -309,7 +306,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
             iter++;
         }
 
-        RXMESH_INFO("===================");
+        RXMESH_INFO("\n===================\n");
 
         //  update velocity
         rx.for_each_vertex(
