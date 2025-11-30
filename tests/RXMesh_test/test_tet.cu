@@ -4,7 +4,9 @@
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/log.h"
 
+#if USE_POLYSCOPE
 #include "polyscope/volume_mesh.h"
+#endif
 
 TEST(Util, Tet)
 {

@@ -7,6 +7,7 @@ void inline render_permutation(rxmesh::RXMeshStatic& rx,
                                std::vector<T>&       h_permute,
                                std::string           name)
 {
+#if USE_POLYSCOPE
     assert(h_permute.size() == rx.get_num_vertices());
 
     using namespace rxmesh;
@@ -20,4 +21,5 @@ void inline render_permutation(rxmesh::RXMeshStatic& rx,
     rx.get_polyscope_mesh()->addVertexScalarQuantity(name, v_perm);
 
     rx.remove_attribute("Perm");
+#endif
 }

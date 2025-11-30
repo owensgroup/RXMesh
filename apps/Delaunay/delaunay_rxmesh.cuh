@@ -325,7 +325,9 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx,
 
     int id = 1;
 
+    
     auto render = [&]() {
+#if USE_POLYSCOPE
         polyscope::removeAllStructures();
         rx.update_host();
         coords->move(DEVICE, HOST);
@@ -343,6 +345,7 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx,
 
         id++;
         polyscope::screenshot("flip_" + oss.str() + ".png");
+#endif
     };
 
 

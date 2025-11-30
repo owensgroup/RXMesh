@@ -13,7 +13,9 @@
 #include "rxmesh/matrix/gmg/gmg_kernels.h"
 #include "rxmesh/matrix/gmg/hashtable.h"
 
+#if USE_POLYSCOPE
 #include "polyscope/point_cloud.h"
+#endif
 
 #include <thrust/device_vector.h>
 #include <thrust/random.h>
@@ -488,6 +490,7 @@ struct GMG
 
     void render_point_clouds(RXMeshStatic& rx)
     {
+#if USE_POLYSCOPE
         // DEBUG Code
         for (int l = 1; l < m_num_levels; ++l) {
 
@@ -549,6 +552,7 @@ struct GMG
             }
         }
         polyscope::show();
+#endif
     }
 
     void render_hierarchy()
@@ -623,9 +627,10 @@ struct GMG
                     }
                 }
             }
-
+#if USE_POLYSCOPE
             polyscope::registerSurfaceMesh(
                 "Level" + std::to_string(l), pos, fv);
+#endif
         }
         // polyscope::show();
     }

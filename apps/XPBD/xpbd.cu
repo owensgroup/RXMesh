@@ -4,8 +4,10 @@
 #include "rxmesh/query.cuh"
 #include "rxmesh/rxmesh_static.h"
 
+#if USE_POLYSCOPE
 #include "imgui.h"
 #include "polyscope/polyscope.h"
+#endif
 
 #include "rxmesh/geometry_factory.h"
 
@@ -434,10 +436,15 @@ int main(int argc, char** argv)
     float total_time = 0;
 
     auto polyscope_callback = [&]() mutable {
+        bool button = false;
+
+#if USE_POLYSCOPE
         if (ImGui::Button("Pause")) {
             started = false;
         }
-        if (ImGui::Button("Start Simulation") || started) {
+        button = ImGui::Button("Start Simulation") 
+#endif
+        if (button || started) {
             started = true;
 
             GPUTimer timer;
@@ -578,10 +585,12 @@ int main(int argc, char** argv)
         }
     };
 
-    // started = true;
-    // while (true) {
-    //     polyscope_callback();
-    // }
+#if !USE_POLYSCOPE
+    started = true;
+    while (true) {
+         polyscope_callback();
+    }
+#endif
 
 #if USE_POLYSCOPE
     polyscope::state::userCallback = polyscope_callback;

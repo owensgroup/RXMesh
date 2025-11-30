@@ -11,6 +11,7 @@ void draw(RXMeshStatic& rx,
           FunT&         step_forward,
           int&           time_step)
 {
+#if USE_POLYSCOPE
     polyscope::options::groundPlaneHeightFactor = 0.37;
     polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::Tile;
 
@@ -51,4 +52,5 @@ void draw(RXMeshStatic& rx,
 
     polyscope::state::userCallback = ps_callback;
     polyscope::show();
+#endif
 }

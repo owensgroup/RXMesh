@@ -251,7 +251,9 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
     }
 
+#if USE_POLYSCOPE
     polyscope::view::upDir = polyscope::UpDir::ZUp;
+#endif
 
     constexpr uint32_t blockThreads = 256;
 
@@ -397,6 +399,8 @@ int main(int argc, char** argv)
     };
 
     auto ps_callback = [&]() {
+#if USE_POLYSCOPE
+
         ImGui::SameLine();
         if (ImGui::Button("Step")) {
             take_step();
@@ -414,6 +418,7 @@ int main(int argc, char** argv)
         if (is_running) {
             take_step();
         }
+#endif
     };
 
 

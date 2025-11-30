@@ -169,9 +169,10 @@ struct GMGSolver : public IterativeSolver<T, DenseMatrix<T>>
 
             make_connections_vector(connections[l - 1], l);
 
-
+#if USE_POLYSCOPE
             polyscope::getSurfaceMesh("Level" + std::to_string(l))
                 ->addVertexScalarQuantity("connections", connections[l - 1]);
+#endif
         }
     }
 

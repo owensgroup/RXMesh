@@ -224,14 +224,13 @@ int main(int argc, char** argv)
         uv(vh, 1) -= upper[1];
         uv(vh, 0) /= s;
         uv(vh, 1) /= s;
-    });
-
-    // add uv to Polyscope
-    rx.get_polyscope_mesh()->addVertexParameterizationQuantity("uv", uv);
-    rx.get_polyscope_mesh()->addVertexScalarQuantity("vBoundary", v_bd);
+    });  
 
 
 #if USE_POLYSCOPE
+    // add uv to Polyscope
+    rx.get_polyscope_mesh()->addVertexParameterizationQuantity("uv", uv);
+    rx.get_polyscope_mesh()->addVertexScalarQuantity("vBoundary", v_bd);
     polyscope::show();
 #endif
 

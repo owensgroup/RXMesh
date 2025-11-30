@@ -309,8 +309,10 @@ void all_perm(RXMeshStatic& rx)
         rx_mat.non_zeros(),
         100 * float(rx_mat.non_zeros()) / float(rx_mat.rows() * rx_mat.cols()));
 
+#if USE_POLYSCOPE
     rx.render_face_patch();
     rx.render_vertex_patch();
+#endif
 
     // convert matrix to Eigen
     auto eigen_mat = rx_mat.to_eigen_copy();
@@ -329,7 +331,9 @@ void all_perm(RXMeshStatic& rx)
 
     with_gpu_nd(rx, eigen_mat);
 
+#if USE_POLYSCOPE
     polyscope::show();
+#endif
 }
 
 int main(int argc, char** argv)

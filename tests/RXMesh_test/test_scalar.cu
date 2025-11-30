@@ -4,6 +4,7 @@
 
 #include "rxmesh/rxmesh_static.h"
 
+#include <glm/gtc/constants.hpp>
 
 #define RX_ASSERT_NEAR(val1, val2, eps, d_err)                           \
     if (abs((val1 - val2)) > eps) {                                      \
