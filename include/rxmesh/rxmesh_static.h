@@ -46,12 +46,14 @@ class RXMeshStatic : public RXMesh
      */
     explicit RXMeshStatic(const std::string file_path,
                           const std::string patcher_file             = "",
+                          const bool        use_metis                = false,
                           const uint32_t    patch_size               = 512,
                           const float       capacity_factor          = 1.0,
                           const float       patch_alloc_factor       = 1.0,
                           const float       lp_hashtable_load_factor = 0.8)
-        : RXMesh(patch_size)
+        : RXMesh(patch_size, use_metis)
     {
+        this->_use_metis = use_metis;
         std::vector<std::vector<uint32_t>> fv;
         std::vector<std::vector<float>>    vertices;
         if (!import_obj(file_path, vertices, fv)) {
