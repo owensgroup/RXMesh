@@ -11,7 +11,6 @@ template <typename ProblemT,
           typename T = typename VAttrT::Type>
 void floor_barrier_energy(ProblemT&      problem,
                           VAttrT&        contact_area,
-                          const VAttrT&  x,
                           const T        h,  // time_step
                           const VAttrI&  is_dbc,
                           const vec3<T>& ground_n,
@@ -31,9 +30,9 @@ void floor_barrier_energy(ProblemT&      problem,
         [=] __device__(const auto& vh, auto& obj) mutable {
             using ActiveT = ACTIVE_TYPE(vh);
 
-            const Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(vh, x);
+            const Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(vh, obj);
 
-            ActiveT E;
+            ActiveT E(T(0));
 
 
             if (!is_dbc(vh)) {
@@ -64,6 +63,9 @@ void add_contact(RXMeshStatic&      rx,
                  const VAttrT&      x,
                  const T            dhat)
 {
+    if (contact_pairs.num_pairs() > 0) {
+        return;
+    }
     contact_pairs.reset();
 
     rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) mutable {
@@ -77,9 +79,19 @@ void add_contact(RXMeshStatic&      rx,
         T d = (xi - x_dbc).dot(normal);
 
         if (d < dhat) {
-            contact_pairs.insert(vh, dbc_vertex);        
+            bool inserted = contact_pairs.insert(vh, dbc_vertex);
+            assert(inserted);
+
+            printf("\n addec contact pair between %d, %d",
+                   vh.local_id(),
+                   dbc_vertex.local_id());
         }
     });
+
+    {
+        CUDA_ERROR(cudaGetLastError());
+        CUDA_ERROR(cudaDeviceSynchronize());
+    }
 }
 
 template <typename ProblemT,
@@ -116,13 +128,28 @@ void ceiling_barrier_energy(ProblemT&      problem,
         // ceiling
         ActiveT d = (xi - x_dbc).dot(normal);
 
-        assert(d < dhat);
+        ActiveT E(T(0));
 
-        // if (d < dhat) {
-        ActiveT s = d / dhat;
+        if (d < dhat) {
+            ActiveT s = d / dhat;
 
-        ActiveT E =
-            h_sq * contact_area(c0) * dhat * T(0.5) * kappa * (s - 1) * log(s);
+            if (s <= T(0)) {
+                using PassiveT = PassiveType<ActiveT>;
+                return ActiveT(std::numeric_limits<PassiveT>::max());
+            }
+
+            if constexpr (is_scalar_v<ActiveT>) {
+                printf("\n Ceil AC: T= %d, d= %f, s= %f",
+                       threadIdx.x,
+                       d.val(),
+                       s.val());
+            } else {
+                printf("\n Ceil PA: T= %d, d= %f, s= %f", threadIdx.x, d, s);
+            }
+
+            E = h_sq * contact_area(c0) * dhat * T(0.5) * kappa * (s - 1) *
+                log(s);
+        }
 
 
         return E;
@@ -167,7 +194,7 @@ T barrier_step_size(RXMeshStatic&      rx,
         }
 
         // ceiling
-        //TODO this should be generalized 
+        // TODO this should be generalized
         if (!is_dbc(vh)) {
             p_n = glm::dot(n, (pi - p_dbc));
             if (p_n < 0) {
@@ -180,29 +207,4 @@ T barrier_step_size(RXMeshStatic&      rx,
     // we want the min here but since the min value is greater than 1 (y_ground
     // is less than 0, and search_dir is also less than zero)
     return alpha.abs_min();
-}
-
-template <typename VAttrT, typename T = typename VAttrT::Type>
-void compute_mu_lambda(RXMeshStatic&  rx,
-                       const T        fricition_coef,
-                       const T        dhat,
-                       const T        kappa,
-                       const vec3<T>& ground_n,
-                       const vec3<T>& ground_o,
-                       const VAttrT&  x,
-                       const VAttrT&  contact_area,
-                       VAttrT&        mu_lambda)
-{
-    rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) mutable {
-        const vec3<T> xi = x.to_glm<3>(vh);
-
-        T d = glm::dot(ground_n, (xi - ground_o));
-
-        if (d < dhat) {
-            T s = d / dhat;
-
-            mu_lambda(vh) = fricition_coef * -contact_area(vh) * dhat *
-                            (kappa / 2 * (log(s) / dhat + (s - 1) / d));
-        }
-    });
 }

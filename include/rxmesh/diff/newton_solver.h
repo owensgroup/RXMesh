@@ -140,7 +140,7 @@ struct NetwtonSolver
     /**
      * @brief line search
      */
-    inline void line_search(const T      s_max        = 1.0,
+    inline bool line_search(const T      s_max        = 1.0,
                             const T      shrink       = 0.8,
                             const int    max_iters    = 64,
                             const T      armijo_const = 1e-4,
@@ -194,6 +194,7 @@ struct NetwtonSolver
                 break;
             }
 
+
             if (try_one && s > 1.0 && s * shrink < 1.0) {
                 s = 1.0;
             } else {
@@ -210,7 +211,10 @@ struct NetwtonSolver
                         obj(h, j) = t_obj(h, j);
                     }
                 });
+            return true;
         }
+
+        return false;
     }
 
 

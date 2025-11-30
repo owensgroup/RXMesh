@@ -53,7 +53,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
 
     // TODO the limits and velocity should be different for different Dirichlet
     // nodes
-    const vec3<T> v_dbc_vel(0, -0.5, 0);        // Dirichlet node velocity
+    const vec3<T> v_dbc_vel(0, -0.9, 0);        // Dirichlet node velocity
     const vec3<T> v_dbc_limit(0, -0.7, 0);      // Dirichlet node limit position
     const vec3<T> ground_o(0.0f, -1.0f, 0.0f);  // a point on the slope
     const vec3<T> ground_n =
@@ -103,8 +103,11 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     // Diff problem and solvers
     ProblemT problem(rx, true, max_vv_candidate_pairs);
 
-    CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(
-        problem.hess.get());
+
+    CGSolver<T, ProblemT::DenseMatT::OrderT> solver(*problem.hess, 1, 1000);
+
+    // CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(
+    //     problem.hess.get());
 
     NetwtonSolver newton_solver(problem, &solver);
 
@@ -142,20 +145,19 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     rx.get_polyscope_mesh()->addFaceScalarQuantity("Volume", volume);
 #endif
 
-    // add inertial energy term OK
-    inertial_energy(problem, x, x_tilde, is_dbc, mass);
+    // add inertial energy term
+    inertial_energy(problem, x_tilde, is_dbc, mass);
 
     // add spring energy term
-    spring_energy(problem, x, dbc_target, is_dbc, mass, dbc_stiff);
+    spring_energy(problem, dbc_target, is_dbc, mass, dbc_stiff);
 
 
-    // add gravity energy OK
-    gravity_energy(problem, x, is_dbc, time_step, mass);
+    // add gravity energy
+    gravity_energy(problem, is_dbc, time_step, mass);
 
     // add barrier energy
     floor_barrier_energy(problem,
                          contact_area,
-                         x,
                          time_step,
                          is_dbc,
                          ground_n,
@@ -172,7 +174,6 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     // add friction energy
     // TODO alpha should change during different runs (e.g., in the line search)
     // friction_energy(problem,
-    //                x,
     //                x_n,
     //                newton_solver.dir,
     //                line_search_init_step,
@@ -224,6 +225,10 @@ void neo_hookean(RXMeshStatic& rx, T dx)
         add_contact(rx, problem.vv_pairs, v_dbc[0], is_dbc, x, dhat);
         problem.update_hessian();
         problem.eval_terms();
+        {
+            CUDA_ERROR(cudaGetLastError());
+            CUDA_ERROR(cudaDeviceSynchronize());
+        }
 
         // DBC satisfied
         check_dbc_satisfied(
@@ -244,7 +249,8 @@ void neo_hookean(RXMeshStatic& rx, T dx)
         T residual = newton_solver.dir.abs_max() / time_step;
 
         T f = problem.get_current_loss();
-        RXMESH_INFO("Step: {}, Energy: {}, Residual: {}", steps, f, residual);
+        RXMESH_INFO(
+            "*******Step: {}, Energy: {}, Residual: {}", steps, f, residual);
 
         int iter = 0;
         while (residual > tol || num_satisfied != num_dbc_vertices) {
@@ -267,15 +273,20 @@ void neo_hookean(RXMeshStatic& rx, T dx)
             line_search_init_step = std::min(nh_step, bar_step);
 
             // TODO: line search should pass the step to the friction energy
-            newton_solver.line_search(line_search_init_step, 0.5);
+            if (!newton_solver.line_search(line_search_init_step, 0.5, 5)) {
+                break;
+            }
 
             // evaluate energy
             add_contact(rx, problem.vv_pairs, v_dbc[0], is_dbc, x, dhat);
             problem.update_hessian();
             problem.eval_terms();
+            {
+                CUDA_ERROR(cudaGetLastError());
+                CUDA_ERROR(cudaDeviceSynchronize());
+            }
 
-            // T f = problem.get_current_loss();
-            // RXMESH_INFO("Subsetp, Energy: {}", f);
+            T f = problem.get_current_loss();
 
             // DBC satisfied
             check_dbc_satisfied(
@@ -293,8 +304,12 @@ void neo_hookean(RXMeshStatic& rx, T dx)
             // residual is abs_max(newton_dir)/ h
             residual = newton_solver.dir.abs_max() / time_step;
 
+            RXMESH_INFO("  Subsetp: {}, F: {}, R: {}", iter, f, residual);
+
             iter++;
         }
+
+        RXMESH_INFO("===================");
 
         //  update velocity
         rx.for_each_vertex(

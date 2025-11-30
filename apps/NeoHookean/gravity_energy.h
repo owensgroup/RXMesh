@@ -4,15 +4,12 @@
 
 using namespace rxmesh;
 
-template <typename ProblemT, typename VAttrT, typename VAttrI, typename T>
-void gravity_energy(ProblemT&     problem,
-                    const VAttrT& x,
+template <typename ProblemT, typename VAttrI, typename T>
+void gravity_energy(ProblemT&     problem,                    
                     const VAttrI& is_dbc,
                     const T       h,
                     const T       mass)
 {
-    // obj here is x
-
     const Eigen::Vector3<T> g(0.0, -9.81, 0.0);
 
     const T neg_mass_times_h_sq = -mass * h * h;
@@ -24,7 +21,7 @@ void gravity_energy(ProblemT&     problem,
         ActiveT E(T(0));
 
         if (int(is_dbc(vh)) == 0) {
-            Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(vh, x);
+            Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(vh, obj);
 
             E = neg_mass_times_h_sq * xi.dot(g);            
         } 

@@ -737,14 +737,14 @@ struct SparseMatrix
      * Note: d_rows and d_cols should include only new unique entries that does
      * not exist in the in_mat
      */
-    __host__ void insert(RXMeshStatic&    rx,
+    __host__ bool insert(RXMeshStatic&    rx,
                          SparseMatrix<T>& in_mat,
                          const IndexT     size,
                          const IndexT*    d_new_rows,
                          const IndexT*    d_new_cols)
     {
         if (size == 0) {
-            return;
+            return false;
         }
 
         if (in_mat.rows() != rows() || in_mat.cols() != cols()) {
@@ -756,6 +756,7 @@ struct SparseMatrix
                 cols(),
                 in_mat.rows(),
                 in_mat.cols());
+            return false;
         }
 
         IndexT* in_d_row_ptr = in_mat.m_d_row_ptr;
@@ -893,6 +894,8 @@ struct SparseMatrix
                               cudaMemcpyDeviceToHost));
 
         init_cusparse(*this);
+
+        return true;
     }
 
     /*__host__ void insert(RXMeshStatic&    rx,

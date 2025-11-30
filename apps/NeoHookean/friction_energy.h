@@ -5,8 +5,7 @@
 using namespace rxmesh;
 
 template <typename ProblemT, typename VAttrT, typename DenseMatT, typename T>
-void friction_energy(ProblemT&        problem,
-                     const VAttrT&    x,
+void friction_energy(ProblemT&        problem,                     
                      const VAttrT&    x_n,
                      const DenseMatT& p,
                      const T&         alpha,
@@ -53,7 +52,7 @@ void friction_energy(ProblemT&        problem,
                 // by hand, otherwise the derivative won't be computed correctly
                 // (?)
 
-                const Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(vh, x);
+                const Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(vh, obj);
 
                 const Eigen::Vector3<T> xi_n = x_n.template to_eigen<3>(vh);
 

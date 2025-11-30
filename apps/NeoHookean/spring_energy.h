@@ -9,8 +9,7 @@ template <typename ProblemT,
           typename VAttrI,
           typename MatT,
           typename T>
-void spring_energy(ProblemT&     problem,
-                   const VAttrT& x,
+void spring_energy(ProblemT&     problem,                   
                    const VAttrT& dbc_target,
                    const VAttrI& is_dbc,
                    const T       mass,
@@ -25,7 +24,7 @@ void spring_energy(ProblemT&     problem,
         ActiveT E(T(0));
 
         if (is_dbc(vh) == 1) {
-            const Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(vh, x);
+            const Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(vh, obj);
 
             const Eigen::Vector3<T> x_target =
                 dbc_target.template to_eigen<3>(vh);

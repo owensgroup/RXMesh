@@ -76,7 +76,11 @@ struct DiffScalarProblem
 
                 hess_new =
                     std::make_unique<HessMatT>(rx, expected_vv_candidate_pairs);
+            } else {
+                hess = std::make_unique<HessMatT>();
             }
+        } else {
+            hess = std::make_unique<HessMatT>();
         }
     }
 
@@ -179,18 +183,18 @@ struct DiffScalarProblem
             std::dynamic_pointer_cast<Term<T, ObjHandleT>>(new_term));
     }
 
-
     void update_hessian()
     {
-        hess_new->insert(rx,
-                         *hess,
-                         vv_pairs.num_index(),
-                         vv_pairs.m_pairs_id.col_data(0),
-                         vv_pairs.m_pairs_id.col_data(1));
-        hess_new.swap(hess);
+        if (hess_new->insert(rx,
+                             *hess,
+                             vv_pairs.num_index(),
+                             vv_pairs.m_pairs_id.col_data(0),
+                             vv_pairs.m_pairs_id.col_data(1))) {
+            hess_new->swap(*hess);
 
-        for (size_t i = 0; i < terms.size(); ++i) {
-            terms[i]->update_hessian(hess.get());
+            // for (size_t i = 0; i < terms.size(); ++i) {
+            //     terms[i]->update_hessian(hess.get());
+            // }
         }
     }
 
@@ -207,6 +211,10 @@ struct DiffScalarProblem
 
         for (size_t i = 0; i < terms.size(); ++i) {
             terms[i]->eval_active(*objective, stream);
+            {
+                CUDA_ERROR(cudaGetLastError());
+                CUDA_ERROR(cudaDeviceSynchronize());
+            }
         }
     }
 
@@ -245,7 +253,8 @@ struct DiffScalarProblem
         T sum = 0;
 
         for (size_t i = 0; i < terms.size(); ++i) {
-            sum += terms[i]->get_loss(stream);
+            T l = terms[i]->get_loss(stream);
+            sum += l;
         }
         return sum;
     }
