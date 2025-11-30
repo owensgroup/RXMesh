@@ -416,7 +416,7 @@ int main(int argc, char** argv)
             rx, problem, newton_solver, init_s, Direction::Default);
     } else if (Arg.solver == "lbfgs") {
         using ProblemT = DiffScalarProblem<T, 2, VertexHandle, false>;
-        ProblemT problem(rx);
+        ProblemT problem(rx, true);
 
         LBFGSSolver lbfgs_solver(problem, Arg.history);
         manifold_optimization<T>(
