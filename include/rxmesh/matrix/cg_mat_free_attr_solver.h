@@ -112,6 +112,11 @@ struct CGMatFreeAttrSolver : public IterativeSolver<T, Attribute<T, HandleT>>
 
             this->m_iter_taken++;
         }
+        RXMESH_WARN(
+            "CGMatFreeAttrSolver::solve() did not converge after {} iterations. Residual "
+            "= {}",
+            this->m_iter_taken,
+            delta_new);
         this->m_final_residual = delta_new;
     }
 
