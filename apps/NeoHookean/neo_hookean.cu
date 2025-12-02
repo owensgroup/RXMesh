@@ -168,6 +168,11 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     ceiling_barrier_energy(
         problem, contact_area, time_step, ground_n, ground_o, dhat, kappa);
 
+    DenseMatrix<T, Eigen::RowMajor> dir(
+        rx, problem.grad.rows(), problem.grad.cols());
+
+    DenseMatrix<T, Eigen::RowMajor> grad(
+        rx, problem.grad.rows(), problem.grad.cols());
 
     T line_search_init_step = 0;
 
@@ -192,6 +197,11 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     timer.add("LineSearch");
     timer.add("LinearSolver");
     timer.add("Diff");
+
+    //add_contact(
+    //    rx, problem.vv_pairs, v_dbc[0], v_dbc[1], v_dbc[2], is_dbc, x, dhat);
+    //problem.update_hessian();
+    //printf("\n");
 
     auto step_forward = [&]() {
         // x_tilde = x + v*h
@@ -221,7 +231,14 @@ void neo_hookean(RXMeshStatic& rx, T dx)
             rx, is_dbc, x, v_dbc_vel, v_dbc_limit, time_step, dbc_target);
 
         // evaluate energy
-        add_contact(rx, problem.vv_pairs, v_dbc[0], is_dbc, x, dhat);
+        add_contact(rx,
+                    problem.vv_pairs,
+                    v_dbc[0],
+                    v_dbc[1],
+                    v_dbc[2],
+                    is_dbc,
+                    x,
+                    dhat);
         problem.update_hessian();
         problem.eval_terms();
         {
@@ -229,6 +246,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
             CUDA_ERROR(cudaDeviceSynchronize());
         }
 
+        grad.copy_from(problem.grad, DEVICE, DEVICE);
         // DBC satisfied
         check_dbc_satisfied(
             rx, is_dbc_satisfied, x, is_dbc, dbc_target, time_step, tol);
@@ -244,18 +262,25 @@ void neo_hookean(RXMeshStatic& rx, T dx)
         // get newton direction
         newton_solver.compute_direction();
 
+        dir.copy_from(newton_solver.dir, DEVICE, DEVICE);
         // residual is abs_max(newton_dir)/ h
         T residual = newton_solver.dir.abs_max() / time_step;
 
         T f = problem.get_current_loss();
         RXMESH_INFO(
-            "*******Step: {}, Energy: {}, Residual: {}", steps, f, residual);
+            "*******Step: {}, Energy: {}, Residual: {},  DBC_satisfied= {}",
+            steps,
+            f,
+            residual,
+            num_satisfied);
 
         int iter = 0;
         while (residual > tol || num_satisfied != num_dbc_vertices) {
 
             if (residual <= tol && num_satisfied != num_dbc_vertices) {
                 dbc_stiff.multiply(T(2));
+                problem.eval_terms();
+                newton_solver.compute_direction();
             }
 
             T nh_step = neo_hookean_step_size(rx, x, newton_solver.dir, alpha);
@@ -272,10 +297,22 @@ void neo_hookean(RXMeshStatic& rx, T dx)
             line_search_init_step = std::min(nh_step, bar_step);
 
             // TODO: line search should pass the step to the friction energy
-            newton_solver.line_search(line_search_init_step, 0.5);
+            bool ls_success =
+                newton_solver.line_search(line_search_init_step, 0.5, 64, 0.0);
+
+            if (!ls_success) {
+                RXMESH_WARN("Line search failed!");
+            }
 
             // evaluate energy
-            add_contact(rx, problem.vv_pairs, v_dbc[0], is_dbc, x, dhat);
+            add_contact(rx,
+                        problem.vv_pairs,
+                        v_dbc[0],
+                        v_dbc[1],
+                        v_dbc[2],
+                        is_dbc,
+                        x,
+                        dhat);
             problem.update_hessian();
             problem.eval_terms();
             {
@@ -301,9 +338,20 @@ void neo_hookean(RXMeshStatic& rx, T dx)
             // residual is abs_max(newton_dir)/ h
             residual = newton_solver.dir.abs_max() / time_step;
 
-            RXMESH_INFO("  Subsetp: {}, F: {}, R: {}", iter, f, residual);
+            RXMESH_INFO(
+                "  Subsetp: {}, F: {}, R: {}, line_search_init_step={}, "
+                "DBC_satisfied= {}",
+                iter,
+                f,
+                residual,
+                line_search_init_step,
+                num_satisfied);
 
             iter++;
+
+            if (iter > 10) {
+                break;
+            }
         }
 
         RXMESH_INFO("\n===================\n");
@@ -325,7 +373,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     };
 
 #if USE_POLYSCOPE
-    draw(rx, x, velocity, step_forward, steps);
+    draw(rx, x, velocity, step_forward, dir, grad, steps);
 #else
     while (steps < 5) {
         step_forward();

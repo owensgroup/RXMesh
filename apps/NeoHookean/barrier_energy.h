@@ -55,17 +55,19 @@ void floor_barrier_energy(ProblemT&      problem,
         });
 }
 
-template <typename VAttrT, typename VAttrB, typename T = typename VAttrT::Type>
+template <typename VAttrT,
+          typename VAttrB,
+          typename PairT,
+          typename T = typename VAttrT::Type>
 void add_contact(RXMeshStatic&      rx,
-                 CandidatePairsVV&  contact_pairs,
+                 PairT&             contact_pairs,
                  const VertexHandle dbc_vertex,
+                 const VertexHandle dbc_vertex1,
+                 const VertexHandle dbc_vertex2,
                  const VAttrB&      is_dbc,
                  const VAttrT&      x,
                  const T            dhat)
 {
-    if (contact_pairs.num_pairs() > 0) {
-        return;
-    }
     contact_pairs.reset();
 
     rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) mutable {
@@ -79,12 +81,22 @@ void add_contact(RXMeshStatic&      rx,
         T d = (xi - x_dbc).dot(normal);
 
         if (d < dhat) {
+            // if (vh.local_id() == 20 || vh.local_id() == 21 || vh.local_id()
+            // == 22 || vh.local_id() == 23 || vh.local_id() == 24) {
             bool inserted = contact_pairs.insert(vh, dbc_vertex);
             assert(inserted);
 
-            printf("\n addec contact pair between %d, %d",
+            inserted = contact_pairs.insert(vh, dbc_vertex1);
+            assert(inserted);
+
+            inserted = contact_pairs.insert(vh, dbc_vertex2);
+            assert(inserted);
+
+            printf("\n addec contact pair between %d, (%d, %d, %d)",
                    vh.local_id(),
-                   dbc_vertex.local_id());
+                   dbc_vertex.local_id(),
+                   dbc_vertex1.local_id(),
+                   dbc_vertex2.local_id());
         }
     });
 

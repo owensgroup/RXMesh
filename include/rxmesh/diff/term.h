@@ -291,6 +291,7 @@ template <typename LossHandleT,
           uint32_t blockThreads,
           typename HandleT0,
           typename HandleT1,
+          typename HessMatT,
           typename ScalarT,
           bool ProjectHess,
           int  VariableDim,
@@ -308,7 +309,7 @@ struct TemplatedTermPairs
                        LambdaT                                  t,
                        DenseMatrix<T, Eigen::RowMajor>*         grad,
                        HessianSparseMatrix<T, VariableDim>*     hess,
-                       CandidatePairs<HandleT0, HandleT1, int>& pairs)
+                       CandidatePairs<HandleT0, HandleT1, HessMatT>& pairs)
         : term(t), grad(grad), hess(hess), pairs(pairs)
     {
         // To avoid the clash that happens from adding many losses.
@@ -346,6 +347,7 @@ struct TemplatedTermPairs
                                         ObjHandleT,
                                         HandleT0,
                                         HandleT1,
+                                        HessMatT,
                                         ScalarT,
                                         ProjectHess,
                                         VariableDim,
@@ -375,6 +377,7 @@ struct TemplatedTermPairs
                                         ObjHandleT,
                                         HandleT0,
                                         HandleT1,
+                                        HessMatT,
                                         ScalarGradOnlyT,
                                         ProjectHess,
                                         VariableDim,
@@ -436,6 +439,7 @@ struct TemplatedTermPairs
                                          ObjHandleT,
                                          HandleT0,
                                          HandleT1,
+                                         HessMatT,
                                          ScalarT,
                                          LambdaT>
             <<<blocks, blockThreads, 0, stream>>>(pairs, *loss, obj, term);
@@ -465,6 +469,6 @@ struct TemplatedTermPairs
 
     DenseMatrix<T, Eigen::RowMajor>*         grad;
     HessianSparseMatrix<T, VariableDim>*     hess;
-    CandidatePairs<HandleT0, HandleT1, int>& pairs;
+    CandidatePairs<HandleT0, HandleT1, HessMatT>& pairs;
 };
 }  // namespace rxmesh

@@ -42,7 +42,7 @@ struct DiffScalarProblem
     std::vector<std::shared_ptr<Term<T, ObjHandleT>>> terms;
 
     // TODO we might need other types of candidate pairs
-    CandidatePairsVV vv_pairs;
+    CandidatePairsVV<HessMatT> vv_pairs;
 
 
     /**
@@ -55,10 +55,7 @@ struct DiffScalarProblem
                       int           expected_vv_candidate_pairs = 0)
         : rx(rx),
           grad(DenseMatT(rx, rx.get_num_elements<ObjHandleT>(), VariableDim)),
-          objective(rx.add_vertex_attribute<T>("objective", VariableDim)),
-          vv_pairs(CandidatePairsVV(expected_vv_candidate_pairs,
-                                    VariableDim,
-                                    rx.get_context()))
+          objective(rx.add_vertex_attribute<T>("objective", VariableDim))
     {
         grad.reset(0, LOCATION_ALL);
 
@@ -76,6 +73,9 @@ struct DiffScalarProblem
 
                 hess_new =
                     std::make_unique<HessMatT>(rx, expected_vv_candidate_pairs);
+
+                vv_pairs = CandidatePairsVV<HessMatT>(
+                    expected_vv_candidate_pairs, *hess, rx.get_context());
             } else {
                 hess = std::make_unique<HessMatT>();
             }
@@ -173,6 +173,7 @@ struct DiffScalarProblem
                                                 blockThreads,
                                                 VertexHandle,  // TODO
                                                 VertexHandle,  // TODO
+                                                HessMatT,
                                                 ScalarT,
                                                 ProjectHess,
                                                 VariableDim,
@@ -183,14 +184,23 @@ struct DiffScalarProblem
             std::dynamic_pointer_cast<Term<T, ObjHandleT>>(new_term));
     }
 
+    /**
+     * @brief update the sparse Hessian after adding contact
+     */
     void update_hessian()
     {
+        if (!hess) {
+            return;
+        }
+
         if (hess_new->insert(rx,
                              *hess,
                              vv_pairs.num_index(),
                              vv_pairs.m_pairs_id.col_data(0),
                              vv_pairs.m_pairs_id.col_data(1))) {
             hess_new->swap(*hess);
+
+            vv_pairs.m_hess = *hess;
 
             // for (size_t i = 0; i < terms.size(); ++i) {
             //     terms[i]->update_hessian(hess.get());

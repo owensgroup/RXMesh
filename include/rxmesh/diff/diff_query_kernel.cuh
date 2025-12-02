@@ -324,10 +324,11 @@ template <uint32_t blockThreads,
           typename ObjHandleT,
           typename HandleT0,
           typename HandleT1,
+          typename HessMatT,
           typename ScalarT,
           typename LambdaT>
 __global__ static void diff_kernel_passive_pair(
-    CandidatePairs<HandleT0, HandleT1, int>               pairs,
+    CandidatePairs<HandleT0, HandleT1, HessMatT>          pairs,
     Attribute<typename ScalarT::PassiveType, LossHandleT> loss,
     Attribute<typename ScalarT::PassiveType, ObjHandleT>  objective,
     LambdaT                                               user_func)
@@ -363,12 +364,13 @@ template <uint32_t blockThreads,
           typename ObjHandleT,
           typename HandleT0,
           typename HandleT1,
+          typename HessMatT,
           typename ScalarT,
           bool ProjectHess,
           int  VariableDim,
           typename LambdaT>
 __global__ static void diff_kernel_active_pair(
-    CandidatePairs<HandleT0, HandleT1, int>                         pairs,
+    CandidatePairs<HandleT0, HandleT1, HessMatT>                    pairs,
     DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor>     grad,
     HessianSparseMatrix<typename ScalarT::PassiveType, VariableDim> hess,
     Attribute<typename ScalarT::PassiveType, LossHandleT>           loss,

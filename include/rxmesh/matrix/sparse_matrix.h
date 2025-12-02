@@ -598,6 +598,24 @@ struct SparseMatrix
         return T(0);
     }
 
+    /**
+     * @brief check if the input entry (x,y) is a non-zero (i.e., if it
+     * allocated in the CSR representation)
+     */
+    __device__ __host__ bool is_non_zero(const IndexT x, IndexT y) const
+    {
+        const IndexT start = row_ptr()[x];
+        const IndexT end   = row_ptr()[x + 1];
+
+        for (IndexT i = start; i < end; ++i) {
+            if (col_idx()[i] == y) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
 #ifdef USE_CUDSS
     /**
      * @brief Return cuDSS matrix

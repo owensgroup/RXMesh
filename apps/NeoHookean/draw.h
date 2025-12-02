@@ -4,11 +4,13 @@
 
 using namespace rxmesh;
 
-template <typename FunT, typename VAttrT>
+template <typename FunT, typename VAttrT, typename DirT>
 void draw(RXMeshStatic& rx,
           VAttrT&       x,
           VAttrT&       velocity,
           FunT&         step_forward,
+          DirT&         dir_mat,
+          DirT&         grad_mat,
           int&          step)
 {
 #if USE_POLYSCOPE
@@ -18,6 +20,9 @@ void draw(RXMeshStatic& rx,
 
     bool is_running = false;
 
+    auto dir  = *rx.add_vertex_attribute<float>("Dir", 3);
+    auto grad = *rx.add_vertex_attribute<float>("Grad", 3);
+
     auto ps_callback = [&]() mutable {
         auto step_and_update = [&]() {
             step_forward();
@@ -25,6 +30,15 @@ void draw(RXMeshStatic& rx,
             velocity.move(DEVICE, HOST);
             auto vel = rx.get_polyscope_mesh()->addVertexVectorQuantity(
                 "Velocity", velocity);
+
+            dir_mat.move(DEVICE, HOST);
+            dir.from_matrix(&dir_mat);
+            rx.get_polyscope_mesh()->addVertexVectorQuantity("Direction", dir);
+
+            grad_mat.move(DEVICE, HOST);
+            grad.from_matrix(&grad_mat);
+            rx.get_polyscope_mesh()->addVertexVectorQuantity("Grad", grad);
+
             rx.get_polyscope_mesh()->updateVertexPositions(x);
         };
         if (ImGui::Button("Step")) {

@@ -7,9 +7,11 @@ namespace rxmesh {
 /**
  * @brief Storing a pair of candidate contact pairs using their handles
  */
-template <typename HandleT0, typename HandleT1, typename IndexT>
+template <typename HandleT0, typename HandleT1, typename HessMatT>
 struct CandidatePairs
 {
+    using IndexT = int;
+
     template <typename T, int V, typename O, bool W>
     friend struct DiffScalarProblem;
 
@@ -36,11 +38,12 @@ struct CandidatePairs
      * contribute to -- but this is already allocated in the hessian matrix
      */
     __host__ CandidatePairs(int            max_capacity,
-                            int            variable_dim,
+                            HessMatT&      hess,
                             const Context& ctx)
-        : m_variable_dim(variable_dim),
+        : m_hess(hess),
+          m_variable_dim(hess.K_),
           m_pairs_id(DenseMatrix<IndexT, Eigen::ColMajor>(
-              max_capacity * variable_dim * variable_dim * 2,
+              max_capacity * m_variable_dim * m_variable_dim * 2,
               2)),
           m_pairs_handle(DenseMatrix<PairT, Eigen::ColMajor>(max_capacity, 1)),
           m_current_num_pairs(DenseMatrix<int>(1, 1)),
@@ -53,7 +56,15 @@ struct CandidatePairs
 
     /**
      * @brief Insert a candidate pair and return true if it succeeded. Otherwise
-     * return false, i.e., in case of exceeding the max capacity
+     * return false, i.e., in case of exceeding the max capacity.
+     * Here, we insert two things 1) the handles in a buffer to iterate over
+     * later 2) the corresponding new indices of the local Hessian block in the
+     * sparse Hessian matrix that these two (possibly) contacting pair
+     * generates.
+     * We always insert new handles (so long as the buffer is not overflown).
+     * For 2) we check if the block is already allocated. If not, we add the
+     * indices to another buffer which is later used in the update_hessian in
+     * the Problem
      */
     __device__ __host__ bool insert(const HandleT0& c0, const HandleT1& c1)
     {
@@ -61,7 +72,7 @@ struct CandidatePairs
         // first check if we have a space
         /// if we have a space to insert new pairs
 
-        auto add_candidate = [&](int id) {
+        auto add_candidate_with_indices = [&](int id) {
             // add the handles
             m_pairs_handle(id).first  = c0;
             m_pairs_handle(id).second = c1;
@@ -86,12 +97,24 @@ struct CandidatePairs
             }
         };
 
+
+        auto add_candidate = [&](int id) {
+            // add the handles
+            m_pairs_handle(id).first  = c0;
+            m_pairs_handle(id).second = c1;
+        };
+
+
 #ifdef __CUDA_ARCH__
         int id = ::atomicAdd(m_current_num_pairs.data(DEVICE), 1);
-        if (id < m_pairs_handle.rows()) {
-            ::atomicAdd(m_current_num_index.data(DEVICE),
-                        m_variable_dim * m_variable_dim * 2);
-            add_candidate(id);
+        if (id < m_pairs_handle.rows()) {            
+            if (m_hess.is_non_zero(c0, c1)) {
+                add_candidate(id);
+            } else {
+                ::atomicAdd(m_current_num_index.data(DEVICE),
+                            m_variable_dim * m_variable_dim * 2);
+                add_candidate_with_indices(id);
+            }
             return true;
         } else {
             ::atomicAdd(m_current_num_pairs.data(DEVICE), -1);
@@ -100,9 +123,13 @@ struct CandidatePairs
 #else
         if (m_current_num_pairs(0) < m_pairs_handle.rows()) {
             int id = m_current_num_pairs(0);
-            m_current_num_pairs(0)++;
-            m_current_num_index(0) += m_variable_dim * m_variable_dim * 2;
-            add_candidate(id);
+            m_current_num_pairs(0)++;            
+            if (m_hess.is_non_zero(c0, c1)) {
+                add_candidate(id);
+            } else {
+                m_current_num_index(0) += m_variable_dim * m_variable_dim * 2;
+                add_candidate_with_indices(id);
+            }
             return true;
         } else {
             return false;
@@ -168,7 +195,6 @@ struct CandidatePairs
         m_current_num_index(0) = 0;
 
 #ifndef __CUDA_ARCH__
-
         m_current_num_pairs.move(HOST, DEVICE);
         m_current_num_index.move(HOST, DEVICE);
 #endif
@@ -194,12 +220,16 @@ struct CandidatePairs
     // track the number of pairs (not the number of indices)
     DenseMatrix<int> m_current_num_pairs;
     DenseMatrix<int> m_current_num_index;
-    int              m_variable_dim;
+
+    // TODO remove this and use m_hess.k_
+    int m_variable_dim;
+
+    HessMatT m_hess;
 
     Context m_context;
 };
 
-
-using CandidatePairsVV = CandidatePairs<VertexHandle, VertexHandle, int>;
+template <typename HessMatT>
+using CandidatePairsVV = CandidatePairs<VertexHandle, VertexHandle, HessMatT>;
 
 }  // namespace rxmesh

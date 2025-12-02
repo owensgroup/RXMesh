@@ -190,9 +190,10 @@ class Attribute : public AttributeBase
      * rows represent the number of mesh elements of this attribute and number
      * of columns is the number of attributes
      */
-    std::shared_ptr<DenseMatrix<T>> to_matrix() const
+    template <int Order = Eigen::ColMajor>
+    std::shared_ptr<DenseMatrix<T, Order>> to_matrix() const
     {
-        std::shared_ptr<DenseMatrix<T>> mat =
+        std::shared_ptr<DenseMatrix<T, Order>> mat =
             std::make_shared<DenseMatrix<T>>(*m_rxmesh, rows(), cols());
 
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
@@ -230,7 +231,8 @@ class Attribute : public AttributeBase
      * attribute on the host side
      * @param mat
      */
-    void from_matrix(DenseMatrix<T>* mat)
+    template <int Order>
+    void from_matrix(DenseMatrix<T, Order>* mat)
     {
         assert(mat->rows() == rows());
         assert(mat->cols() == cols());
