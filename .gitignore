@@ -19,7 +19,10 @@ input/*
 build/
 build_debug/
 include/rxmesh/util/git_sha1.cpp
+cmake-build-release
+cmake-build-debug
 .vscode/
+.idea/
 scripts/*.log
 scripts/*.ini
 scripts/*.nsys-rep

@@ -68,10 +68,11 @@ int count_nnz_fillin(const EigeMatT& eigen_mat,
         perm.indices()[i] = h_permute[i];
     }
 
-    Eigen::SparseMatrix<float> permuted_mat(eigen_mat.rows(), eigen_mat.rows());
-
-    Eigen::internal::permute_symm_to_fullsymm<Eigen::Lower, false>(
-        eigen_mat, permuted_mat, perm.indices().data());
+    // Create a full symmetric matrix from the lower triangular part
+    // and apply permutation: P * A * P^T
+    Eigen::SparseMatrix<float> full_mat =
+        eigen_mat.template selfadjointView<Eigen::Lower>();
+    Eigen::SparseMatrix<float> permuted_mat = perm * full_mat * perm.transpose();
 
 
     // save_sparse_mat(permuted_mat,

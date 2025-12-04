@@ -37,6 +37,7 @@ inline void rx_init(int                       device_id,
 class RXMesh
 {
    public:
+    bool _use_metis  = false;
     /**
      * @brief Total number of vertices in the mesh
      */
@@ -438,7 +439,7 @@ class RXMesh
 
     RXMesh(const RXMesh&) = delete;
 
-    RXMesh(uint32_t patch_size);
+    RXMesh(uint32_t patch_size, bool use_metis = false);
 
     /**
      * @brief init all the data structures

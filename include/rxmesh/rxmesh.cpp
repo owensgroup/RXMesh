@@ -15,7 +15,7 @@
 #include "rxmesh/util/util.h"
 
 namespace rxmesh {
-RXMesh::RXMesh(uint32_t patch_size)
+RXMesh::RXMesh(uint32_t patch_size, bool use_metis)
     : m_num_edges(0),
       m_num_faces(0),
       m_num_vertices(0),
@@ -48,7 +48,8 @@ RXMesh::RXMesh(uint32_t patch_size)
       m_lp_hashtable_load_factor(0.f),
       m_patch_alloc_factor(0.f),
       m_topo_memory_mega_bytes(0.0),
-      m_num_colors(0)
+      m_num_colors(0),
+      _use_metis(use_metis)
 {
 }
 
@@ -298,7 +299,7 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
                                                            m_edges_map,
                                                            m_num_vertices,
                                                            m_num_edges,
-                                                           false);
+                                                           _use_metis);
         } else {
             m_patcher = std::make_unique<patcher::Patcher>(patcher_file);
         }
@@ -310,7 +311,7 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
                                                        m_edges_map,
                                                        m_num_vertices,
                                                        m_num_edges,
-                                                       false);
+                                                       _use_metis);
     }
 
 
