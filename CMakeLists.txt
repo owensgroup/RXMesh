@@ -17,13 +17,11 @@ project(RXMesh
 set(RX_USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")
 set(RX_BUILD_TESTS "OFF" CACHE BOOL "Build RXMesh unit test")
 set(RX_BUILD_APPS "ON" CACHE BOOL "Build RXMesh applications")
-set(RX_USE_SUITESPARSE "OFF" CACHE BOOL "Use SuiteSparse for benchmark")
 set(RX_USE_CUDSS "ON" CACHE BOOL "Use cuDSS - CUDA Library for Direct Sparse Solvers")
 
 message(STATUS "Polyscope is ${RX_USE_POLYSCOPE}")
 message(STATUS "Build RXMesh unit test is ${RX_BUILD_TESTS}")
 message(STATUS "Build RXMesh applications is ${RX_BUILD_APPS}")
-message(STATUS "SuiteSparse is ${RX_USE_SUITESPARSE}")
 message(STATUS "cuDSS is ${RX_USE_CUDSS}")
 
 # Language standards
@@ -101,6 +99,9 @@ target_link_libraries(${PROJECT_NAME} INTERFACE glm::glm)
 target_compile_definitions(${PROJECT_NAME} INTERFACE GLM_ENABLE_EXPERIMENTAL)
 
 # Cereal
+set(WITH_WERROR OFF CACHE BOOL "Compile with '-Werror' C++ compiler flag" FORCE)
+set(BUILD_SANDBOX OFF CACHE BOOL "Build sandbox examples" FORCE)
+set(BUILD_TESTS OFF CACHE BOOL "Build tests" FORCE)
 include(cmake/recipes/cereal.cmake)
 target_include_directories(${PROJECT_NAME} INTERFACE "${cereal_SOURCE_DIR}/include")
 
@@ -199,12 +200,6 @@ target_compile_definitions(RXMesh INTERFACE "EIGEN_DEFAULT_DENSE_INDEX_TYPE=int"
 # ==============================================================================
 # Optional Libraries
 # ==============================================================================
-# SuiteSparse
-if(${RX_USE_SUITESPARSE})
-    include("cmake/recipes/suitesparse.cmake")
-    target_compile_definitions(RXMesh INTERFACE USE_SUITESPARSE)
-endif()
-
 # cuDSS
 if(${RX_USE_CUDSS})
     find_package(cudss QUIET)
