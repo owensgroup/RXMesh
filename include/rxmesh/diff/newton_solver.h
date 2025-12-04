@@ -50,15 +50,7 @@ struct NetwtonSolver
                 };
         }
     }
-
-    /**
-     * @brief
-     */
-    inline void solve(cudaStream_t stream = NULL)
-    {
-        compute_direction(stream);
-        line_search(stream);
-    }
+ 
 
     /**
      * @brief solve to get Newton direction
@@ -140,10 +132,13 @@ struct NetwtonSolver
     /**
      * @brief line search
      */
+    using Callback = std::function<void(Attribute<T, ObjHandleT>)>;
+
     inline bool line_search(const T      s_max        = 1.0,
                             const T      shrink       = 0.8,
                             const int    max_iters    = 64,
                             const T      armijo_const = 1e-4,
+                            Callback     cb           = {},
                             cudaStream_t stream       = NULL)
     {
         // we are going to keep trying to update temp_objective until we reach
@@ -183,6 +178,9 @@ struct NetwtonSolver
 
 
             // eval new obj func
+            if (cb) {
+                cb(*temp_objective);
+            }
             problem.eval_terms_passive(temp_objective.get(), stream);
 
             // get the new value of the objective function

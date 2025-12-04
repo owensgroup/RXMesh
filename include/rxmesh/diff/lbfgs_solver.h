@@ -49,12 +49,7 @@ struct LBFGSSolver
             y_list[i].reset(0, LOCATION_ALL);
         }
     }
-
-    inline void solve(cudaStream_t stream = NULL)
-    {
-        compute_direction(stream);
-        line_search(stream);
-    }
+     
 
     inline void compute_direction(cudaStream_t stream = NULL)
     {

@@ -399,6 +399,8 @@ __global__ static void diff_kernel_active_pair(
 
         std::pair<HandleT0, HandleT1> pair = pairs.get_pair(id);
 
+        assert(hess.is_non_zero(pair.first, pair.second));
+
         PairIterator<HandleT0> iter(pair.first, pair.second);
 
         ScalarT res = user_func(diff_handle, iter, objective);

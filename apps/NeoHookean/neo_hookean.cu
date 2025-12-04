@@ -198,11 +198,6 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     timer.add("LinearSolver");
     timer.add("Diff");
 
-    //add_contact(
-    //    rx, problem.vv_pairs, v_dbc[0], v_dbc[1], v_dbc[2], is_dbc, x, dhat);
-    //problem.update_hessian();
-    //printf("\n");
-
     auto step_forward = [&]() {
         // x_tilde = x + v*h
         timer.start("Step");
@@ -241,10 +236,6 @@ void neo_hookean(RXMeshStatic& rx, T dx)
                     dhat);
         problem.update_hessian();
         problem.eval_terms();
-        {
-            CUDA_ERROR(cudaGetLastError());
-            CUDA_ERROR(cudaDeviceSynchronize());
-        }
 
         grad.copy_from(problem.grad, DEVICE, DEVICE);
         // DBC satisfied
@@ -297,8 +288,17 @@ void neo_hookean(RXMeshStatic& rx, T dx)
             line_search_init_step = std::min(nh_step, bar_step);
 
             // TODO: line search should pass the step to the friction energy
-            bool ls_success =
-                newton_solver.line_search(line_search_init_step, 0.5, 64, 0.0);
+            bool ls_success = newton_solver.line_search(
+                line_search_init_step, 0.5, 64, 0.0, [&](auto temp_x) {
+                    add_contact(rx,
+                                problem.vv_pairs,
+                                v_dbc[0],
+                                v_dbc[1],
+                                v_dbc[2],
+                                is_dbc,
+                                temp_x,
+                                dhat);
+                });
 
             if (!ls_success) {
                 RXMESH_WARN("Line search failed!");
@@ -315,10 +315,6 @@ void neo_hookean(RXMeshStatic& rx, T dx)
                         dhat);
             problem.update_hessian();
             problem.eval_terms();
-            {
-                CUDA_ERROR(cudaGetLastError());
-                CUDA_ERROR(cudaDeviceSynchronize());
-            }
 
             T f = problem.get_current_loss();
 

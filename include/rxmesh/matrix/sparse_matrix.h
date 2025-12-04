@@ -602,7 +602,7 @@ struct SparseMatrix
      * @brief check if the input entry (x,y) is a non-zero (i.e., if it
      * allocated in the CSR representation)
      */
-    __device__ __host__ bool is_non_zero(const IndexT x, IndexT y) const
+    __device__ __host__ bool is_non_zero(const IndexT x, const IndexT y) const
     {
         const IndexT start = row_ptr()[x];
         const IndexT end   = row_ptr()[x + 1];

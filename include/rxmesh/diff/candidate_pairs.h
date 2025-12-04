@@ -73,18 +73,12 @@ struct CandidatePairs
         /// if we have a space to insert new pairs
 
         auto add_candidate_with_indices = [&](int id) {
-            // add the handles
-            m_pairs_handle(id).first  = c0;
-            m_pairs_handle(id).second = c1;
-
             // add the indices
-            id *= m_variable_dim * m_variable_dim * 2;
-
             for (int i = 0; i < m_variable_dim; ++i) {
                 for (int j = 0; j < m_variable_dim; ++j) {
 
-                    int r_id = m_context.linear_id(c0) * m_variable_dim + i;
-                    int c_id = m_context.linear_id(c1) * m_variable_dim + j;
+                    int r_id = m_hess.get_row_id(c0) * m_variable_dim + i;
+                    int c_id = m_hess.get_row_id(c1) * m_variable_dim + j;
 
                     m_pairs_id(id, 0) = r_id;
                     m_pairs_id(id, 1) = c_id;
@@ -107,13 +101,13 @@ struct CandidatePairs
 
 #ifdef __CUDA_ARCH__
         int id = ::atomicAdd(m_current_num_pairs.data(DEVICE), 1);
-        if (id < m_pairs_handle.rows()) {            
-            if (m_hess.is_non_zero(c0, c1)) {
+        if (id < m_pairs_handle.rows()) {
+            add_candidate(id);
+            if (!m_hess.is_non_zero(c0, c1)) {
                 add_candidate(id);
-            } else {
-                ::atomicAdd(m_current_num_index.data(DEVICE),
-                            m_variable_dim * m_variable_dim * 2);
-                add_candidate_with_indices(id);
+                int idd = ::atomicAdd(m_current_num_index.data(DEVICE),
+                                      m_variable_dim * m_variable_dim * 2);
+                add_candidate_with_indices(idd);
             }
             return true;
         } else {
@@ -123,12 +117,12 @@ struct CandidatePairs
 #else
         if (m_current_num_pairs(0) < m_pairs_handle.rows()) {
             int id = m_current_num_pairs(0);
-            m_current_num_pairs(0)++;            
-            if (m_hess.is_non_zero(c0, c1)) {
-                add_candidate(id);
-            } else {
+            m_current_num_pairs(0)++;
+            add_candidate(id);
+            if (!m_hess.is_non_zero(c0, c1)) {
+                int idd = m_current_num_index(0);
                 m_current_num_index(0) += m_variable_dim * m_variable_dim * 2;
-                add_candidate_with_indices(id);
+                add_candidate_with_indices(idd);
             }
             return true;
         } else {

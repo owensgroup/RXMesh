@@ -81,8 +81,6 @@ void add_contact(RXMeshStatic&      rx,
         T d = (xi - x_dbc).dot(normal);
 
         if (d < dhat) {
-            // if (vh.local_id() == 20 || vh.local_id() == 21 || vh.local_id()
-            // == 22 || vh.local_id() == 23 || vh.local_id() == 24) {
             bool inserted = contact_pairs.insert(vh, dbc_vertex);
             assert(inserted);
 
@@ -91,19 +89,8 @@ void add_contact(RXMeshStatic&      rx,
 
             inserted = contact_pairs.insert(vh, dbc_vertex2);
             assert(inserted);
-
-            printf("\n addec contact pair between %d, (%d, %d, %d)",
-                   vh.local_id(),
-                   dbc_vertex.local_id(),
-                   dbc_vertex1.local_id(),
-                   dbc_vertex2.local_id());
         }
     });
-
-    {
-        CUDA_ERROR(cudaGetLastError());
-        CUDA_ERROR(cudaDeviceSynchronize());
-    }
 }
 
 template <typename ProblemT,
