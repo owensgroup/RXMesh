@@ -10,8 +10,8 @@ TEST(RXMeshStatic, DenseMatrixToEigen)
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
-    DenseMatrix<float> rx_mat(rx, 10, 10);
-    DenseMatrix<float> rx_mat_copy(rx, 10, 10);
+    DenseMatrix<float> rx_mat(rx, 10, 10, LOCATION_ALL);
+    DenseMatrix<float> rx_mat_copy(rx, 10, 10, LOCATION_ALL);
 
     rx_mat.fill_random();
     rx_mat_copy.copy_from(rx_mat, HOST, HOST);
@@ -47,7 +47,7 @@ TEST(RXMeshStatic, DenseMatrixASum)
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
-    DenseMatrix<float> mat(rx, 10, 10);
+    DenseMatrix<float> mat(rx, 10, 10, LOCATION_ALL);
 
     mat.fill_random();
 
@@ -75,11 +75,11 @@ TEST(RXMeshStatic, DenseMatrixAXPY)
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
-    DenseMatrix<float> Y(rx, 10, 10);
-    DenseMatrix<float> X(rx, 10, 10);
+    DenseMatrix<float> Y(rx, 10, 10, LOCATION_ALL);
+    DenseMatrix<float> X(rx, 10, 10, LOCATION_ALL);
 
-    DenseMatrix<float> Y_copy(rx, 10, 10);
-    DenseMatrix<float> X_copy(rx, 10, 10);
+    DenseMatrix<float> Y_copy(rx, 10, 10, LOCATION_ALL);
+    DenseMatrix<float> X_copy(rx, 10, 10, LOCATION_ALL);
 
     Y.fill_random();
     X.fill_random();
@@ -112,10 +112,10 @@ TEST(RXMeshStatic, DenseMatrixDot)
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
-    DenseMatrix<cuComplex> y(rx, 10, 10);
+    DenseMatrix<cuComplex> y(rx, 10, 10, LOCATION_ALL);
     y.fill_random();
 
-    DenseMatrix<cuComplex> x(rx, 10, 10);
+    DenseMatrix<cuComplex> x(rx, 10, 10, LOCATION_ALL);
     x.fill_random();
 
     cuComplex dot_res = y.dot(x);
@@ -152,7 +152,7 @@ TEST(RXMeshStatic, DenseMatrixNorm2)
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
-    DenseMatrix<cuComplex> x(rx, 10, 10);
+    DenseMatrix<cuComplex> x(rx, 10, 10, LOCATION_ALL);
     x.fill_random();
 
     float norm2_res = x.norm2();
@@ -182,8 +182,8 @@ TEST(RXMeshStatic, DenseMatrixMulitply)
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
-    DenseMatrix<cuComplex> x(rx, 10, 10);
-    DenseMatrix<cuComplex> copy(rx, 10, 10);
+    DenseMatrix<cuComplex> x(rx, 10, 10, LOCATION_ALL);
+    DenseMatrix<cuComplex> copy(rx, 10, 10, LOCATION_ALL);
 
     x.fill_random();
 
@@ -222,13 +222,13 @@ TEST(RXMeshStatic, DenseMatrixSwap)
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
-    DenseMatrix<float> x(rx, 10, 10);
-    DenseMatrix<float> copy(rx, 10, 10);
+    DenseMatrix<float> x(rx, 10, 10, LOCATION_ALL);
+    DenseMatrix<float> copy(rx, 10, 10, LOCATION_ALL);
     x.fill_random();
 
     copy.copy_from(x, HOST, HOST);
 
-    DenseMatrix<float> y(rx, 10, 10);
+    DenseMatrix<float> y(rx, 10, 10, LOCATION_ALL);
     y.fill_random();
 
     x.swap(y);
@@ -296,7 +296,7 @@ TEST(RXMeshStatic, DenseMatrixSlice)
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
 
-    DenseMatrix<float> mat(rx, 10, 3);
+    DenseMatrix<float> mat(rx, 10, 3, LOCATION_ALL);
 
     mat.fill_random();
 

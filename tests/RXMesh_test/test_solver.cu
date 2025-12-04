@@ -157,7 +157,7 @@ void test_direct_solver(RXMeshStatic&    rx,
         X.move(HOST, DEVICE);
     }
 
-    DenseMatrix<T> Ax(rx, A.rows(), X.cols());
+    DenseMatrix<T> Ax(rx, A.rows(), X.cols(), LOCATION_ALL);
 
     A.multiply(X, Ax);
 
@@ -181,8 +181,8 @@ TEST(Solver, Cholesky)
     uint32_t num_vertices = rx.get_num_vertices();
 
     SparseMatrix<float> A(rx, Op::VV);
-    DenseMatrix<float>  X(rx, num_vertices, 3);
-    DenseMatrix<float>  B(rx, num_vertices, 3);
+    DenseMatrix<float>  X(rx, num_vertices, 3, LOCATION_ALL);
+    DenseMatrix<float>  B(rx, num_vertices, 3, LOCATION_ALL);
 
     CholeskySolver solver(&A);
 
@@ -217,8 +217,8 @@ TEST(Solver, cuDSSCholesky)
     uint32_t num_vertices = rx.get_num_vertices();
 
     SparseMatrix<float> A(rx, Op::VV);
-    DenseMatrix<float>  X(rx, num_vertices, 3);
-    DenseMatrix<float>  B(rx, num_vertices, 3);
+    DenseMatrix<float>  X(rx, num_vertices, 3, LOCATION_ALL);
+    DenseMatrix<float>  B(rx, num_vertices, 3, LOCATION_ALL);
 
     cuDSSCholeskySolver solver(&A);
 
@@ -253,8 +253,8 @@ TEST(Solver, QR)
     uint32_t num_vertices = rx.get_num_vertices();
 
     SparseMatrix<float> A(rx, Op::VV);
-    DenseMatrix<float>  X(rx, num_vertices, 3);
-    DenseMatrix<float>  B(rx, num_vertices, 3);
+    DenseMatrix<float>  X(rx, num_vertices, 3, LOCATION_ALL);
+    DenseMatrix<float>  B(rx, num_vertices, 3, LOCATION_ALL);
 
     QRSolver solver(&A);
 
@@ -277,8 +277,8 @@ TEST(Solver, LU)
     uint32_t num_vertices = rx.get_num_vertices();
 
     SparseMatrix<float> A(rx, Op::VV);
-    DenseMatrix<float>  X(rx, num_vertices, 3);
-    DenseMatrix<float>  B(rx, num_vertices, 3);
+    DenseMatrix<float>  X(rx, num_vertices, 3, LOCATION_ALL);
+    DenseMatrix<float>  B(rx, num_vertices, 3, LOCATION_ALL);
 
     LUSolver solver(&A);
 
@@ -298,15 +298,15 @@ TEST(Solver, CompareEigen)
     uint32_t num_vertices = rx.get_num_vertices();
 
     SparseMatrix<float> A(rx, Op::VV);
-    DenseMatrix<float>  X(rx, num_vertices, 3);
-    DenseMatrix<float>  B(rx, num_vertices, 3);
+    DenseMatrix<float>  X(rx, num_vertices, 3, LOCATION_ALL);
+    DenseMatrix<float>  B(rx, num_vertices, 3, LOCATION_ALL);
 
     CholeskySolver solver(&A);
 
     test_direct_solver(
         rx, solver, A, B, X, true, [&]() { solver.pre_solve(rx); });
 
-    DenseMatrix<float> X_copy(rx, num_vertices, 3);
+    DenseMatrix<float> X_copy(rx, num_vertices, 3, LOCATION_ALL);
     X_copy.copy_from(X, DEVICE, HOST);
 
     auto A_eigen = A.to_eigen();
@@ -364,7 +364,7 @@ void test_iterative_solver(RXMeshStatic&    rx,
 
     X.move(DEVICE, HOST);
 
-    DenseMatrix<T> Ax(rx, A.rows(), X.cols());
+    DenseMatrix<T> Ax(rx, A.rows(), X.cols(), LOCATION_ALL);
 
     A.multiply(X, Ax);
 
@@ -389,8 +389,8 @@ TEST(Solver, CG)
     using T = float;
 
     SparseMatrix<T> A(rx, Op::VV);
-    DenseMatrix<T>  X(rx, num_vertices, 3);
-    DenseMatrix<T>  B(rx, num_vertices, 3);
+    DenseMatrix<T>  X(rx, num_vertices, 3, LOCATION_ALL);
+    DenseMatrix<T>  B(rx, num_vertices, 3, LOCATION_ALL);
 
     CGSolver solver(A, 3, 5000, T(1e-7));
 
@@ -411,8 +411,8 @@ TEST(Solver, PCG)
     using T = float;
 
     SparseMatrix<T> A(rx, Op::VV);
-    DenseMatrix<T>  X(rx, num_vertices, 3);
-    DenseMatrix<T>  B(rx, num_vertices, 3);
+    DenseMatrix<T>  X(rx, num_vertices, 3, LOCATION_ALL);
+    DenseMatrix<T>  B(rx, num_vertices, 3, LOCATION_ALL);
 
     PCGSolver solver(A, 3, 5000, T(1e-7));
 
@@ -432,8 +432,8 @@ TEST(Solver, CGMatFree)
     using T = float;
 
     SparseMatrix<T> A(rx, Op::VV);
-    DenseMatrix<T>  X(rx, num_vertices, 3);
-    DenseMatrix<T>  B(rx, num_vertices, 3);
+    DenseMatrix<T>  X(rx, num_vertices, 3, LOCATION_ALL);
+    DenseMatrix<T>  B(rx, num_vertices, 3, LOCATION_ALL);
 
     CGMatFreeSolver solver(num_vertices, 3, 5000, T(1e-7));
 
