@@ -22,7 +22,7 @@ void manual(RXMeshStatic& rx)
 
     int cols = pos.get_num_attributes();
 
-    DenseMatrix<T> grad(rx, rx.get_num_vertices(), cols);
+    DenseMatrix<T> grad(rx, rx.get_num_vertices(), cols, LOCATION_ALL);
 
     pos.copy_from(input_pos, DEVICE, DEVICE);
 

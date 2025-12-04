@@ -285,7 +285,7 @@ int main(int argc, char** argv)
     auto rotations = *rx.add_vertex_attribute<float>("RotationMatrix", 9);
 
     // b-matrix
-    DenseMatrix<float> b_mat(rx, rx.get_num_vertices(), 3);
+    DenseMatrix<float> b_mat(rx, rx.get_num_vertices(), 3, LOCATION_ALL);
     b_mat.reset(0.f, LOCATION_ALL);
 
     // obtain cotangent weight matrix

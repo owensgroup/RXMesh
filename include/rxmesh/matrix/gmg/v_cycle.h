@@ -123,17 +123,17 @@ struct VCycle
         // allocate memory for coarsened LHS and RHS
         m_smoother.emplace_back(gmg.m_num_samples[0], num_cols);
 
-        m_r.emplace_back(rx, gmg.m_num_samples[0], num_cols);
+        m_r.emplace_back(rx, gmg.m_num_samples[0], num_cols, LOCATION_ALL);
 
-        m_rhs.emplace_back(rx, gmg.m_num_samples[0], num_cols);
+        m_rhs.emplace_back(rx, gmg.m_num_samples[0], num_cols, LOCATION_ALL);
 
 
         for (int l = 1; l < gmg.m_num_levels; ++l) {
             m_rhs.emplace_back(rx, gmg.m_num_samples[l], num_cols);
 
-            m_x.emplace_back(rx, gmg.m_num_samples[l], num_cols);
+            m_x.emplace_back(rx, gmg.m_num_samples[l], num_cols, LOCATION_ALL);
 
-            m_r.emplace_back(rx, gmg.m_num_samples[l], num_cols);
+            m_r.emplace_back(rx, gmg.m_num_samples[l], num_cols, LOCATION_ALL);
 
             gmg.m_prolong_op[l - 1].alloc_multiply_buffer(m_r.back(),
                                                           m_rhs[l - 1]);

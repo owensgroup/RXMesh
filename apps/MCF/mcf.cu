@@ -48,7 +48,7 @@ void creat_matrices(rxmesh::RXMeshStatic& rx)
     auto coords = rx.get_input_vertex_coordinates();
 
     SparseMatrix<float> A_mat(rx);
-    DenseMatrix<float>  B_mat(rx, num_vertices, 3);
+    DenseMatrix<float>  B_mat(rx, num_vertices, 3, LOCATION_ALL);
 
     rx.run_kernel<256>({Op::VV},
                        mcf_B_setup<float, 256>,

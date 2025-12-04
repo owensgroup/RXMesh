@@ -27,9 +27,9 @@ struct LBFGSSolver
         : problem(p),
           m(history_size),
           k(0),
-          dir(DenseMatT(p.rx, p.grad.rows(), p.grad.cols())),
-          q(DenseMatT(p.rx, p.grad.rows(), p.grad.cols())),
-          r(DenseMatT(p.rx, p.grad.rows(), p.grad.cols())),
+          dir(DenseMatT(p.rx, p.grad.rows(), p.grad.cols(), LOCATION_ALL)),
+          q(DenseMatT(p.rx, p.grad.rows(), p.grad.cols(), LOCATION_ALL)),
+          r(DenseMatT(p.rx, p.grad.rows(), p.grad.cols(), LOCATION_ALL)),
           temp_objective(
               p.rx.add_attribute_like("temp_objective", *p.objective))
     {
@@ -43,8 +43,10 @@ struct LBFGSSolver
         rho_list.resize(m, T(0));
 
         for (int i = 0; i < m; ++i) {
-            s_list[i] = DenseMatT(p.rx, p.grad.rows(), p.grad.cols());
-            y_list[i] = DenseMatT(p.rx, p.grad.rows(), p.grad.cols());
+            s_list[i] =
+                DenseMatT(p.rx, p.grad.rows(), p.grad.cols(), LOCATION_ALL);
+            y_list[i] =
+                DenseMatT(p.rx, p.grad.rows(), p.grad.cols(), LOCATION_ALL);
             s_list[i].reset(0, LOCATION_ALL);
             y_list[i].reset(0, LOCATION_ALL);
         }

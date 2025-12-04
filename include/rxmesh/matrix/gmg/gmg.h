@@ -227,32 +227,35 @@ struct GMG
             int level_num_samples = m_num_samples[l];
 
             if (l > 0) {
-                m_samples_pos.emplace_back(rx, level_num_samples, 3);
+                m_samples_pos.emplace_back(
+                    rx, level_num_samples, 3, LOCATION_ALL);
 
                 // we allocate +1 for cub prefix sum
                 m_sample_neighbor_size.emplace_back(
-                    rx, level_num_samples + 1, 1);
+                    rx, level_num_samples + 1, 1, LOCATION_ALL);
                 m_sample_neighbor_size.back().reset(0, DEVICE);
 
                 m_sample_neighbor_size_prefix.emplace_back(
-                    rx, level_num_samples + 1, 1);
+                    rx, level_num_samples + 1, 1, LOCATION_ALL);
                 m_sample_neighbor_size_prefix.back().reset(0, DEVICE);
 
                 if (m_pruned_ptap) {
                     m_sample_neighbor_size_disk.emplace_back(
-                        rx, level_num_samples + 1, 1);
+                        rx, level_num_samples + 1, 1, LOCATION_ALL);
                     m_sample_neighbor_size_disk.back().reset(0, DEVICE);
                     m_sample_neighbor_size_prefix_disk.emplace_back(
-                        rx, level_num_samples + 1, 1);
+                        rx, level_num_samples + 1, 1, LOCATION_ALL);
                     m_sample_neighbor_size_prefix_disk.back().reset(0, DEVICE);
                 }
 
-                m_distance_mat.emplace_back(rx, level_num_samples, 1);
+                m_distance_mat.emplace_back(
+                    rx, level_num_samples, 1, LOCATION_ALL);
                 m_distance_mat.back().reset(std::numeric_limits<float>::max(),
                                             LOCATION_ALL);
             }
             if (l < m_num_samples.size() - 1) {
-                m_vertex_cluster.emplace_back(rx, level_num_samples, 1);
+                m_vertex_cluster.emplace_back(
+                    rx, level_num_samples, 1, LOCATION_ALL);
                 m_vertex_cluster.back().reset(-1, LOCATION_ALL);
 
                 m_prolong_op.emplace_back(
@@ -956,7 +959,8 @@ struct GMG
             cudaMemcpyDeviceToHost));
 
 
-        m_sample_neighbor.emplace_back(DenseMatrix<int>(rx, s, 1));
+        m_sample_neighbor.emplace_back(
+            DenseMatrix<int>(rx, s, 1, LOCATION_ALL));
         auto& sample_neighbor = m_sample_neighbor[level - 1];
 
         sample_neighbor_size.reset(0, DEVICE);
@@ -976,7 +980,7 @@ struct GMG
                 cudaMemcpyDeviceToHost));
 
             m_sample_neighbor_disk.emplace_back(
-                DenseMatrix<int>(rx, s_disk, 1));
+                DenseMatrix<int>(rx, s_disk, 1, LOCATION_ALL));
             
 
             sample_neighbor_size_disk.reset(0, DEVICE);

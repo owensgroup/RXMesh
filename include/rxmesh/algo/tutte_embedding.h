@@ -245,8 +245,8 @@ inline void harmonic(RXMeshStatic&                     rx,
                      SparseMatrix<T>&                  L)
 {
     auto rhs = *uv.to_matrix();
-    auto sol =
-        DenseMatrix<T>(rx, rx.get_num_vertices(), uv.get_num_attributes());
+    auto sol = DenseMatrix<T>(
+        rx, rx.get_num_vertices(), uv.get_num_attributes(), LOCATION_ALL);
 
     sol.reset(T(0), DEVICE);
     L.reset(T(0), DEVICE);

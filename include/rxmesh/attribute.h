@@ -194,7 +194,8 @@ class Attribute : public AttributeBase
     std::shared_ptr<DenseMatrix<T, Order>> to_matrix() const
     {
         std::shared_ptr<DenseMatrix<T, Order>> mat =
-            std::make_shared<DenseMatrix<T>>(*m_rxmesh, rows(), cols());
+            std::make_shared<DenseMatrix<T>>(
+                *m_rxmesh, rows(), cols(), LOCATION_ALL);
 
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
             m_rxmesh->for_each_vertex(HOST, [&](const VertexHandle vh) {

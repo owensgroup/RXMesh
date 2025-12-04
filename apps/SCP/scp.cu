@@ -114,7 +114,7 @@ int main(int argc, char** argv)
 
     auto uv = *rx.add_vertex_attribute<float>("uv", 3);
 
-    DenseMatrix<cuComplex> uv_mat(rx, rx.get_num_vertices(), 1);
+    DenseMatrix<cuComplex> uv_mat(rx, rx.get_num_vertices(), 1, LOCATION_ALL);
 
 
     // calc number of boundary vertices
@@ -139,7 +139,7 @@ int main(int argc, char** argv)
         rx.get_context(), v_bd, Lc);
 
     // Compute B and eb matrix
-    DenseMatrix<cuComplex> eb(rx, rx.get_num_vertices(), 1);
+    DenseMatrix<cuComplex> eb(rx, rx.get_num_vertices(), 1, LOCATION_ALL);
     eb.reset(make_cuComplex(0.f, 0.f), LOCATION_ALL);
 
     SparseMatrix<cuComplex> B(rx);
@@ -154,7 +154,7 @@ int main(int argc, char** argv)
         });
 
     // temp mat needed for the power method
-    DenseMatrix<cuComplex> T1(rx, rx.get_num_vertices(), 1);
+    DenseMatrix<cuComplex> T1(rx, rx.get_num_vertices(), 1, LOCATION_ALL);
     T1.reset(make_cuComplex(0.f, 0.f), LOCATION_ALL);
 
 

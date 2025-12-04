@@ -71,7 +71,8 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario)
     auto& x_tilde = *problem.objective;
     x_tilde.copy_from(x, DEVICE, DEVICE);
 
-    typename ProblemT::DenseMatT alpha(rx, rx.get_num_vertices(), DEVICE);
+    typename ProblemT::DenseMatT alpha(
+        rx, rx.get_num_vertices(), DEVICE, LOCATION_ALL);
 
     // set boundary conditions and scenario specific energies
     switch (scenario) {

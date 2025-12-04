@@ -16,7 +16,7 @@ struct JacobiSolver
     }
 
     __host__ JacobiSolver(int num_rows, int num_cols)
-        : m_x_new(num_rows, num_cols)
+        : m_x_new(num_rows, num_cols, LOCATION_ALL)
     {
     }
 
@@ -30,7 +30,7 @@ struct JacobiSolver
         uint32_t           blocks       = DIVIDE_UP(A.rows(), blockThreads);
 
         if (m_x_new.rows() != A.rows() || m_x_new.cols() != x.cols()) {
-            m_x_new = DenseMatrix<T>(A.rows(), x.cols());
+            m_x_new = DenseMatrix<T>(A.rows(), x.cols(), LOCATION_ALL);
         }
 
         for (int iter = 0; iter < num_iter; ++iter) {

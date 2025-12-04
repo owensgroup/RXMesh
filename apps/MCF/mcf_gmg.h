@@ -22,7 +22,7 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx,
     //rx.export_obj("mcf_initial.obj", *rx.get_input_vertex_coordinates());
 
     SparseMatrix<float> A_mat(rx);
-    DenseMatrix<float>  B_mat(rx, num_vertices, 3);
+    DenseMatrix<float>  B_mat(rx, num_vertices, 3, LOCATION_ALL);
 
     DenseMatrix<float> X_mat = *(coords->to_matrix());
 
