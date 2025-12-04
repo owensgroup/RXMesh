@@ -442,7 +442,7 @@ int main(int argc, char** argv)
         if (ImGui::Button("Pause")) {
             started = false;
         }
-        button = ImGui::Button("Start Simulation") 
+        button = ImGui::Button("Start Simulation");
 #endif
         if (button || started) {
             started = true;
@@ -588,7 +588,7 @@ int main(int argc, char** argv)
 #if !USE_POLYSCOPE
     started = true;
     while (true) {
-         polyscope_callback();
+        polyscope_callback();
     }
 #endif
 
