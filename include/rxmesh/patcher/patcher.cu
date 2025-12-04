@@ -557,6 +557,8 @@ void Patcher::get_multi_components(
             current_component.reserve(
                 static_cast<uint32_t>(static_cast<double>(m_num_faces) / 10.0));
 
+            current_component.push_back(f);
+
             std::queue<uint32_t> face_queue;
             face_queue.push(f);
             while (!face_queue.empty()) {
@@ -1007,7 +1009,7 @@ void Patcher::run_lloyd(uint32_t* d_face_patch,
                                                             d_ff_values,
                                                             d_queue);
 
-        if (max_patch_size < m_patch_size) {
+        if (max_patch_size <= m_patch_size) {
             shift<<<blocks_f, threads_f>>>(
                 m_num_faces, d_face_patch, d_patches_val);
 

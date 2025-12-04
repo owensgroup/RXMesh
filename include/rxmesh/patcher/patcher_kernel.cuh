@@ -267,20 +267,31 @@ __global__ static void add_more_seeds(const uint32_t  num_patches,
         const uint32_t p_end  = d_patches_offset[patch_id];
         const uint32_t p_size = p_end - p_start;
 
-        if (p_size > threshold) {
+
+        if (p_size >= threshold) {
 
             if (threadIdx.x == 0) {
                 // look for a boundary face
                 // printf("\n patch_id = %u, p_size = %u", patch_id, p_size);
 
+                bool added = false;
+
                 for (uint32_t f = p_start; f < p_end; ++f) {
                     uint32_t face = d_patches_val[f];
                     if (face & 1) {
+                        added = true;
                         uint32_t new_patch_id =
                             ::atomicAdd(d_new_num_patches, 1u);
                         d_seeds[new_patch_id] = face >> 1;
                         break;
                     }
+                }
+
+                if (!added) {
+                    // if we can not find a boundary edge (it is a single patch
+                    // or isolated), then add the first face
+                    uint32_t new_patch_id = ::atomicAdd(d_new_num_patches, 1u);
+                    d_seeds[new_patch_id] = d_patches_val[p_start] >> 1;
                 }
             }
         }

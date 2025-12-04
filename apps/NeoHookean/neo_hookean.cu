@@ -350,7 +350,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
             }
         }
 
-        RXMESH_INFO("\n===================\n");
+        RXMESH_INFO("===================");
 
         //  update velocity
         rx.for_each_vertex(
