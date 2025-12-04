@@ -129,7 +129,7 @@ struct VCycle
 
 
         for (int l = 1; l < gmg.m_num_levels; ++l) {
-            m_rhs.emplace_back(rx, gmg.m_num_samples[l], num_cols);
+            m_rhs.emplace_back(rx, gmg.m_num_samples[l], num_cols, LOCATION_ALL);
 
             m_x.emplace_back(rx, gmg.m_num_samples[l], num_cols, LOCATION_ALL);
 

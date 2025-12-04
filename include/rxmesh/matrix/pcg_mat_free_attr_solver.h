@@ -124,7 +124,7 @@ struct PCGMatFreeAttrSolver : public CGMatFreeAttrSolver<T, HandleT>
             "iterations. Residual "
             "= {}",
             this->m_iter_taken,
-            delta_new);
+            this->delta_new);
         this->m_final_residual = this->delta_new;
     }
 
