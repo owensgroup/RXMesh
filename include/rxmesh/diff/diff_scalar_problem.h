@@ -54,7 +54,10 @@ struct DiffScalarProblem
                       bool          assmble_hessian,
                       int           expected_vv_candidate_pairs = 0)
         : rx(rx),
-          grad(DenseMatT(rx, rx.get_num_elements<ObjHandleT>(), VariableDim)),
+          grad(DenseMatT(rx,
+                         rx.get_num_elements<ObjHandleT>(),
+                         VariableDim,
+                         LOCATION_ALL)),
           objective(rx.add_vertex_attribute<T>("objective", VariableDim))
     {
         grad.reset(0, LOCATION_ALL);

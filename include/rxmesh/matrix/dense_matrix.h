@@ -61,10 +61,10 @@ struct DenseMatrix
      * of vertices, edges, or faces. With constructor, the user can access
      * the matrix using mesh handles
      */
-    DenseMatrix(const RXMesh& rx,
-                IndexT        num_rows,
-                IndexT        num_cols,
-                locationT     location = LOCATION_ALL)
+    explicit DenseMatrix(const RXMesh& rx,
+                         IndexT        num_rows,
+                         IndexT        num_cols,
+                         locationT     location)
         : m_context(rx.get_context()),
           m_num_rows(num_rows),
           m_num_cols(num_cols),
@@ -84,9 +84,7 @@ struct DenseMatrix
      * So the size (num_rows) can be anything. However, using this constructor
      * means that you can not access the matrix using handles
      */
-    DenseMatrix(IndexT    num_rows,
-                IndexT    num_cols,
-                locationT location = LOCATION_ALL)
+    explicit DenseMatrix(IndexT num_rows, IndexT num_cols, locationT location)
         : m_num_rows(num_rows),
           m_num_cols(num_cols),
           m_dendescr(NULL),

@@ -45,7 +45,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     const T        stiffness_coef = 4e4;
     const T        tol            = 0.01;
     const T        inv_time_step  = T(1) / time_step;
-    DenseMatrix<T> dbc_stiff(1, 1);
+    DenseMatrix<T> dbc_stiff(1, 1, LOCATION_ALL);
     dbc_stiff(0) = 1000;
     dbc_stiff.move(HOST, DEVICE);
     const T dhat  = 0.01;
@@ -169,10 +169,10 @@ void neo_hookean(RXMeshStatic& rx, T dx)
         problem, contact_area, time_step, ground_n, ground_o, dhat, kappa);
 
     DenseMatrix<T, Eigen::RowMajor> dir(
-        rx, problem.grad.rows(), problem.grad.cols());
+        rx, problem.grad.rows(), problem.grad.cols(), LOCATION_ALL);
 
     DenseMatrix<T, Eigen::RowMajor> grad(
-        rx, problem.grad.rows(), problem.grad.cols());
+        rx, problem.grad.rows(), problem.grad.cols(), LOCATION_ALL);
 
     T line_search_init_step = 0;
 

@@ -33,7 +33,7 @@ struct NetwtonSolver
      */
     NetwtonSolver(DiffProblemT& p, SolverT* s)
         : problem(p),
-          dir(DenseMatT(p.rx, p.grad.rows(), p.grad.cols())),
+          dir(DenseMatT(p.rx, p.grad.rows(), p.grad.cols(), LOCATION_ALL)),
           temp_objective(
               p.rx.add_attribute_like("temp_objective", *p.objective)),
           solver(s),
