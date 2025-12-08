@@ -666,6 +666,12 @@ void RXMesh::build_single_patch_ltog(
         add_new_face(face_id, local_face_id++);
     }
 
+    // The previous loop over faces should already insert all owned edges and
+    // vertices into `ltog`. However, we still iterate over owned edges and
+    // owned vertices as a safeguard, in case the patcher behavior changes
+    // in the future. At the moment, the patcher marks an edge as owned by
+    // patch P only if at least one of its incident faces is owned by P. Same
+    // thing for vertices
 
     // add edges owned by this patch
     for (uint32_t e = 0; e < m_num_edges; ++e) {
