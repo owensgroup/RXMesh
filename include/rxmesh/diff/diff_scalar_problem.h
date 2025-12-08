@@ -223,11 +223,7 @@ struct DiffScalarProblem
         }
 
         for (size_t i = 0; i < terms.size(); ++i) {
-            terms[i]->eval_active(*objective, stream);
-            {
-                CUDA_ERROR(cudaGetLastError());
-                CUDA_ERROR(cudaDeviceSynchronize());
-            }
+            terms[i]->eval_active(*objective, stream);            
         }
     }
 
