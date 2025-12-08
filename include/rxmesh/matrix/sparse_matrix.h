@@ -5,6 +5,7 @@
 
 #include "rxmesh/rxmesh_static.h"
 
+#include "rxmesh/matrix/block_dim.h"
 #include "rxmesh/matrix/dense_matrix.h"
 #include "rxmesh/matrix/sparse_matrix_kernels.cuh"
 
@@ -46,7 +47,7 @@ struct SparseMatrix
           m_nnz(0),
           m_context(Context()),
           m_cusparse_handle(NULL),
-          m_replicate(0),
+          m_block_dim(detail::BlockDim(1, 1)),
           m_spdescr(NULL),
           m_spmm_buffer_size(0),
           m_spmv_buffer_size(0),
@@ -64,7 +65,7 @@ struct SparseMatrix
      * @brief Constructor using specific mesh query
      */
     SparseMatrix(const RXMeshStatic& rx, Op op = Op::VV)
-        : SparseMatrix(rx, 1.f, 0, op, 1) {};
+        : SparseMatrix(rx, 1.f, 0, op, detail::BlockDim(1, 1), true) {};
 
 
     /**
@@ -91,7 +92,7 @@ struct SparseMatrix
                  T*      h_val)
         : SparseMatrix()
     {
-        m_replicate = 1;
+        m_block_dim = detail::BlockDim(1, 1);
 
         m_is_user_managed = true;
 
@@ -123,7 +124,8 @@ struct SparseMatrix
                  const float         capacity_factor,
                  const int           extra_nnz_entries,
                  Op                  op,
-                 IndexT              replicate)
+                 detail::BlockDim    block_dim,
+                 bool                add_diagonal)
         : m_d_row_ptr(nullptr),
           m_d_col_idx(nullptr),
           m_d_val(nullptr),
@@ -136,7 +138,7 @@ struct SparseMatrix
           m_nnz(0),
           m_context(rx.get_context()),
           m_cusparse_handle(NULL),
-          m_replicate(replicate),
+          m_block_dim(block_dim),
           m_spdescr(NULL),
           m_spmm_buffer_size(0),
           m_spmv_buffer_size(0),
@@ -150,6 +152,13 @@ struct SparseMatrix
           m_capacity_factor(capacity_factor),
           m_extra_nnz_entires(extra_nnz_entries)
     {
+
+        if (add_diagonal && (block_dim.x != block_dim.y)) {
+            RXMESH_ERROR(
+                "SparseMatrix::SparseMatrix() adding diagonal blocks for "
+                "non-symmetric blocks has not been tested before!");
+        }
+
         constexpr uint32_t blockThreads = 256;
 
         // num rows
@@ -181,8 +190,8 @@ struct SparseMatrix
         }
 
 
-        m_num_rows *= m_replicate;
-        m_num_cols *= m_replicate;
+        m_num_rows *= m_block_dim.x;
+        m_num_cols *= m_block_dim.y;
 
         // row pointer allocation and init with prefix sum for CSR
         CUDA_ERROR(cudaMalloc((void**)&m_d_row_ptr,
@@ -198,49 +207,57 @@ struct SparseMatrix
                 {m_op},
                 detail::sparse_mat_prescan<Op::VV, blockThreads>,
                 m_d_row_ptr,
-                m_replicate);
+                m_block_dim,
+                add_diagonal);
         } else if (m_op == Op::VE) {
             rx.run_kernel<blockThreads>(
                 {m_op},
                 detail::sparse_mat_prescan<Op::VE, blockThreads>,
                 m_d_row_ptr,
-                m_replicate);
+                m_block_dim,
+                add_diagonal);
         } else if (m_op == Op::VF) {
             rx.run_kernel<blockThreads>(
                 {m_op},
                 detail::sparse_mat_prescan<Op::VF, blockThreads>,
                 m_d_row_ptr,
-                m_replicate);
+                m_block_dim,
+                add_diagonal);
         } else if (m_op == Op::EV) {
             rx.run_kernel<blockThreads>(
                 {m_op},
                 detail::sparse_mat_prescan<Op::EV, blockThreads>,
                 m_d_row_ptr,
-                m_replicate);
+                m_block_dim,
+                add_diagonal);
         } else if (m_op == Op::EF) {
             rx.run_kernel<blockThreads>(
                 {m_op},
                 detail::sparse_mat_prescan<Op::EF, blockThreads>,
                 m_d_row_ptr,
-                m_replicate);
+                m_block_dim,
+                add_diagonal);
         } else if (m_op == Op::FV) {
             rx.run_kernel<blockThreads>(
                 {m_op},
                 detail::sparse_mat_prescan<Op::FV, blockThreads>,
                 m_d_row_ptr,
-                m_replicate);
+                m_block_dim,
+                add_diagonal);
         } else if (m_op == Op::FE) {
             rx.run_kernel<blockThreads>(
                 {m_op},
                 detail::sparse_mat_prescan<Op::FE, blockThreads>,
                 m_d_row_ptr,
-                m_replicate);
+                m_block_dim,
+                add_diagonal);
         } else if (m_op == Op::FF) {
             rx.run_kernel<blockThreads>(
                 {m_op},
                 detail::sparse_mat_prescan<Op::FF, blockThreads>,
                 m_d_row_ptr,
-                m_replicate);
+                m_block_dim,
+                add_diagonal);
         } else {
             RXMESH_ERROR(
                 "SparseMatrix Unsupported query operation for constructing "
@@ -285,62 +302,64 @@ struct SparseMatrix
                 detail::sparse_mat_col_fill<Op::VV, blockThreads>,
                 m_d_row_ptr,
                 m_d_col_idx,
-                m_replicate);
-
+                m_block_dim,
+                add_diagonal);
         } else if (m_op == Op::VE) {
             rx.run_kernel<blockThreads>(
                 {m_op},
                 detail::sparse_mat_col_fill<Op::VE, blockThreads>,
                 m_d_row_ptr,
                 m_d_col_idx,
-                m_replicate);
-
+                m_block_dim,
+                add_diagonal);
         } else if (m_op == Op::VF) {
             rx.run_kernel<blockThreads>(
                 {m_op},
                 detail::sparse_mat_col_fill<Op::VF, blockThreads>,
                 m_d_row_ptr,
                 m_d_col_idx,
-                m_replicate);
-
+                m_block_dim,
+                add_diagonal);
         } else if (m_op == Op::EV) {
             rx.run_kernel<blockThreads>(
                 {m_op},
                 detail::sparse_mat_col_fill<Op::EV, blockThreads>,
                 m_d_row_ptr,
                 m_d_col_idx,
-                m_replicate);
-
+                m_block_dim,
+                add_diagonal);
         } else if (m_op == Op::EF) {
             rx.run_kernel<blockThreads>(
                 {m_op},
                 detail::sparse_mat_col_fill<Op::EF, blockThreads>,
                 m_d_row_ptr,
                 m_d_col_idx,
-                m_replicate);
-
+                m_block_dim,
+                add_diagonal);
         } else if (m_op == Op::FV) {
             rx.run_kernel<blockThreads>(
                 {m_op},
                 detail::sparse_mat_col_fill<Op::FV, blockThreads>,
                 m_d_row_ptr,
                 m_d_col_idx,
-                m_replicate);
-
+                m_block_dim,
+                add_diagonal);
         } else if (m_op == Op::FE) {
             rx.run_kernel<blockThreads>(
                 {m_op},
                 detail::sparse_mat_col_fill<Op::FE, blockThreads>,
                 m_d_row_ptr,
                 m_d_col_idx,
-                m_replicate);
+                m_block_dim,
+                add_diagonal);
         } else if (m_op == Op::FF) {
             rx.run_kernel<blockThreads>(
                 {m_op},
                 detail::sparse_mat_col_fill<Op::FF, blockThreads>,
                 m_d_row_ptr,
                 m_d_col_idx,
-                m_replicate);
+                m_block_dim,
+                add_diagonal);
 
         } else {
             RXMESH_ERROR(
@@ -916,179 +935,6 @@ struct SparseMatrix
         return true;
     }
 
-    /*__host__ void insert(RXMeshStatic&    rx,
-                         SparseMatrix<T>& in_mat,
-                         const IndexT     size,
-                         const IndexT*    d_new_rows,
-                         const IndexT*    d_new_cols)
-    {
-        if (size == 0) {
-            return;
-        }
-
-        if (in_mat.rows() != rows() || in_mat.cols() != cols()) {
-            RXMESH_ERROR(
-                "SparseMatrix::insert() insertion only works for matrices of "
-                "the same size. This matrix size: ({}x{}), in_mat size: "
-                "({}x{})",
-                rows(),
-                cols(),
-                in_mat.rows(),
-                in_mat.cols());
-        }
-
-        IndexT* in_d_row_ptr = in_mat.m_d_row_ptr;
-        IndexT* in_d_col_idx = in_mat.m_d_col_idx;
-
-        constexpr uint32_t blockThreads = 256;
-
-        uint32_t blocks = DIVIDE_UP(rows(), blockThreads);
-
-        // read in_mat row sum
-        for_each_item<<<DIVIDE_UP(rows(), blockThreads), blockThreads>>>(
-            rows(),
-            [in_d_row_ptr = in_d_row_ptr,
-             m_d_row_ptr  = m_d_row_ptr] __device__(int i) mutable {
-                m_d_row_ptr[i] = in_d_row_ptr[i + 1] - in_d_row_ptr[i];
-            });
-
-        // add contribution of the new entries in the row sum
-        for_each_item<<<DIVIDE_UP(size, blockThreads), blockThreads>>>(
-            size,
-            [m_d_row_ptr = m_d_row_ptr,
-             m_replicate = m_replicate,
-             d_new_rows  = d_new_rows] __device__(int i) mutable {
-                const int row = d_new_rows[i] * m_replicate;
-
-                for (IndexT j = 0; j < m_replicate; ++j) {
-                    ::atomicAdd(m_d_row_ptr + (row + j), m_replicate);
-                }
-            });
-
-        // prefix sum using CUB.
-        CUDA_ERROR(
-            cudaMemset(m_d_cub_temp_storage, 0, m_cub_temp_storage_bytes));
-        CUDA_ERROR(cudaMemset(m_d_row_ptr + m_num_rows, 0, sizeof(IndexT)));
-        cub::DeviceScan::ExclusiveSum(m_d_cub_temp_storage,
-                                      m_cub_temp_storage_bytes,
-                                      m_d_row_ptr,
-                                      m_d_row_ptr,
-                                      m_num_rows + 1);
-
-        // get nnz
-        CUDA_ERROR(cudaMemcpy(&m_nnz,
-                              (m_d_row_ptr + m_num_rows),
-                              sizeof(IndexT),
-                              cudaMemcpyDeviceToHost));
-
-        if (m_nnz > m_max_nnz) {
-            // free memory
-            RXMESH_TRACE("SparseMatrxi::insert() allocating more memory!");
-            GPU_FREE(m_d_col_idx);
-            GPU_FREE(m_d_val);
-            free(m_h_val);
-            free(m_h_col_idx);
-
-            // update max size as a function of current nnz
-            update_max_nnz();
-
-            // if respecting the user capacity factor is not enough
-            // i.e., capacity factor is 1
-            while (m_nnz > m_max_nnz) {
-                m_capacity_factor *= 2.f;
-                update_max_nnz();
-            }
-
-            // allocate col idx and values
-            CUDA_ERROR(cudaMalloc((void**)&m_d_val, m_max_nnz * sizeof(T)));
-            CUDA_ERROR(
-                cudaMalloc((void**)&m_d_col_idx, m_max_nnz * sizeof(IndexT)));
-
-            m_h_val = static_cast<T*>(malloc(m_max_nnz * sizeof(T)));
-            m_h_col_idx =
-                static_cast<IndexT*>(malloc(m_max_nnz * sizeof(IndexT)));
-        }
-
-        // reset row accumulator so that we can keep track of the col_idx
-        // of the new items
-        CUDA_ERROR(cudaMemset(m_d_row_acc, 0, m_num_rows * sizeof(IndexT)));
-
-        // fill in the col_idx with the col_idx data from in_mat
-        for_each_item<<<DIVIDE_UP(rows(), blockThreads), blockThreads>>>(
-            rows(),
-            [in_d_row_ptr = in_d_row_ptr,
-             in_d_col_idx = in_d_col_idx,
-             m_d_row_ptr  = m_d_row_ptr,
-             m_d_col_idx  = m_d_col_idx,
-             m_d_row_acc  = m_d_row_acc] __device__(int r) mutable {
-                // fill in the first stop=start chunk of this row's col_idx
-                const IndexT start = in_d_row_ptr[r];
-
-                const IndexT stop = in_d_row_ptr[r + 1];
-
-                const IndexT new_start = m_d_row_ptr[r];
-
-                IndexT i = 0;
-
-                for (IndexT j = start; j < stop; ++j) {
-                    IndexT col = in_d_col_idx[j];
-
-                    m_d_col_idx[new_start + i] = col;
-                    ++i;
-                }
-
-                assert(stop >= start);
-
-                m_d_row_acc[r] = stop - start;
-
-            });
-
-
-        // fill in the col_idx with the new entries information
-        for_each_item<<<DIVIDE_UP(size, blockThreads), blockThreads>>>(
-            size,
-            [d_new_rows  = d_new_rows,
-             d_new_cols  = d_new_cols,
-             m_d_row_acc = m_d_row_acc,
-             m_d_row_ptr = m_d_row_ptr,
-             m_d_col_idx = m_d_col_idx,
-             m_replicate = m_replicate] __device__(const int item) {
-                // each 'new' item is the (i,j) of an entry without replication
-                // so, when we add it, we have to replicate it m_replicate
-                // along the rows and the col, i.e., we are inserting a block
-                // of size m_replicatexm_replicate.
-                // However, other threads might be adding an item with similar
-                // row index and so there might be a race condition here. Thus,
-                // we use the m_d_row_acc
-
-                const IndexT r = d_new_rows[item] * m_replicate;
-                const IndexT c = d_new_cols[item] * m_replicate;
-
-                for (int i = 0; i < m_replicate; ++i) {
-                    const IndexT rr = r + i;
-
-                    IndexT row_st = ::atomicAdd(m_d_row_acc + rr, m_replicate);
-                    row_st += m_d_row_ptr[rr];
-
-                    assert(row_st + m_replicate <= m_d_row_ptr[rr + 1]);
-
-                    for (int j = 0; j < m_replicate; ++j) {
-                        m_d_col_idx[row_st + j] = c + j;
-                    }
-                }
-            });
-
-        // finally update the host (could be optional)
-        CUDA_ERROR(cudaMemcpy(m_h_col_idx,
-                              m_d_col_idx,
-                              m_nnz * sizeof(IndexT),
-                              cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaMemcpy(m_h_row_ptr,
-                              m_d_row_ptr,
-                              (m_num_rows + 1) * sizeof(IndexT),
-                              cudaMemcpyDeviceToHost));
-    }*/
-
 
     /**
      * @brief swap this matrix with another on
@@ -1100,7 +946,7 @@ struct SparseMatrix
         std::swap(m_spdescr, in.m_spdescr);
         std::swap(m_d_cub_temp_storage, in.m_d_cub_temp_storage);
         std::swap(m_cub_temp_storage_bytes, in.m_cub_temp_storage_bytes);
-        std::swap(m_replicate, in.m_replicate);
+        std::swap(m_block_dim, in.m_block_dim);
         std::swap(m_num_rows, in.m_num_rows);
         std::swap(m_num_cols, in.m_num_cols);
         std::swap(m_nnz, in.m_nnz);
@@ -1148,7 +994,8 @@ struct SparseMatrix
         ret.m_num_cols        = m_num_rows;
         ret.m_nnz             = m_nnz;
         ret.m_context         = m_context;
-        ret.m_replicate       = m_replicate;
+        ret.m_block_dim.x     = m_block_dim.y;
+        ret.m_block_dim.y     = m_block_dim.x;
         ret.m_allocated       = m_allocated;
         ret.m_is_user_managed = false;
         ret.m_op              = transpose_op(m_op);
@@ -1720,7 +1567,7 @@ struct SparseMatrix
     void*  m_d_cub_temp_storage;
     size_t m_cub_temp_storage_bytes;
 
-    int m_replicate;
+    detail::BlockDim m_block_dim;
 
     IndexT m_num_rows;
     IndexT m_num_cols;
