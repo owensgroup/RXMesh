@@ -574,6 +574,8 @@ class RXMesh
 
     void populate_patch_stash();
 
+    void create_handles();
+
     uint32_t get_edge_id(const std::pair<uint32_t, uint32_t>& edge) const;
 
     friend class ::RXMeshTest;
@@ -627,6 +629,11 @@ class RXMesh
     uint32_t* m_h_face_prefix;
 
     uint32_t *m_d_vertex_prefix, *m_d_edge_prefix, *m_d_face_prefix;
+
+    //Store the mapping from linear_id to Vertex/Edge/FaceHandle
+    VertexHandle *m_d_v_handles, *m_h_v_handles;
+    EdgeHandle *  m_d_e_handles, *m_h_e_handles;
+    FaceHandle *  m_d_f_handles, *m_h_f_handles;
 
     PatchInfo *m_d_patches_info, *m_h_patches_info;
 

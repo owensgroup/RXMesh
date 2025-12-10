@@ -48,7 +48,14 @@ RXMesh::RXMesh(uint32_t patch_size)
       m_lp_hashtable_load_factor(0.f),
       m_patch_alloc_factor(0.f),
       m_topo_memory_mega_bytes(0.0),
-      m_num_colors(0)
+      m_num_colors(0),
+      m_h_v_handles(nullptr),
+      m_h_e_handles(nullptr),
+      m_h_f_handles(nullptr),
+      m_d_v_handles(nullptr),
+      m_d_e_handles(nullptr),
+      m_d_f_handles(nullptr)
+
 {
 }
 
@@ -136,6 +143,12 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
     m_timers.stop("allocate_extra_patches");
 
     // 7)
+    m_timers.add("create_handles");
+    m_timers.start("create_handles");
+    create_handles();
+    m_timers.stop("create_handles");
+
+    // 8)
     m_timers.add("context.init");
     m_timers.start("context.init");
     // Allocate and copy the context to the gpu
@@ -154,6 +167,9 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                           m_h_vertex_prefix,
                           m_h_edge_prefix,
                           m_h_face_prefix,
+                          m_d_v_handles,
+                          m_d_e_handles,
+                          m_d_f_handles,
                           m_d_patches_info,
                           sch);
     m_timers.stop("context.init");
@@ -202,7 +218,9 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                 m_timers.elapsed_millis("PatchScheduler"));
     RXMESH_INFO("6) allocate_extra_patches time = {} (ms)",
                 m_timers.elapsed_millis("allocate_extra_patches"));
-    RXMESH_INFO("7) context.init time = {} (ms)",
+    RXMESH_INFO("7) create_handles time = {} (ms)",
+                m_timers.elapsed_millis("create_handles"));
+    RXMESH_INFO("8) context.init time = {} (ms)",
                 m_timers.elapsed_millis("context.init"));
 
     RXMESH_INFO("cudaMemcpy time = {} (ms)",
@@ -269,6 +287,14 @@ RXMesh::~RXMesh()
     free(m_h_vertex_prefix);
     free(m_h_edge_prefix);
     free(m_h_face_prefix);
+
+    free(m_h_v_handles);
+    free(m_h_e_handles);
+    free(m_h_f_handles);
+
+    GPU_FREE(m_d_v_handles);
+    GPU_FREE(m_d_e_handles);
+    GPU_FREE(m_d_f_handles);
 }
 
 void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
@@ -380,6 +406,7 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
         m_h_face_prefix[p + 1]   = m_h_face_prefix[p] + m_h_num_owned_f[p];
     }
 
+
     // the hash table capacity should be at least 2* the size of the stash
     m_max_capacity_lp_v = 2 * LPHashTable::stash_size;
     m_max_capacity_lp_e = 2 * LPHashTable::stash_size;
@@ -436,6 +463,74 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
     calc_input_statistics(fv, ef);
 }
 
+void RXMesh::create_handles()
+{
+    // allocate host and device memory
+    m_h_v_handles =
+        (VertexHandle*)malloc(sizeof(VertexHandle) * m_num_vertices);
+    m_h_e_handles = (EdgeHandle*)malloc(sizeof(EdgeHandle) * m_num_edges);
+    m_h_f_handles = (FaceHandle*)malloc(sizeof(FaceHandle) * m_num_faces);
+
+    CUDA_ERROR(cudaMalloc((void**)&m_d_v_handles,
+                          sizeof(VertexHandle) * m_num_vertices));
+    CUDA_ERROR(
+        cudaMalloc((void**)&m_d_e_handles, sizeof(EdgeHandle) * m_num_edges));
+    CUDA_ERROR(
+        cudaMalloc((void**)&m_d_f_handles, sizeof(FaceHandle) * m_num_faces));
+
+    // populate m_h_v_handles, m_h_e_handles, m_h_f_handles
+
+    int v_id(0), e_id(0), f_id(0);
+    for (int p = 0; p < get_num_patches(); ++p) {
+        int num_vertices = *(m_h_patches_info[p].num_vertices);
+        int num_edges    = *(m_h_patches_info[p].num_edges);
+        int num_faces    = *(m_h_patches_info[p].num_faces);
+
+
+        for (int v = 0; v < num_vertices; ++v) {
+            LocalVertexT vl(v);
+            if (m_h_patches_info[p].is_owned(vl) &&
+                !m_h_patches_info[p].is_deleted(vl)) {
+                m_h_v_handles[v_id] = VertexHandle(p, vl);
+                ++v_id;
+            }
+        }
+
+        for (int e = 0; e < num_edges; ++e) {
+            LocalEdgeT el(e);
+            if (m_h_patches_info[p].is_owned(el) &&
+                !m_h_patches_info[p].is_deleted(el)) {
+                m_h_e_handles[e_id] = EdgeHandle(p, el);
+                ++e_id;
+            }
+        }
+
+        for (int f = 0; f < num_faces; ++f) {
+            LocalFaceT fl(f);
+            if (m_h_patches_info[p].is_owned(fl) &&
+                !m_h_patches_info[p].is_deleted(fl)) {
+                m_h_f_handles[f_id] = FaceHandle(p, fl);
+                ++f_id;
+            }
+        }
+    }
+
+    // move handles to device
+    CUDA_ERROR(cudaMemcpy(m_d_v_handles,
+                          m_h_v_handles,
+                          sizeof(VertexHandle) * m_num_vertices,
+                          cudaMemcpyHostToDevice));
+
+    CUDA_ERROR(cudaMemcpy(m_d_e_handles,
+                          m_h_e_handles,
+                          sizeof(EdgeHandle) * m_num_edges,
+                          cudaMemcpyHostToDevice));
+
+    CUDA_ERROR(cudaMemcpy(m_d_f_handles,
+                          m_h_f_handles,
+                          sizeof(FaceHandle) * m_num_faces,
+                          cudaMemcpyHostToDevice));
+}
 void RXMesh::build_supporting_structures(
     const std::vector<std::vector<uint32_t>>& fv,
     std::vector<std::vector<uint32_t>>&       ev,

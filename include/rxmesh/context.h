@@ -37,7 +37,11 @@ class Context
           m_h_face_prefix(nullptr),
           m_patches_info(nullptr),
           m_capacity_factor(0.0f),
-          m_max_num_patches(0)
+          m_max_num_patches(0),
+          m_d_v_handles(nullptr),
+          m_d_e_handles(nullptr),
+          m_d_f_handles(nullptr)
+
     {
     }
 
@@ -69,6 +73,56 @@ class Context
     {
         return m_num_vertices;
     }
+
+    /**
+     * @brief give a linear id, return the corresponding Vertex/Edge/FaceHandle
+     */
+    template <typename HandleT>
+    __device__ __inline__ HandleT get_handle(uint32_t i)
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return get_vertex_handle(i);
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return get_edge_handle(i);
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return get_face_handle(i);
+        }
+    }
+
+    /**
+     * @brief given a linear vertex index [0, num_vertices - 1], return the
+     * corresponding VertexHandle
+     */
+    __device__ __inline__ VertexHandle get_vertex_handle(uint32_t i)
+    {
+        assert(i < m_num_vertices[0]);
+        return m_d_v_handles[i];
+    }
+
+    /**
+     * @brief given a linear edge index [0, num_edges - 1], return the
+     * corresponding EdgeHandle
+     */
+    __device__ __inline__ EdgeHandle get_edge_handle(uint32_t i)
+    {
+        assert(i < m_num_edges[0]);
+        return m_d_e_handles[i];
+    }
+
+    /**
+     * @brief given a linear face index [0, num_faces - 1], return the
+     * corresponding FaceHandle
+     */
+    __device__ __inline__ FaceHandle get_face_handle(uint32_t i)
+    {
+        assert(i < m_num_faces[0]);
+        return m_d_f_handles[i];
+    }
+
 
     /**
      * @brief Total number of vertices in mesh
@@ -282,6 +336,9 @@ class Context
               uint32_t*      h_vertex_prefix,
               uint32_t*      h_edge_prefix,
               uint32_t*      h_face_prefix,
+              VertexHandle*  d_v_handles,
+              EdgeHandle*    d_e_handles,
+              FaceHandle*    d_f_handles,
               PatchInfo*     d_patches,
               PatchScheduler scheduler)
     {
@@ -331,6 +388,10 @@ class Context
         m_d_edge_prefix   = d_edge_prefix;
         m_d_face_prefix   = d_face_prefix;
 
+        m_d_v_handles = d_v_handles;
+        m_d_e_handles = d_e_handles;
+        m_d_f_handles = d_f_handles;
+
         m_patches_info = d_patches;
 
         m_patch_scheduler = scheduler;
@@ -351,5 +412,9 @@ class Context
     float          m_capacity_factor;
     uint32_t       m_max_num_patches;
     PatchScheduler m_patch_scheduler;
+
+    VertexHandle* m_d_v_handles;
+    EdgeHandle*   m_d_e_handles;
+    FaceHandle*   m_d_f_handles;
 };
 }  // namespace rxmesh
