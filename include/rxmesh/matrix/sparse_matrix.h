@@ -57,7 +57,9 @@ struct SparseMatrix
           m_is_user_managed(false),
           m_op(Op::INVALID),
           m_d_cub_temp_storage(nullptr),
-          m_cub_temp_storage_bytes(0)
+          m_cub_temp_storage_bytes(0),
+          m_capacity_factor(1.0f),
+          m_extra_nnz_entires(0)
     {
     }
 
@@ -159,39 +161,9 @@ struct SparseMatrix
                 "non-symmetric blocks has not been tested before!");
         }
 
-        constexpr uint32_t blockThreads = 256;
-
-        // num rows
-        if (m_op == Op::VV || m_op == Op::VE || m_op == Op::VF) {
-            m_num_rows = rx.get_num_vertices();
-        } else if (m_op == Op::EV || m_op == Op::EE || m_op == Op::EF) {
-            m_num_rows = rx.get_num_edges();
-        } else if (m_op == Op::FV || m_op == Op::FE || m_op == Op::FF) {
-            m_num_rows = rx.get_num_faces();
-        } else {
-            RXMESH_ERROR(
-                "SparseMatrix Unsupported query operation for constructing "
-                "the sparse matrix. Input operation is {}",
-                op_to_string(m_op));
-        }
-
-        // num cols
-        if (m_op == Op::VV || m_op == Op::EV || m_op == Op::FV) {
-            m_num_cols = rx.get_num_vertices();
-        } else if (m_op == Op::VE || m_op == Op::EE || m_op == Op::FE) {
-            m_num_cols = rx.get_num_edges();
-        } else if (m_op == Op::VF || m_op == Op::EF || m_op == Op::FF) {
-            m_num_cols = rx.get_num_faces();
-        } else {
-            RXMESH_ERROR(
-                "SparseMatrix Unsupported query operation for constructing "
-                "the sparse matrix. Input operation is {}",
-                op_to_string(m_op));
-        }
-
-
-        m_num_rows *= m_block_dim.x;
-        m_num_cols *= m_block_dim.y;
+        // get num rows and cols based on the input op
+        std::tie(m_num_rows, m_num_cols) =
+            get_num_rows_and_cols(rx, m_op, m_block_dim);
 
         // row pointer allocation and init with prefix sum for CSR
         CUDA_ERROR(cudaMalloc((void**)&m_d_row_ptr,
@@ -202,68 +174,8 @@ struct SparseMatrix
         CUDA_ERROR(
             cudaMemset(m_d_row_ptr, 0, (m_num_rows + 1) * sizeof(IndexT)));
 
-        if (m_op == Op::VV) {
-            rx.run_kernel<blockThreads>(
-                {m_op},
-                detail::sparse_mat_prescan<Op::VV, blockThreads>,
-                m_d_row_ptr,
-                m_block_dim,
-                add_diagonal);
-        } else if (m_op == Op::VE) {
-            rx.run_kernel<blockThreads>(
-                {m_op},
-                detail::sparse_mat_prescan<Op::VE, blockThreads>,
-                m_d_row_ptr,
-                m_block_dim,
-                add_diagonal);
-        } else if (m_op == Op::VF) {
-            rx.run_kernel<blockThreads>(
-                {m_op},
-                detail::sparse_mat_prescan<Op::VF, blockThreads>,
-                m_d_row_ptr,
-                m_block_dim,
-                add_diagonal);
-        } else if (m_op == Op::EV) {
-            rx.run_kernel<blockThreads>(
-                {m_op},
-                detail::sparse_mat_prescan<Op::EV, blockThreads>,
-                m_d_row_ptr,
-                m_block_dim,
-                add_diagonal);
-        } else if (m_op == Op::EF) {
-            rx.run_kernel<blockThreads>(
-                {m_op},
-                detail::sparse_mat_prescan<Op::EF, blockThreads>,
-                m_d_row_ptr,
-                m_block_dim,
-                add_diagonal);
-        } else if (m_op == Op::FV) {
-            rx.run_kernel<blockThreads>(
-                {m_op},
-                detail::sparse_mat_prescan<Op::FV, blockThreads>,
-                m_d_row_ptr,
-                m_block_dim,
-                add_diagonal);
-        } else if (m_op == Op::FE) {
-            rx.run_kernel<blockThreads>(
-                {m_op},
-                detail::sparse_mat_prescan<Op::FE, blockThreads>,
-                m_d_row_ptr,
-                m_block_dim,
-                add_diagonal);
-        } else if (m_op == Op::FF) {
-            rx.run_kernel<blockThreads>(
-                {m_op},
-                detail::sparse_mat_prescan<Op::FF, blockThreads>,
-                m_d_row_ptr,
-                m_block_dim,
-                add_diagonal);
-        } else {
-            RXMESH_ERROR(
-                "SparseMatrix Unsupported query operation for constructing "
-                "the sparse matrix. Input operation is {}",
-                op_to_string(m_op));
-        }
+        // count the nnz per row
+        mat_prescan(rx, m_op, m_d_row_ptr, m_block_dim, add_diagonal);
 
 
         // prefix sum using CUB.
@@ -296,77 +208,9 @@ struct SparseMatrix
         CUDA_ERROR(
             cudaMalloc((void**)&m_d_col_idx, m_max_nnz * sizeof(IndexT)));
 
-        if (m_op == Op::VV) {
-            rx.run_kernel<blockThreads>(
-                {m_op},
-                detail::sparse_mat_col_fill<Op::VV, blockThreads>,
-                m_d_row_ptr,
-                m_d_col_idx,
-                m_block_dim,
-                add_diagonal);
-        } else if (m_op == Op::VE) {
-            rx.run_kernel<blockThreads>(
-                {m_op},
-                detail::sparse_mat_col_fill<Op::VE, blockThreads>,
-                m_d_row_ptr,
-                m_d_col_idx,
-                m_block_dim,
-                add_diagonal);
-        } else if (m_op == Op::VF) {
-            rx.run_kernel<blockThreads>(
-                {m_op},
-                detail::sparse_mat_col_fill<Op::VF, blockThreads>,
-                m_d_row_ptr,
-                m_d_col_idx,
-                m_block_dim,
-                add_diagonal);
-        } else if (m_op == Op::EV) {
-            rx.run_kernel<blockThreads>(
-                {m_op},
-                detail::sparse_mat_col_fill<Op::EV, blockThreads>,
-                m_d_row_ptr,
-                m_d_col_idx,
-                m_block_dim,
-                add_diagonal);
-        } else if (m_op == Op::EF) {
-            rx.run_kernel<blockThreads>(
-                {m_op},
-                detail::sparse_mat_col_fill<Op::EF, blockThreads>,
-                m_d_row_ptr,
-                m_d_col_idx,
-                m_block_dim,
-                add_diagonal);
-        } else if (m_op == Op::FV) {
-            rx.run_kernel<blockThreads>(
-                {m_op},
-                detail::sparse_mat_col_fill<Op::FV, blockThreads>,
-                m_d_row_ptr,
-                m_d_col_idx,
-                m_block_dim,
-                add_diagonal);
-        } else if (m_op == Op::FE) {
-            rx.run_kernel<blockThreads>(
-                {m_op},
-                detail::sparse_mat_col_fill<Op::FE, blockThreads>,
-                m_d_row_ptr,
-                m_d_col_idx,
-                m_block_dim,
-                add_diagonal);
-        } else if (m_op == Op::FF) {
-            rx.run_kernel<blockThreads>(
-                {m_op},
-                detail::sparse_mat_col_fill<Op::FF, blockThreads>,
-                m_d_row_ptr,
-                m_d_col_idx,
-                m_block_dim,
-                add_diagonal);
-
-        } else {
-            RXMESH_ERROR(
-                "SparseMatrix Unsupported query operation for constructing "
-                "the sparse matrix. Input operation is {}",
-                op_to_string(m_op));
-        }
+        // fill in col_idx
+        mat_col_fill(
+            rx, op, m_d_row_ptr, m_d_col_idx, m_block_dim, add_diagonal);
 
 
         // allocate value ptr
@@ -375,24 +219,7 @@ struct SparseMatrix
         m_allocated = m_allocated | DEVICE;
 
 
-        // allocate the host
-        m_h_val = static_cast<T*>(malloc(m_max_nnz * sizeof(T)));
-        m_h_row_ptr =
-            static_cast<IndexT*>(malloc((m_num_rows + 1) * sizeof(IndexT)));
-        m_h_col_idx = static_cast<IndexT*>(malloc(m_max_nnz * sizeof(IndexT)));
-
-        CUDA_ERROR(cudaMemcpy(
-            m_h_val, m_d_val, m_nnz * sizeof(T), cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaMemcpy(m_h_col_idx,
-                              m_d_col_idx,
-                              m_nnz * sizeof(IndexT),
-                              cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaMemcpy(m_h_row_ptr,
-                              m_d_row_ptr,
-                              (m_num_rows + 1) * sizeof(IndexT),
-                              cudaMemcpyDeviceToHost));
-
-        m_allocated = m_allocated | HOST;
+        alloce_and_move_to_host();
 
 
         // create cusparse matrix
@@ -745,7 +572,7 @@ struct SparseMatrix
     /**
      * @brief release all allocated memory
      */
-    __host__ void release()
+    __host__ virtual void release()
     {
         release(LOCATION_ALL);
         CUSPARSE_ERROR(cusparseDestroy(m_cusparse_handle));
@@ -1557,6 +1384,284 @@ struct SparseMatrix
         }
 
 #endif
+    }
+
+    /**
+     * @brief call sparse_mat_prescan kernel
+     */
+    void mat_prescan(const RXMeshStatic& rx,
+                     Op                  op,
+                     IndexT*             d_row_ptr,
+                     detail::BlockDim    block_dim,
+                     bool                add_diagonal)
+    {
+        constexpr uint32_t blockThreads = 256;
+
+        if (op == Op::V) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_prescan<Op::V, blockThreads>,
+                d_row_ptr,
+                block_dim,
+                add_diagonal);
+        } else if (op == Op::VV) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_prescan<Op::VV, blockThreads>,
+                d_row_ptr,
+                block_dim,
+                add_diagonal);
+        } else if (op == Op::VE) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_prescan<Op::VE, blockThreads>,
+                d_row_ptr,
+                block_dim,
+                add_diagonal);
+        } else if (op == Op::VF) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_prescan<Op::VF, blockThreads>,
+                d_row_ptr,
+                m_block_dim,
+                add_diagonal);
+        } else if (op == Op::E) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_prescan<Op::E, blockThreads>,
+                d_row_ptr,
+                block_dim,
+                add_diagonal);
+        } else if (op == Op::EV) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_prescan<Op::EV, blockThreads>,
+                d_row_ptr,
+                block_dim,
+                add_diagonal);
+        } else if (op == Op::EF) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_prescan<Op::EF, blockThreads>,
+                d_row_ptr,
+                block_dim,
+                add_diagonal);
+        } else if (op == Op::F) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_prescan<Op::F, blockThreads>,
+                d_row_ptr,
+                block_dim,
+                add_diagonal);
+        } else if (op == Op::FV) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_prescan<Op::FV, blockThreads>,
+                d_row_ptr,
+                block_dim,
+                add_diagonal);
+        } else if (op == Op::FE) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_prescan<Op::FE, blockThreads>,
+                d_row_ptr,
+                block_dim,
+                add_diagonal);
+        } else if (op == Op::FF) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_prescan<Op::FF, blockThreads>,
+                d_row_ptr,
+                block_dim,
+                add_diagonal);
+        } else {
+            RXMESH_ERROR(
+                "SparseMatrix::prescan() Unsupported query operation for "
+                "constructing the sparse matrix. Input operation is {}",
+                op_to_string(op));
+        }
+    }
+
+    /**
+     * @brief call sparse_mat_col_fill
+     */
+    void mat_col_fill(const RXMeshStatic& rx,
+                      Op                  op,
+                      IndexT*             d_row_ptr,
+                      IndexT*             d_col_idx,
+                      detail::BlockDim    block_dim,
+                      bool                add_diagonal)
+    {
+        constexpr uint32_t blockThreads = 256;
+
+        if (op == Op::V) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_col_fill<Op::V, blockThreads>,
+                d_row_ptr,
+                d_col_idx,
+                block_dim,
+                add_diagonal);
+        } else if (op == Op::VV) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_col_fill<Op::VV, blockThreads>,
+                d_row_ptr,
+                d_col_idx,
+                block_dim,
+                add_diagonal);
+        } else if (op == Op::VE) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_col_fill<Op::VE, blockThreads>,
+                d_row_ptr,
+                d_col_idx,
+                block_dim,
+                add_diagonal);
+        } else if (op == Op::VF) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_col_fill<Op::VF, blockThreads>,
+                d_row_ptr,
+                d_col_idx,
+                block_dim,
+                add_diagonal);
+        } else if (op == Op::E) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_col_fill<Op::E, blockThreads>,
+                d_row_ptr,
+                d_col_idx,
+                block_dim,
+                add_diagonal);
+        } else if (op == Op::EV) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_col_fill<Op::EV, blockThreads>,
+                d_row_ptr,
+                d_col_idx,
+                block_dim,
+                add_diagonal);
+        } else if (op == Op::EF) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_col_fill<Op::EF, blockThreads>,
+                d_row_ptr,
+                d_col_idx,
+                block_dim,
+                add_diagonal);
+        } else if (op == Op::F) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_col_fill<Op::F, blockThreads>,
+                d_row_ptr,
+                d_col_idx,
+                block_dim,
+                add_diagonal);
+        } else if (op == Op::FV) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_col_fill<Op::FV, blockThreads>,
+                d_row_ptr,
+                d_col_idx,
+                block_dim,
+                add_diagonal);
+        } else if (op == Op::FE) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_col_fill<Op::FE, blockThreads>,
+                d_row_ptr,
+                d_col_idx,
+                block_dim,
+                add_diagonal);
+        } else if (op == Op::FF) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_col_fill<Op::FF, blockThreads>,
+                d_row_ptr,
+                d_col_idx,
+                block_dim,
+                add_diagonal);
+        } else {
+            RXMESH_ERROR(
+                "SparseMatrix::mat_col_fill() Unsupported query operation for "
+                "constructing the sparse matrix. Input operation is {}",
+                op_to_string(op));
+        }
+    }
+
+    /**
+     * @brief get the number of rows and cols based on an input Op
+     */
+    std::pair<uint32_t, uint32_t> get_num_rows_and_cols(
+        const RXMeshStatic& rx,
+        Op                  op,
+        detail::BlockDim    block_dim)
+    {
+        int num_rows(0), num_cols(0);
+
+        // num rows
+        if (op == Op::VV || op == Op::VE || op == Op::VF || op == Op::V) {
+            num_rows = rx.get_num_vertices();
+        } else if (op == Op::EV || op == Op::EE || op == Op::EF ||
+                   op == Op::E) {
+            num_rows = rx.get_num_edges();
+        } else if (op == Op::FV || op == Op::FE || op == Op::FF ||
+                   op == Op::F) {
+            num_rows = rx.get_num_faces();
+        } else {
+            RXMESH_ERROR(
+                "SparseMatrix::get_num_rows_and_cols() Unsupported query "
+                "operation for constructing the sparse matrix. Input operation "
+                "is {}",
+                op_to_string(op));
+        }
+
+        // num cols
+        if (op == Op::VV || op == Op::EV || op == Op::FV || op == Op::V) {
+            num_cols = rx.get_num_vertices();
+        } else if (op == Op::VE || op == Op::EE || op == Op::FE ||
+                   op == Op::E) {
+            num_cols = rx.get_num_edges();
+        } else if (op == Op::VF || op == Op::EF || op == Op::FF ||
+                   op == Op::F) {
+            num_cols = rx.get_num_faces();
+        } else {
+            RXMESH_ERROR(
+                "SparseMatrix::get_num_rows_and_cols() Unsupported query "
+                "operation for constructing the sparse matrix. Input operation "
+                "is {}",
+                op_to_string(op));
+        }
+
+        num_rows *= block_dim.x;
+        num_cols *= block_dim.y;
+
+        return {num_rows, num_cols};
+    }
+
+    /**
+     * @brief allocate host memory and move csr info to the host
+     */
+    void alloce_and_move_to_host()
+    {  // allocate the host
+        m_h_val = static_cast<T*>(malloc(m_max_nnz * sizeof(T)));
+        m_h_row_ptr =
+            static_cast<IndexT*>(malloc((m_num_rows + 1) * sizeof(IndexT)));
+        m_h_col_idx = static_cast<IndexT*>(malloc(m_max_nnz * sizeof(IndexT)));
+
+        CUDA_ERROR(cudaMemcpy(
+            m_h_val, m_d_val, m_nnz * sizeof(T), cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(m_h_col_idx,
+                              m_d_col_idx,
+                              m_nnz * sizeof(IndexT),
+                              cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(m_h_row_ptr,
+                              m_d_row_ptr,
+                              (m_num_rows + 1) * sizeof(IndexT),
+                              cudaMemcpyDeviceToHost));
+
+        m_allocated = m_allocated | HOST;
     }
 
    public:

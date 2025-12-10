@@ -34,6 +34,7 @@ set( SOURCE_LIST
 	test_hess.cu
 	test_tet.cu
 	test_indices.cu
+	test_jacobian.cu
 )
 
 target_sources( RXMesh_test 
