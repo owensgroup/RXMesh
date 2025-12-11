@@ -20,7 +20,7 @@ namespace rxmesh {
  * variables). This is used to store the all energies inside DiffScalarProblem
  */
 template <typename T, typename ObjHandleT>
-struct Term
+struct ScalarTerm
 {
     virtual void eval_active(Attribute<T, ObjHandleT>& obj,
                              cudaStream_t              stream) = 0;
@@ -55,7 +55,8 @@ template <typename LossHandleT,
           bool ProjectHess,
           int  VariableDim,
           typename LambdaT>
-struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
+struct TemplatedScalarTerm
+    : public ScalarTerm<typename ScalarT::PassiveType, ObjHandleT>
 {
     using T = typename ScalarT::PassiveType;
 
@@ -64,11 +65,11 @@ struct TemplatedTerm : public Term<typename ScalarT::PassiveType, ObjHandleT>
     using ScalarGradOnlyT = Scalar<T, ScalarT::k_, false>;
 
 
-    TemplatedTerm(RXMeshStatic&                        rx,
-                  LambdaT                              t,
-                  bool                                 oreinted,
-                  DenseMatrix<T, Eigen::RowMajor>*     grad,
-                  HessianSparseMatrix<T, VariableDim>* hess)
+    TemplatedScalarTerm(RXMeshStatic&                        rx,
+                        LambdaT                              t,
+                        bool                                 oreinted,
+                        DenseMatrix<T, Eigen::RowMajor>*     grad,
+                        HessianSparseMatrix<T, VariableDim>* hess)
         : term(t), rx(rx), grad(grad), hess(hess), oreinted(oreinted)
     {
         // To avoid the clash that happens from adding many losses.
@@ -296,8 +297,8 @@ template <typename LossHandleT,
           bool ProjectHess,
           int  VariableDim,
           typename LambdaT>
-struct TemplatedTermPairs
-    : public Term<typename ScalarT::PassiveType, ObjHandleT>
+struct TemplatedScalarTermPairs
+    : public ScalarTerm<typename ScalarT::PassiveType, ObjHandleT>
 {
     using T = typename ScalarT::PassiveType;
 
@@ -305,11 +306,12 @@ struct TemplatedTermPairs
     // This will be the same as ScalarT if ScalarT has WithHessian=false
     using ScalarGradOnlyT = Scalar<T, ScalarT::k_, false>;
 
-    TemplatedTermPairs(RXMeshStatic&                            rx,
-                       LambdaT                                  t,
-                       DenseMatrix<T, Eigen::RowMajor>*         grad,
-                       HessianSparseMatrix<T, VariableDim>*     hess,
-                       CandidatePairs<HandleT0, HandleT1, HessMatT>& pairs)
+    TemplatedScalarTermPairs(
+        RXMeshStatic&                                 rx,
+        LambdaT                                       t,
+        DenseMatrix<T, Eigen::RowMajor>*              grad,
+        HessianSparseMatrix<T, VariableDim>*          hess,
+        CandidatePairs<HandleT0, HandleT1, HessMatT>& pairs)
         : term(t), grad(grad), hess(hess), pairs(pairs)
     {
         // To avoid the clash that happens from adding many losses.
@@ -467,8 +469,8 @@ struct TemplatedTermPairs
     std::shared_ptr<Attribute<T, LossHandleT>>    loss;
     std::shared_ptr<ReduceHandle<T, LossHandleT>> reducer;
 
-    DenseMatrix<T, Eigen::RowMajor>*         grad;
-    HessianSparseMatrix<T, VariableDim>*     hess;
+    DenseMatrix<T, Eigen::RowMajor>*              grad;
+    HessianSparseMatrix<T, VariableDim>*          hess;
     CandidatePairs<HandleT0, HandleT1, HessMatT>& pairs;
 };
 }  // namespace rxmesh

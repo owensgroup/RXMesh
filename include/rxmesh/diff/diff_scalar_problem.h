@@ -5,7 +5,7 @@
 #include "rxmesh/diff/candidate_pairs.h"
 #include "rxmesh/diff/element_valence.h"
 #include "rxmesh/diff/hessian_sparse_matrix.h"
-#include "rxmesh/diff/term.h"
+#include "rxmesh/diff/scalar_term.h"
 #include "rxmesh/matrix/dense_matrix.h"
 #include "rxmesh/types.h"
 
@@ -34,12 +34,12 @@ struct DiffScalarProblem
     static constexpr bool WithHessian = WithHess;
 
 
-    RXMeshStatic&                                     rx;
-    DenseMatT                                         grad;
-    std::unique_ptr<HessMatT>                         hess;
-    std::unique_ptr<HessMatT>                         hess_new;
-    std::shared_ptr<Attribute<T, ObjHandleT>>         objective;
-    std::vector<std::shared_ptr<Term<T, ObjHandleT>>> terms;
+    RXMeshStatic&                                           rx;
+    DenseMatT                                               grad;
+    std::unique_ptr<HessMatT>                               hess;
+    std::unique_ptr<HessMatT>                               hess_new;
+    std::shared_ptr<Attribute<T, ObjHandleT>>               objective;
+    std::vector<std::shared_ptr<ScalarTerm<T, ObjHandleT>>> terms;
 
     // TODO we might need other types of candidate pairs
     CandidatePairsVV<HessMatT> vv_pairs;
@@ -58,7 +58,7 @@ struct DiffScalarProblem
                          rx.get_num_elements<ObjHandleT>(),
                          VariableDim,
                          LOCATION_ALL)),
-          objective(rx.add_vertex_attribute<T>("objective", VariableDim))
+          objective(rx.add_attribute<T, ObjHandleT>("objective", VariableDim))
     {
         grad.reset(0, LOCATION_ALL);
 
@@ -107,47 +107,47 @@ struct DiffScalarProblem
 
         if constexpr (op == Op::VV || op == Op::VE || op == Op::VF ||
                       op == Op::V) {
-            auto new_term = std::make_shared<TemplatedTerm<VertexHandle,
-                                                           ObjHandleT,
-                                                           blockThreads,
-                                                           op,
-                                                           ScalarT,
-                                                           ProjectHess,
-                                                           VariableDim,
-                                                           LambdaT>>(
+            auto new_term = std::make_shared<TemplatedScalarTerm<VertexHandle,
+                                                                 ObjHandleT,
+                                                                 blockThreads,
+                                                                 op,
+                                                                 ScalarT,
+                                                                 ProjectHess,
+                                                                 VariableDim,
+                                                                 LambdaT>>(
                 rx, t, oreinted, &grad, hess.get());
             terms.push_back(
-                std::dynamic_pointer_cast<Term<T, ObjHandleT>>(new_term));
+                std::dynamic_pointer_cast<ScalarTerm<T, ObjHandleT>>(new_term));
         }
 
         if constexpr (op == Op::EV || op == Op::EE || op == Op::EF ||
                       op == Op::E) {
-            auto new_term = std::make_shared<TemplatedTerm<EdgeHandle,
-                                                           ObjHandleT,
-                                                           blockThreads,
-                                                           op,
-                                                           ScalarT,
-                                                           ProjectHess,
-                                                           VariableDim,
-                                                           LambdaT>>(
+            auto new_term = std::make_shared<TemplatedScalarTerm<EdgeHandle,
+                                                                 ObjHandleT,
+                                                                 blockThreads,
+                                                                 op,
+                                                                 ScalarT,
+                                                                 ProjectHess,
+                                                                 VariableDim,
+                                                                 LambdaT>>(
                 rx, t, oreinted, &grad, hess.get());
             terms.push_back(
-                std::dynamic_pointer_cast<Term<T, ObjHandleT>>(new_term));
+                std::dynamic_pointer_cast<ScalarTerm<T, ObjHandleT>>(new_term));
         }
 
         if constexpr (op == Op::FV || op == Op::FE || op == Op::FF ||
                       op == Op::F) {
-            auto new_term = std::make_shared<TemplatedTerm<FaceHandle,
-                                                           ObjHandleT,
-                                                           blockThreads,
-                                                           op,
-                                                           ScalarT,
-                                                           ProjectHess,
-                                                           VariableDim,
-                                                           LambdaT>>(
+            auto new_term = std::make_shared<TemplatedScalarTerm<FaceHandle,
+                                                                 ObjHandleT,
+                                                                 blockThreads,
+                                                                 op,
+                                                                 ScalarT,
+                                                                 ProjectHess,
+                                                                 VariableDim,
+                                                                 LambdaT>>(
                 rx, t, oreinted, &grad, hess.get());
             terms.push_back(
-                std::dynamic_pointer_cast<Term<T, ObjHandleT>>(new_term));
+                std::dynamic_pointer_cast<ScalarTerm<T, ObjHandleT>>(new_term));
         }
     }
 
@@ -171,20 +171,20 @@ struct DiffScalarProblem
 
 
         auto new_term =
-            std::make_shared<TemplatedTermPairs<VertexHandle,  // TODO
-                                                ObjHandleT,
-                                                blockThreads,
-                                                VertexHandle,  // TODO
-                                                VertexHandle,  // TODO
-                                                HessMatT,
-                                                ScalarT,
-                                                ProjectHess,
-                                                VariableDim,
-                                                LambdaT>>(
+            std::make_shared<TemplatedScalarTermPairs<VertexHandle,  // TODO
+                                                      ObjHandleT,
+                                                      blockThreads,
+                                                      VertexHandle,  // TODO
+                                                      VertexHandle,  // TODO
+                                                      HessMatT,
+                                                      ScalarT,
+                                                      ProjectHess,
+                                                      VariableDim,
+                                                      LambdaT>>(
                 rx, t, &grad, hess.get(), vv_pairs);
 
         terms.push_back(
-            std::dynamic_pointer_cast<Term<T, ObjHandleT>>(new_term));
+            std::dynamic_pointer_cast<ScalarTerm<T, ObjHandleT>>(new_term));
     }
 
     /**
@@ -223,7 +223,7 @@ struct DiffScalarProblem
         }
 
         for (size_t i = 0; i < terms.size(); ++i) {
-            terms[i]->eval_active(*objective, stream);            
+            terms[i]->eval_active(*objective, stream);
         }
     }
 
