@@ -306,7 +306,6 @@ struct DenseMatrix
     __host__ __device__ T& operator()(const HandleT handle,
                                       const IndexT  col = 0)
     {
-        assert(!m_user_managed);
         return this->operator()(get_row_id(handle), col);
     }
 
@@ -318,7 +317,6 @@ struct DenseMatrix
     __host__ __device__ const T& operator()(const HandleT handle,
                                             const IndexT  col = 0) const
     {
-        assert(!m_user_managed);
         return this->operator()(get_row_id(handle), col);
     }
 
@@ -333,14 +331,19 @@ struct DenseMatrix
      * @param new_num_cols The new number of columns
      * @return
      */
-    __host__ __device__ void reshape(IndexT new_num_rows, IndexT new_num_cols)
+    __host__ __device__ __inline__ void reshape(int new_num_rows,
+                                                int new_num_cols)
     {
-        assert(m_num_rows * m_num_cols == new_num_rows * new_num_cols &&
-               "Reshape must preserve total number of elements.");
+        long long size_old = (long long)m_num_rows * (long long)m_num_cols;
+        long long size_new = (long long)new_num_rows * (long long)new_num_cols;
+
+        assert(size_old == size_new);
 
         m_num_rows = new_num_rows;
         m_num_cols = new_num_cols;
 
+
+#ifndef __CUDA_ARCH__
         // make sure that cuSparse knows about these changes
         // just in case we used this matrix to multiply with a sparse matrix
         if (std::is_floating_point_v<T> || std::is_same_v<T, int> ||
@@ -354,6 +357,7 @@ struct DenseMatrix
                                                cuda_type<T>(),
                                                CUSPARSE_ORDER_COL));
         }
+#endif
     }
 
 
@@ -795,8 +799,6 @@ struct DenseMatrix
     template <typename HandleT>
     __host__ __device__ IndexT get_row_id(const HandleT handle) const
     {
-        assert(!m_user_managed);
-
         auto id = handle.unpack();
 
         IndexT row;
@@ -843,8 +845,10 @@ struct DenseMatrix
      */
     __host__ const DenseMatrix<T, Order> col(const IndexT col_id) const
     {
-        return DenseMatrix<T, Order>(
+        DenseMatrix<T, Order> ret(
             rows(), 1, col_data(col_id, DEVICE), col_data(col_id, HOST));
+        ret.m_context = m_context;
+        return ret;
     }
 
     /**
@@ -852,8 +856,10 @@ struct DenseMatrix
      */
     __host__ DenseMatrix<T, Order> col(const IndexT col_id)
     {
-        return DenseMatrix<T, Order>(
+        DenseMatrix<T, Order> ret(
             rows(), 1, col_data(col_id, DEVICE), col_data(col_id, HOST));
+        ret.m_context = m_context;
+        return ret;
     }
 
     /**
@@ -900,6 +906,48 @@ struct DenseMatrix
 
         return nullptr;
     }
+
+
+    /**
+     * @brief return a DenseMatrix that holds a 1D slice (view) of the
+     * underlying storage, interpreted as a flat array of length rows()*cols().
+     * The slice starts at linear index `start` and has `count` elements.
+     * No data is copied; the returned matrix wraps pointers into this object.
+     */
+    __host__ DenseMatrix<T, Order> segment(const IndexT start,
+                                           const IndexT count)
+    {
+        const IndexT n = rows() * cols();
+        assert(start >= 0);
+        assert(count >= 0);
+        assert(start + count <= n);
+
+        T* d_ptr = nullptr;
+        T* h_ptr = nullptr;
+
+        if ((m_allocated & DEVICE) == DEVICE) {
+            d_ptr = m_d_val + start;
+        }
+        if ((m_allocated & HOST) == HOST) {
+            h_ptr = m_h_val + start;
+        }
+
+        // Represent the 1D slice as a column vector of length `count`.
+        DenseMatrix<T, Order> ret(count, 1, d_ptr, h_ptr);
+        ret.m_context = m_context;
+        return ret;
+    }
+
+    /**
+     * @brief 1D slice specified by range [start, end) in the flattened storage.
+     */
+    __host__ DenseMatrix<T, Order> segment_range(const IndexT start,
+                                                 const IndexT end)
+    {
+        assert(end >= start);
+        return segment(start, end - start);
+    }
+
 
     /**
      * @brief return the total number bytes used to allocate the matrix

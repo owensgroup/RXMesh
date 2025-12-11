@@ -11,7 +11,9 @@
 
 #include "rxmesh/diff/hessian_projection.h"
 #include "rxmesh/diff/hessian_sparse_matrix.h"
+#include "rxmesh/diff/jacobian_sparse_matrix.h"
 #include "rxmesh/diff/scalar.h"
+
 #include "rxmesh/matrix/dense_matrix.h"
 
 #include "rxmesh/diff/candidate_pairs.h"
@@ -20,6 +22,8 @@
 
 namespace rxmesh {
 namespace detail {
+// ============================== Scalar Kernels ==============================
+// ============= Scalar Mat-vec
 template <uint32_t blockThreads,
           typename LossHandleT,
           typename ObjHandleT,
@@ -28,7 +32,7 @@ template <uint32_t blockThreads,
           bool ProjectHess,
           int  VariableDim,
           typename LambdaT>
-__global__ static void hess_matvec_kernel(
+__global__ static void hess_matvec_scalar_kernel(
     const Context context,
     const DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor>
                                                                 input_vector,
@@ -143,14 +147,14 @@ __global__ static void hess_matvec_kernel(
     }
 }
 
-
+// ============= Scalar Passive
 template <uint32_t blockThreads,
           typename LossHandleT,
           typename ObjHandleT,
           Op op,
           typename ScalarT,
           typename LambdaT>
-__global__ static void diff_kernel_passive(
+__global__ static void diff_scalar_kernel_passive(
     const Context                                         context,
     Attribute<typename ScalarT::PassiveType, LossHandleT> loss,
     Attribute<typename ScalarT::PassiveType, ObjHandleT>  objective,
@@ -192,7 +196,7 @@ __global__ static void diff_kernel_passive(
     }
 }
 
-
+// ============= Scalar Active
 template <uint32_t blockThreads,
           typename LossHandleT,
           typename ObjHandleT,
@@ -201,7 +205,7 @@ template <uint32_t blockThreads,
           bool ProjectHess,
           int  VariableDim,
           typename LambdaT>
-__global__ static void diff_kernel_active(
+__global__ static void diff_scalar_kernel_active(
     const Context                                                   context,
     DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor>     grad,
     HessianSparseMatrix<typename ScalarT::PassiveType, VariableDim> hess,
@@ -269,7 +273,7 @@ __global__ static void diff_kernel_active(
             loss(fh) = res.val();
 
             // gradient
-            for (uint16_t i = 0; i < iter.size(); ++i) {
+            for (int i = 0; i < iter.size(); ++i) {
                 for (int local = 0; local < VariableDim; ++local) {
 
                     ::atomicAdd(
@@ -318,7 +322,7 @@ __global__ static void diff_kernel_active(
     }
 }
 
-
+// ============= Scalar Passive Pairs
 template <uint32_t blockThreads,
           typename LossHandleT,
           typename ObjHandleT,
@@ -327,7 +331,7 @@ template <uint32_t blockThreads,
           typename HessMatT,
           typename ScalarT,
           typename LambdaT>
-__global__ static void diff_kernel_passive_pair(
+__global__ static void diff_scalar_kernel_passive_pair(
     CandidatePairs<HandleT0, HandleT1, HessMatT>          pairs,
     Attribute<typename ScalarT::PassiveType, LossHandleT> loss,
     Attribute<typename ScalarT::PassiveType, ObjHandleT>  objective,
@@ -359,6 +363,7 @@ __global__ static void diff_kernel_passive_pair(
     }
 }
 
+// ============= Scalar Active Pairs
 template <uint32_t blockThreads,
           typename LossHandleT,
           typename ObjHandleT,
@@ -369,7 +374,7 @@ template <uint32_t blockThreads,
           bool ProjectHess,
           int  VariableDim,
           typename LambdaT>
-__global__ static void diff_kernel_active_pair(
+__global__ static void diff_scalar_kernel_active_pair(
     CandidatePairs<HandleT0, HandleT1, HessMatT>                    pairs,
     DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor>     grad,
     HessianSparseMatrix<typename ScalarT::PassiveType, VariableDim> hess,
@@ -448,6 +453,162 @@ __global__ static void diff_kernel_active_pair(
     }
 }
 
+
+// ============================== Vector Kernels ==============================
+// ============= Vector Passive
+template <uint32_t blockThreads,
+          typename LossHandleT,
+          typename ObjHandleT,
+          Op  op,
+          int InputDim,
+          typename ScalarT,
+          typename LambdaT>
+__global__ static void diff_vector_kernel_passive(
+    const Context                                               context,
+    DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor> residual,
+    Attribute<typename ScalarT::PassiveType, ObjHandleT>        objective,
+    const bool                                                  oriented,
+    LambdaT                                                     user_func)
+{
+
+    using PassiveT = typename ScalarT::PassiveType;
+
+    auto block = cooperative_groups::this_thread_block();
+
+    const int num_input_elements = context.get_num<LossHandleT>();
+
+    assert(residual.cols() == 1);
+
+    assert(residual.rows() == num_input_elements * InputDim);
+
+    residual.reshape(num_input_elements, InputDim);
+
+    // Unary queries
+    if constexpr (op == Op::V || op == Op::E || op == Op::F) {
+
+        for_each<op, blockThreads>(context, [&](const LossHandleT& fh) {
+            DiffHandle<PassiveT, LossHandleT> diff_handle(fh);
+
+            Eigen::Vector<PassiveT, InputDim> res =
+                user_func(diff_handle, objective);
+
+            for (int i = 0; i < InputDim; ++i) {
+                residual(fh, i) = res[i];
+            }
+        });
+    } else {
+        // Binary query
+        using IteratorT = typename IteratorType<op>::type;
+
+        auto eval = [&](const LossHandleT& fh, const IteratorT& iter) {
+            DiffHandle<PassiveT, LossHandleT> diff_handle(fh);
+
+            Eigen::Vector<PassiveT, InputDim> res =
+                user_func(diff_handle, iter, objective);
+
+            for (int i = 0; i < InputDim; ++i) {
+                residual(fh, i) = res[i];
+            }
+        };
+
+        Query<blockThreads> query(context);
+
+        ShmemAllocator shrd_alloc;
+
+        query.dispatch<op>(block, shrd_alloc, eval, oriented);
+    }
+}
+
+
+// ============= Vector Active
+template <uint32_t blockThreads,
+          typename LossHandleT,
+          typename ObjHandleT,
+          Op  op,
+          int InputDim,
+          typename ScalarT,
+          int VariableDim,
+          typename LambdaT>
+__global__ static void diff_vector_kernel_active(
+    const Context                                               context,
+    JacobianSparseMatrix<typename ScalarT::PassiveType>         jac,
+    DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor> residual,
+    Attribute<typename ScalarT::PassiveType, ObjHandleT>        objective,
+    const bool                                                  oriented,
+    LambdaT                                                     user_func)
+{
+
+    using IteratorT = typename IteratorType<op>::type;
+
+    using PassiveT = typename ScalarT::PassiveType;
+
+    auto block = cooperative_groups::this_thread_block();
+
+    const int num_input_elements = context.get_num<LossHandleT>();
+
+    assert(residual.cols() == 1);
+
+
+    assert(residual.rows() == num_input_elements * InputDim);
+
+    residual.reshape(num_input_elements, InputDim);
+
+
+    // Unary queries
+    if constexpr (op == Op::V || op == Op::E || op == Op::F) {
+
+        for_each<op, blockThreads>(context, [&](const LossHandleT& fh) {
+            // eval the objective function
+            DiffHandle<ScalarT, LossHandleT> diff_handle(fh);
+
+            Eigen::Vector<ScalarT, InputDim> res =
+                user_func(diff_handle, objective);
+
+            // residual
+            for (int i = 0; i < InputDim; ++i) {
+                residual(fh, i) = res[i].val();
+            }
+
+            // TODO jacobian
+            for (int local = 0; local < VariableDim; ++local) {
+                // we don't need atomics here since each thread update
+                // the gradient of one element so there is no data race
+                // grad(fh, local) += res.grad()[local];
+            }
+        });
+    } else {
+        // Binary query
+        auto eval = [&](const LossHandleT& fh, const IteratorT& iter) {
+            // eval the objective function
+            DiffHandle<ScalarT, LossHandleT> diff_handle(fh);
+
+            Eigen::Vector<ScalarT, InputDim> res =
+                user_func(diff_handle, iter, objective);
+
+            // residual
+            for (int i = 0; i < InputDim; ++i) {
+                residual(fh, i) = res[i].val();
+            }
+
+
+            // TODO jacobian
+            for (int i = 0; i < iter.size(); ++i) {
+                for (int local = 0; local < VariableDim; ++local) {
+
+                    //::atomicAdd(
+                    //    &grad(iter[i], local),
+                    //    res.grad()[index_mapping(VariableDim, i, local)]);
+                }
+            }
+        };
+
+        Query<blockThreads> query(context);
+
+        ShmemAllocator shrd_alloc;
+
+        query.dispatch<op>(block, shrd_alloc, eval, oriented);
+    }
+}
 
 }  // namespace detail
 }  // namespace rxmesh

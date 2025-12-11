@@ -82,52 +82,56 @@ struct TemplatedScalarTerm
 
         reducer = std::make_shared<ReduceHandle<T, LossHandleT>>(*loss);
 
-        rx.prepare_launch_box({op},
-                              lb_active,
-                              (void*)detail::diff_kernel_active<blockThreads,
-                                                                LossHandleT,
-                                                                ObjHandleT,
-                                                                op,
-                                                                ScalarT,
-                                                                ProjectHess,
-                                                                VariableDim,
-                                                                LambdaT>,
-                              oreinted);
+        rx.prepare_launch_box(
+            {op},
+            lb_active,
+            (void*)detail::diff_scalar_kernel_active<blockThreads,
+                                                     LossHandleT,
+                                                     ObjHandleT,
+                                                     op,
+                                                     ScalarT,
+                                                     ProjectHess,
+                                                     VariableDim,
+                                                     LambdaT>,
+            oreinted);
 
-        rx.prepare_launch_box({op},
-                              lb_passive,
-                              (void*)detail::diff_kernel_passive<blockThreads,
-                                                                 LossHandleT,
-                                                                 ObjHandleT,
-                                                                 op,
-                                                                 ScalarT,
-                                                                 LambdaT>,
-                              oreinted);
+        rx.prepare_launch_box(
+            {op},
+            lb_passive,
+            (void*)detail::diff_scalar_kernel_passive<blockThreads,
+                                                      LossHandleT,
+                                                      ObjHandleT,
+                                                      op,
+                                                      ScalarT,
+                                                      LambdaT>,
+            oreinted);
 
 
-        rx.prepare_launch_box({op},
-                              lb_active_matvec,
-                              (void*)detail::hess_matvec_kernel<blockThreads,
-                                                                LossHandleT,
-                                                                ObjHandleT,
-                                                                op,
-                                                                ScalarT,
-                                                                ProjectHess,
-                                                                VariableDim,
-                                                                LambdaT>,
-                              oreinted);
+        rx.prepare_launch_box(
+            {op},
+            lb_active_matvec,
+            (void*)detail::hess_matvec_scalar_kernel<blockThreads,
+                                                     LossHandleT,
+                                                     ObjHandleT,
+                                                     op,
+                                                     ScalarT,
+                                                     ProjectHess,
+                                                     VariableDim,
+                                                     LambdaT>,
+            oreinted);
 
-        rx.prepare_launch_box({op},
-                              lb_active_grad_only,
-                              (void*)detail::diff_kernel_active<blockThreads,
-                                                                LossHandleT,
-                                                                ObjHandleT,
-                                                                op,
-                                                                ScalarGradOnlyT,
-                                                                ProjectHess,
-                                                                VariableDim,
-                                                                LambdaT>,
-                              oreinted);
+        rx.prepare_launch_box(
+            {op},
+            lb_active_grad_only,
+            (void*)detail::diff_scalar_kernel_active<blockThreads,
+                                                     LossHandleT,
+                                                     ObjHandleT,
+                                                     op,
+                                                     ScalarGradOnlyT,
+                                                     ProjectHess,
+                                                     VariableDim,
+                                                     LambdaT>,
+            oreinted);
     }
 
     /**
@@ -143,14 +147,14 @@ struct TemplatedScalarTerm
         }
 
         rx.run_kernel(lb_active,
-                      detail::diff_kernel_active<blockThreads,
-                                                 LossHandleT,
-                                                 ObjHandleT,
-                                                 op,
-                                                 ScalarT,
-                                                 ProjectHess,
-                                                 VariableDim,
-                                                 LambdaT>,
+                      detail::diff_scalar_kernel_active<blockThreads,
+                                                        LossHandleT,
+                                                        ObjHandleT,
+                                                        op,
+                                                        ScalarT,
+                                                        ProjectHess,
+                                                        VariableDim,
+                                                        LambdaT>,
                       stream,
                       *grad,
                       *hess,
@@ -169,14 +173,14 @@ struct TemplatedScalarTerm
                                cudaStream_t              stream)
     {
         rx.run_kernel(lb_active_grad_only,
-                      detail::diff_kernel_active<blockThreads,
-                                                 LossHandleT,
-                                                 ObjHandleT,
-                                                 op,
-                                                 ScalarGradOnlyT,
-                                                 ProjectHess,
-                                                 VariableDim,
-                                                 LambdaT>,
+                      detail::diff_scalar_kernel_active<blockThreads,
+                                                        LossHandleT,
+                                                        ObjHandleT,
+                                                        op,
+                                                        ScalarGradOnlyT,
+                                                        ProjectHess,
+                                                        VariableDim,
+                                                        LambdaT>,
                       stream,
                       *grad,
                       *hess,
@@ -212,14 +216,14 @@ struct TemplatedScalarTerm
         }
 
         rx.run_kernel(lb_active,
-                      detail::hess_matvec_kernel<blockThreads,
-                                                 LossHandleT,
-                                                 ObjHandleT,
-                                                 op,
-                                                 ScalarT,
-                                                 ProjectHess,
-                                                 VariableDim,
-                                                 LambdaT>,
+                      detail::hess_matvec_scalar_kernel<blockThreads,
+                                                        LossHandleT,
+                                                        ObjHandleT,
+                                                        op,
+                                                        ScalarT,
+                                                        ProjectHess,
+                                                        VariableDim,
+                                                        LambdaT>,
                       stream,
                       input,
                       output,
@@ -234,12 +238,12 @@ struct TemplatedScalarTerm
     void eval_passive(Attribute<T, ObjHandleT>& obj, cudaStream_t stream)
     {
         rx.run_kernel(lb_passive,
-                      detail::diff_kernel_passive<blockThreads,
-                                                  LossHandleT,
-                                                  ObjHandleT,
-                                                  op,
-                                                  ScalarT,
-                                                  LambdaT>,
+                      detail::diff_scalar_kernel_passive<blockThreads,
+                                                         LossHandleT,
+                                                         ObjHandleT,
+                                                         op,
+                                                         ScalarT,
+                                                         LambdaT>,
                       stream,
                       *loss,
                       obj,
@@ -344,16 +348,16 @@ struct TemplatedScalarTermPairs
 
         const int blocks = DIVIDE_UP(size, blockThreads);
 
-        detail::diff_kernel_active_pair<blockThreads,
-                                        LossHandleT,
-                                        ObjHandleT,
-                                        HandleT0,
-                                        HandleT1,
-                                        HessMatT,
-                                        ScalarT,
-                                        ProjectHess,
-                                        VariableDim,
-                                        LambdaT>
+        detail::diff_scalar_kernel_active_pair<blockThreads,
+                                               LossHandleT,
+                                               ObjHandleT,
+                                               HandleT0,
+                                               HandleT1,
+                                               HessMatT,
+                                               ScalarT,
+                                               ProjectHess,
+                                               VariableDim,
+                                               LambdaT>
             <<<blocks, blockThreads, 0, stream>>>(
                 pairs, *grad, *hess, *loss, obj, term);
     }
@@ -374,16 +378,16 @@ struct TemplatedScalarTermPairs
 
         const int blocks = DIVIDE_UP(size, blockThreads);
 
-        detail::diff_kernel_active_pair<blockThreads,
-                                        LossHandleT,
-                                        ObjHandleT,
-                                        HandleT0,
-                                        HandleT1,
-                                        HessMatT,
-                                        ScalarGradOnlyT,
-                                        ProjectHess,
-                                        VariableDim,
-                                        LambdaT>
+        detail::diff_scalar_kernel_active_pair<blockThreads,
+                                               LossHandleT,
+                                               ObjHandleT,
+                                               HandleT0,
+                                               HandleT1,
+                                               HessMatT,
+                                               ScalarGradOnlyT,
+                                               ProjectHess,
+                                               VariableDim,
+                                               LambdaT>
             <<<blocks, blockThreads, 0, stream>>>(
                 pairs, *grad, *hess, *loss, obj, term);
     }
@@ -436,14 +440,14 @@ struct TemplatedScalarTermPairs
 
         const int blocks = DIVIDE_UP(size, blockThreads);
 
-        detail::diff_kernel_passive_pair<blockThreads,
-                                         LossHandleT,
-                                         ObjHandleT,
-                                         HandleT0,
-                                         HandleT1,
-                                         HessMatT,
-                                         ScalarT,
-                                         LambdaT>
+        detail::diff_scalar_kernel_passive_pair<blockThreads,
+                                                LossHandleT,
+                                                ObjHandleT,
+                                                HandleT0,
+                                                HandleT1,
+                                                HessMatT,
+                                                ScalarT,
+                                                LambdaT>
             <<<blocks, blockThreads, 0, stream>>>(pairs, *loss, obj, term);
     }
 

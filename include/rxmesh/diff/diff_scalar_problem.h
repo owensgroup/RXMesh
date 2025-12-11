@@ -121,7 +121,7 @@ struct DiffScalarProblem
         }
 
         if constexpr (op == Op::EV || op == Op::EE || op == Op::EF ||
-                      op == Op::E) {
+                      op == Op::E || op == Op::EVDiamond) {
             auto new_term = std::make_shared<TemplatedScalarTerm<EdgeHandle,
                                                                  ObjHandleT,
                                                                  blockThreads,
