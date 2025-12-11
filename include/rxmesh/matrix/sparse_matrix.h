@@ -5,7 +5,7 @@
 
 #include "rxmesh/rxmesh_static.h"
 
-#include "rxmesh/matrix/block_dim.h"
+#include "rxmesh/matrix/block_shape.h"
 #include "rxmesh/matrix/dense_matrix.h"
 #include "rxmesh/matrix/sparse_matrix_kernels.cuh"
 
@@ -47,7 +47,7 @@ struct SparseMatrix
           m_nnz(0),
           m_context(Context()),
           m_cusparse_handle(NULL),
-          m_block_dim(detail::BlockDim(1, 1)),
+          m_block_shape(BlockShape(1, 1)),
           m_spdescr(NULL),
           m_spmm_buffer_size(0),
           m_spmv_buffer_size(0),
@@ -67,7 +67,7 @@ struct SparseMatrix
      * @brief Constructor using specific mesh query
      */
     SparseMatrix(const RXMeshStatic& rx, Op op = Op::VV)
-        : SparseMatrix(rx, 1.f, 0, op, detail::BlockDim(1, 1), true) {};
+        : SparseMatrix(rx, 1.f, 0, op, BlockShape(1, 1), true) {};
 
 
     /**
@@ -94,7 +94,7 @@ struct SparseMatrix
                  T*      h_val)
         : SparseMatrix()
     {
-        m_block_dim = detail::BlockDim(1, 1);
+        m_block_shape = BlockShape(1, 1);
 
         m_is_user_managed = true;
 
@@ -126,7 +126,7 @@ struct SparseMatrix
                  const float         capacity_factor,
                  const int           extra_nnz_entries,
                  Op                  op,
-                 detail::BlockDim    block_dim,
+                 BlockShape          block_shape,
                  bool                add_diagonal)
         : m_d_row_ptr(nullptr),
           m_d_col_idx(nullptr),
@@ -140,7 +140,7 @@ struct SparseMatrix
           m_nnz(0),
           m_context(rx.get_context()),
           m_cusparse_handle(NULL),
-          m_block_dim(block_dim),
+          m_block_shape(block_shape),
           m_spdescr(NULL),
           m_spmm_buffer_size(0),
           m_spmv_buffer_size(0),
@@ -155,7 +155,7 @@ struct SparseMatrix
           m_extra_nnz_entires(extra_nnz_entries)
     {
 
-        if (add_diagonal && (block_dim.x != block_dim.y)) {
+        if (add_diagonal && (block_shape.x != block_shape.y)) {
             RXMESH_ERROR(
                 "SparseMatrix::SparseMatrix() adding diagonal blocks for "
                 "non-symmetric blocks has not been tested before!");
@@ -163,7 +163,7 @@ struct SparseMatrix
 
         // get num rows and cols based on the input op
         std::tie(m_num_rows, m_num_cols) =
-            get_num_rows_and_cols(rx, m_op, m_block_dim);
+            get_num_rows_and_cols(rx, m_op, m_block_shape);
 
         // row pointer allocation and init with prefix sum for CSR
         CUDA_ERROR(cudaMalloc((void**)&m_d_row_ptr,
@@ -175,7 +175,7 @@ struct SparseMatrix
             cudaMemset(m_d_row_ptr, 0, (m_num_rows + 1) * sizeof(IndexT)));
 
         // count the nnz per row
-        mat_prescan(rx, m_op, m_d_row_ptr, m_block_dim, add_diagonal);
+        mat_prescan(rx, m_op, m_d_row_ptr, m_block_shape, add_diagonal);
 
 
         // prefix sum using CUB.
@@ -210,7 +210,7 @@ struct SparseMatrix
 
         // fill in col_idx
         mat_col_fill(
-            rx, op, m_d_row_ptr, m_d_col_idx, m_block_dim, add_diagonal);
+            rx, op, m_d_row_ptr, m_d_col_idx, m_block_shape, add_diagonal);
 
 
         // allocate value ptr
@@ -773,7 +773,7 @@ struct SparseMatrix
         std::swap(m_spdescr, in.m_spdescr);
         std::swap(m_d_cub_temp_storage, in.m_d_cub_temp_storage);
         std::swap(m_cub_temp_storage_bytes, in.m_cub_temp_storage_bytes);
-        std::swap(m_block_dim, in.m_block_dim);
+        std::swap(m_block_shape, in.m_block_shape);
         std::swap(m_num_rows, in.m_num_rows);
         std::swap(m_num_cols, in.m_num_cols);
         std::swap(m_nnz, in.m_nnz);
@@ -821,8 +821,8 @@ struct SparseMatrix
         ret.m_num_cols        = m_num_rows;
         ret.m_nnz             = m_nnz;
         ret.m_context         = m_context;
-        ret.m_block_dim.x     = m_block_dim.y;
-        ret.m_block_dim.y     = m_block_dim.x;
+        ret.m_block_shape.x   = m_block_shape.y;
+        ret.m_block_shape.y   = m_block_shape.x;
         ret.m_allocated       = m_allocated;
         ret.m_is_user_managed = false;
         ret.m_op              = transpose_op(m_op);
@@ -1392,7 +1392,7 @@ struct SparseMatrix
     void mat_prescan(const RXMeshStatic& rx,
                      Op                  op,
                      IndexT*             d_row_ptr,
-                     detail::BlockDim    block_dim,
+                     BlockShape          block_shape,
                      bool                add_diagonal)
     {
         constexpr uint32_t blockThreads = 256;
@@ -1402,77 +1402,77 @@ struct SparseMatrix
                 {op},
                 detail::sparse_mat_prescan<Op::V, blockThreads>,
                 d_row_ptr,
-                block_dim,
+                block_shape,
                 add_diagonal);
         } else if (op == Op::VV) {
             rx.run_kernel<blockThreads>(
                 {op},
                 detail::sparse_mat_prescan<Op::VV, blockThreads>,
                 d_row_ptr,
-                block_dim,
+                block_shape,
                 add_diagonal);
         } else if (op == Op::VE) {
             rx.run_kernel<blockThreads>(
                 {op},
                 detail::sparse_mat_prescan<Op::VE, blockThreads>,
                 d_row_ptr,
-                block_dim,
+                block_shape,
                 add_diagonal);
         } else if (op == Op::VF) {
             rx.run_kernel<blockThreads>(
                 {op},
                 detail::sparse_mat_prescan<Op::VF, blockThreads>,
                 d_row_ptr,
-                m_block_dim,
+                block_shape,
                 add_diagonal);
         } else if (op == Op::E) {
             rx.run_kernel<blockThreads>(
                 {op},
                 detail::sparse_mat_prescan<Op::E, blockThreads>,
                 d_row_ptr,
-                block_dim,
+                block_shape,
                 add_diagonal);
         } else if (op == Op::EV) {
             rx.run_kernel<blockThreads>(
                 {op},
                 detail::sparse_mat_prescan<Op::EV, blockThreads>,
                 d_row_ptr,
-                block_dim,
+                block_shape,
                 add_diagonal);
         } else if (op == Op::EF) {
             rx.run_kernel<blockThreads>(
                 {op},
                 detail::sparse_mat_prescan<Op::EF, blockThreads>,
                 d_row_ptr,
-                block_dim,
+                block_shape,
                 add_diagonal);
         } else if (op == Op::F) {
             rx.run_kernel<blockThreads>(
                 {op},
                 detail::sparse_mat_prescan<Op::F, blockThreads>,
                 d_row_ptr,
-                block_dim,
+                block_shape,
                 add_diagonal);
         } else if (op == Op::FV) {
             rx.run_kernel<blockThreads>(
                 {op},
                 detail::sparse_mat_prescan<Op::FV, blockThreads>,
                 d_row_ptr,
-                block_dim,
+                block_shape,
                 add_diagonal);
         } else if (op == Op::FE) {
             rx.run_kernel<blockThreads>(
                 {op},
                 detail::sparse_mat_prescan<Op::FE, blockThreads>,
                 d_row_ptr,
-                block_dim,
+                block_shape,
                 add_diagonal);
         } else if (op == Op::FF) {
             rx.run_kernel<blockThreads>(
                 {op},
                 detail::sparse_mat_prescan<Op::FF, blockThreads>,
                 d_row_ptr,
-                block_dim,
+                block_shape,
                 add_diagonal);
         } else {
             RXMESH_ERROR(
@@ -1489,7 +1489,7 @@ struct SparseMatrix
                       Op                  op,
                       IndexT*             d_row_ptr,
                       IndexT*             d_col_idx,
-                      detail::BlockDim    block_dim,
+                      BlockShape          block_shape,
                       bool                add_diagonal)
     {
         constexpr uint32_t blockThreads = 256;
@@ -1500,7 +1500,7 @@ struct SparseMatrix
                 detail::sparse_mat_col_fill<Op::V, blockThreads>,
                 d_row_ptr,
                 d_col_idx,
-                block_dim,
+                block_shape,
                 add_diagonal);
         } else if (op == Op::VV) {
             rx.run_kernel<blockThreads>(
@@ -1508,7 +1508,7 @@ struct SparseMatrix
                 detail::sparse_mat_col_fill<Op::VV, blockThreads>,
                 d_row_ptr,
                 d_col_idx,
-                block_dim,
+                block_shape,
                 add_diagonal);
         } else if (op == Op::VE) {
             rx.run_kernel<blockThreads>(
@@ -1516,7 +1516,7 @@ struct SparseMatrix
                 detail::sparse_mat_col_fill<Op::VE, blockThreads>,
                 d_row_ptr,
                 d_col_idx,
-                block_dim,
+                block_shape,
                 add_diagonal);
         } else if (op == Op::VF) {
             rx.run_kernel<blockThreads>(
@@ -1524,7 +1524,7 @@ struct SparseMatrix
                 detail::sparse_mat_col_fill<Op::VF, blockThreads>,
                 d_row_ptr,
                 d_col_idx,
-                block_dim,
+                block_shape,
                 add_diagonal);
         } else if (op == Op::E) {
             rx.run_kernel<blockThreads>(
@@ -1532,7 +1532,7 @@ struct SparseMatrix
                 detail::sparse_mat_col_fill<Op::E, blockThreads>,
                 d_row_ptr,
                 d_col_idx,
-                block_dim,
+                block_shape,
                 add_diagonal);
         } else if (op == Op::EV) {
             rx.run_kernel<blockThreads>(
@@ -1540,7 +1540,7 @@ struct SparseMatrix
                 detail::sparse_mat_col_fill<Op::EV, blockThreads>,
                 d_row_ptr,
                 d_col_idx,
-                block_dim,
+                block_shape,
                 add_diagonal);
         } else if (op == Op::EF) {
             rx.run_kernel<blockThreads>(
@@ -1548,7 +1548,7 @@ struct SparseMatrix
                 detail::sparse_mat_col_fill<Op::EF, blockThreads>,
                 d_row_ptr,
                 d_col_idx,
-                block_dim,
+                block_shape,
                 add_diagonal);
         } else if (op == Op::F) {
             rx.run_kernel<blockThreads>(
@@ -1556,7 +1556,7 @@ struct SparseMatrix
                 detail::sparse_mat_col_fill<Op::F, blockThreads>,
                 d_row_ptr,
                 d_col_idx,
-                block_dim,
+                block_shape,
                 add_diagonal);
         } else if (op == Op::FV) {
             rx.run_kernel<blockThreads>(
@@ -1564,7 +1564,7 @@ struct SparseMatrix
                 detail::sparse_mat_col_fill<Op::FV, blockThreads>,
                 d_row_ptr,
                 d_col_idx,
-                block_dim,
+                block_shape,
                 add_diagonal);
         } else if (op == Op::FE) {
             rx.run_kernel<blockThreads>(
@@ -1572,7 +1572,7 @@ struct SparseMatrix
                 detail::sparse_mat_col_fill<Op::FE, blockThreads>,
                 d_row_ptr,
                 d_col_idx,
-                block_dim,
+                block_shape,
                 add_diagonal);
         } else if (op == Op::FF) {
             rx.run_kernel<blockThreads>(
@@ -1580,7 +1580,7 @@ struct SparseMatrix
                 detail::sparse_mat_col_fill<Op::FF, blockThreads>,
                 d_row_ptr,
                 d_col_idx,
-                block_dim,
+                block_shape,
                 add_diagonal);
         } else {
             RXMESH_ERROR(
@@ -1593,10 +1593,9 @@ struct SparseMatrix
     /**
      * @brief get the number of rows and cols based on an input Op
      */
-    std::pair<uint32_t, uint32_t> get_num_rows_and_cols(
-        const RXMeshStatic& rx,
-        Op                  op,
-        detail::BlockDim    block_dim)
+    std::pair<uint32_t, uint32_t> get_num_rows_and_cols(const RXMeshStatic& rx,
+                                                        Op                  op,
+                                                        BlockShape block_shape)
     {
         int num_rows(0), num_cols(0);
 
@@ -1634,8 +1633,8 @@ struct SparseMatrix
                 op_to_string(op));
         }
 
-        num_rows *= block_dim.x;
-        num_cols *= block_dim.y;
+        num_rows *= block_shape.x;
+        num_cols *= block_shape.y;
 
         return {num_rows, num_cols};
     }
@@ -1672,7 +1671,7 @@ struct SparseMatrix
     void*  m_d_cub_temp_storage;
     size_t m_cub_temp_storage_bytes;
 
-    detail::BlockDim m_block_dim;
+    BlockShape m_block_shape;
 
     IndexT m_num_rows;
     IndexT m_num_cols;

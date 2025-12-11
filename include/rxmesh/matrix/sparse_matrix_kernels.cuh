@@ -3,7 +3,7 @@
 #include "cusparse.h"
 
 #include "rxmesh/context.h"
-#include "rxmesh/matrix/block_dim.h"
+#include "rxmesh/matrix/block_shape.h"
 #include "rxmesh/query.cuh"
 
 namespace rxmesh {
@@ -14,7 +14,7 @@ namespace detail {
 template <Op op, uint32_t blockThreads, typename IndexT = int>
 __global__ static void sparse_mat_prescan(const rxmesh::Context context,
                                           IndexT*               row_ptr,
-                                          BlockDim              block_dim,
+                                          BlockShape            block_shape,
                                           bool                  add_diagonal)
 {
     bool is_aos = true;
@@ -29,10 +29,10 @@ __global__ static void sparse_mat_prescan(const rxmesh::Context context,
         for_each<op, blockThreads>(context, [&](const HandleT& h) {
             IndexT offset =
                 context.prefix<HandleT>()[h.patch_id()] + h.local_id();
-            offset *= block_dim.x;
+            offset *= block_shape.x;
 
-            for (IndexT i = 0; i < block_dim.x; ++i) {
-                row_ptr[offset + i] = block_dim.y;
+            for (IndexT i = 0; i < block_shape.x; ++i) {
+                row_ptr[offset + i] = block_shape.y;
             }
         });
     } else {
@@ -46,17 +46,17 @@ __global__ static void sparse_mat_prescan(const rxmesh::Context context,
                 size += 1;
             }
 
-            size *= block_dim.y;
+            size *= block_shape.y;
             IndexT offset = context.prefix<HandleT>()[patch_id] + local_id;
 
             if (is_aos) {
-                offset *= block_dim.x;
-                for (IndexT i = 0; i < block_dim.x; ++i) {
+                offset *= block_shape.x;
+                for (IndexT i = 0; i < block_shape.x; ++i) {
                     row_ptr[offset + i] = size;
                 }
             } else {
                 const uint32_t num_elements = context.get_num<HandleT>();
-                for (IndexT i = 0; i < block_dim.x; ++i) {
+                for (IndexT i = 0; i < block_shape.x; ++i) {
                     row_ptr[num_elements * i + offset] = size;
                 }
             }
@@ -74,7 +74,7 @@ template <Op op, uint32_t blockThreads, typename IndexT = int>
 __global__ static void sparse_mat_col_fill(const rxmesh::Context context,
                                            IndexT*               row_ptr,
                                            IndexT*               col_idx,
-                                           BlockDim              block_dim,
+                                           BlockShape            block_shape,
                                            bool                  add_diagonal)
 {
     using namespace rxmesh;
@@ -87,11 +87,11 @@ __global__ static void sparse_mat_col_fill(const rxmesh::Context context,
         for_each<op, blockThreads>(context, [&](const HandleT& h) {
             IndexT v_global =
                 context.prefix<HandleT>()[h.patch_id()] + h.local_id();
-            v_global *= block_dim.x;
+            v_global *= block_shape.x;
 
-            for (IndexT i = 0; i < block_dim.x; ++i) {
+            for (IndexT i = 0; i < block_shape.x; ++i) {
                 IndexT v_base_offset = row_ptr[v_global + i];
-                for (IndexT j = 0; j < block_dim.y; ++j) {
+                for (IndexT j = 0; j < block_shape.y; ++j) {
                     col_idx[v_base_offset + j] = v_global + j;
                 }
             }
@@ -105,21 +105,21 @@ __global__ static void sparse_mat_col_fill(const rxmesh::Context context,
             uint16_t local_id = ids.second;
 
             IndexT v_global = context.prefix<HandleT>()[patch_id] + local_id;
-            v_global *= block_dim.x;
+            v_global *= block_shape.x;
 
             // "block" diagonal entries (which is stored as the first entry in
-            // the col_idx for each row) with block_dim.x =1,  there is only one
-            // entry per diagonal. But with higher block_dim, it becomes
-            // (block_dim.x x block_dim.y) block
+            // the col_idx for each row) with block_shape.x =1,  there is only
+            // one entry per diagonal. But with higher block_shape, it becomes
+            // (block_shape.x x block_shape.y) block
 
             int diagonal_offset = 0;
 
             if (add_diagonal) {
-                diagonal_offset += block_dim.x;
+                diagonal_offset += block_shape.x;
 
-                for (IndexT i = 0; i < block_dim.x; ++i) {
+                for (IndexT i = 0; i < block_shape.x; ++i) {
                     IndexT v_base_offset = row_ptr[v_global + i];
-                    for (IndexT j = 0; j < block_dim.y; ++j) {
+                    for (IndexT j = 0; j < block_shape.y; ++j) {
                         col_idx[v_base_offset + j] = v_global + j;
                     }
                 }
@@ -132,12 +132,12 @@ __global__ static void sparse_mat_col_fill(const rxmesh::Context context,
 
                 IndexT q_global =
                     context.prefix<HandleT>()[q_patch_id] + q_local_id;
-                q_global *= block_dim.y;
+                q_global *= block_shape.y;
 
-                for (IndexT i = 0; i < block_dim.x; ++i) {
+                for (IndexT i = 0; i < block_shape.x; ++i) {
                     IndexT q_base_offset =
-                        row_ptr[v_global + i] + q * block_dim.y;
-                    for (IndexT j = 0; j < block_dim.y; ++j) {
+                        row_ptr[v_global + i] + q * block_shape.y;
+                    for (IndexT j = 0; j < block_shape.y; ++j) {
                         col_idx[q_base_offset + j + diagonal_offset] =
                             q_global + j;
                         //                          ^^ to account for the

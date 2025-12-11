@@ -15,9 +15,9 @@ TEST(Diff, Jacobian)
 
     std::vector<Op> ops{Op::EF, Op::F};
 
-    std::vector<detail::BlockDim> block_dims{{5, 1}, {3, 1}};
+    std::vector<BlockShape> block_shapes{{5, 1}, {3, 1}};
 
-    JacobianSparseMatrix<T> jac(rx, ops, block_dims);
+    JacobianSparseMatrix<T> jac(rx, ops, block_shapes);
 
     RXMESH_INFO("vertices = {}", rx.get_num_vertices());
     RXMESH_INFO("edges = {}", rx.get_num_edges());
@@ -26,15 +26,15 @@ TEST(Diff, Jacobian)
     RXMESH_INFO("rows = {}", jac.rows());
     RXMESH_INFO("cols = {}", jac.cols());
 
-    EXPECT_EQ(jac.cols(), rx.get_num_faces() * block_dims[0].y);
+    EXPECT_EQ(jac.cols(), rx.get_num_faces() * block_shapes[0].y);
 
     EXPECT_EQ(jac.rows(),
-              rx.get_num_edges() * block_dims[0].x +
-                  rx.get_num_faces() * block_dims[1].x);
+              rx.get_num_edges() * block_shapes[0].x +
+                  rx.get_num_faces() * block_shapes[1].x);
 
     EXPECT_EQ(jac.get_num_terms(), 2);
 
-    EXPECT_EQ(jac.get_term_num_rows(0), rx.get_num_edges() * block_dims[0].x);
+    EXPECT_EQ(jac.get_term_num_rows(0), rx.get_num_edges() * block_shapes[0].x);
 
-    EXPECT_EQ(jac.get_term_num_rows(1), rx.get_num_faces() * block_dims[1].x);
+    EXPECT_EQ(jac.get_term_num_rows(1), rx.get_num_faces() * block_shapes[1].x);
 }

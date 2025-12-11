@@ -36,7 +36,7 @@ struct HessianSparseMatrix : public SparseMatrix<T>
                           1.0f,
                           extra_nnz_entries,
                           op,
-                          detail::BlockDim(K, K),
+                          BlockShape(K, K),
                           true)
     {
     }
@@ -54,9 +54,9 @@ struct HessianSparseMatrix : public SparseMatrix<T>
         assert(is_non_zero(row_v, col_v));
 
         const IndexT r_id =
-            this->get_row_id(row_v) * this->m_block_dim.x + local_i;
+            this->get_row_id(row_v) * this->m_block_shape.x + local_i;
         const IndexT c_id =
-            this->get_row_id(col_v) * this->m_block_dim.y + local_j;
+            this->get_row_id(col_v) * this->m_block_shape.y + local_j;
 
         return SparseMatrix<T>::operator()(r_id, c_id);
     }
@@ -73,9 +73,9 @@ struct HessianSparseMatrix : public SparseMatrix<T>
         assert(is_non_zero(row_v, col_v));
 
         const IndexT r_id =
-            this->get_row_id(row_v) * this->m_block_dim.x + local_i;
+            this->get_row_id(row_v) * this->m_block_shape.x + local_i;
         const IndexT c_id =
-            this->get_row_id(col_v) * this->m_block_dim.y + local_j;
+            this->get_row_id(col_v) * this->m_block_shape.y + local_j;
 
         return SparseMatrix<T>::operator()(r_id, c_id);
     }
@@ -93,9 +93,9 @@ struct HessianSparseMatrix : public SparseMatrix<T>
         assert(is_non_zero(row_v, col_v));
 
         const IndexT r_id =
-            this->get_row_id(row_v) * this->m_block_dim.x + local_i;
+            this->get_row_id(row_v) * this->m_block_shape.x + local_i;
         const IndexT c_id =
-            this->get_row_id(col_v) * this->m_block_dim.y + local_j;
+            this->get_row_id(col_v) * this->m_block_shape.y + local_j;
 
         return {r_id, c_id};
     }
@@ -107,8 +107,8 @@ struct HessianSparseMatrix : public SparseMatrix<T>
     __device__ __host__ const bool is_non_zero(const VertexHandle& row_v,
                                                const VertexHandle& col_v) const
     {
-        const IndexT r_id = this->get_row_id(row_v) * this->m_block_dim.x;
-        const IndexT c_id = this->get_row_id(col_v) * this->m_block_dim.y;
+        const IndexT r_id = this->get_row_id(row_v) * this->m_block_shape.x;
+        const IndexT c_id = this->get_row_id(col_v) * this->m_block_shape.y;
 
         return SparseMatrix<T>::is_non_zero(r_id, c_id);
     }

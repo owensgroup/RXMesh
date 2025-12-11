@@ -22,10 +22,10 @@ struct SparseMatrixConstantNNZRow : public SparseMatrix<T>
         : SparseMatrix<T>()
     {
         this->m_context   = rx.get_context();
-        this->m_block_dim = BlockDim(1, 1);
+        this->m_block_shape = BlockShape(1, 1);
 
-        this->m_num_rows = num_rows * this->m_block_dim.x;
-        this->m_num_cols = num_cols * this->m_block_dim.y;
+        this->m_num_rows = num_rows * this->m_block_shape.x;
+        this->m_num_cols = num_cols * this->m_block_shape.y;
         this->m_nnz      = this->m_num_rows * RowNNZ;
 
         int num_row_1 = this->m_num_rows + 1;

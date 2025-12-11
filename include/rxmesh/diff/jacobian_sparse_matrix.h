@@ -15,25 +15,25 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
         : SparseMatrix<T>(),
           m_num_terms(0),
           m_ops(nullptr),
-          m_block_dims(nullptr)
+          m_block_shapes(nullptr)
     {
     }
 
-    JacobianSparseMatrix(const RXMeshStatic&                 rx,
-                         const std::vector<Op>&              ops,
-                         const std::vector<detail::BlockDim> block_dims)
+    JacobianSparseMatrix(const RXMeshStatic&           rx,
+                         const std::vector<Op>&        ops,
+                         const std::vector<BlockShape> block_shapes)
         : SparseMatrix<T>()
     {
 
         // we follow the same logic as in the SparseMatrix construction but the
         // difference here is we stuck multiple matrices along the
 
-        if (ops.size() != block_dims.size()) {
+        if (ops.size() != block_shapes.size()) {
             RXMESH_ERROR(
                 "JacobianSparseMatrix::JacobianSparseMatrix() mismatch between "
-                "ops size {} and block_dims size {}",
+                "ops size {} and block_shapes size {}",
                 ops.size(),
-                block_dims.size());
+                block_shapes.size());
         }
 
         // safe guard against trivial cases
@@ -41,16 +41,15 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
             return;
         }
 
-        // copy ops and block_dims
+        // copy ops and block_shapes
         m_num_terms = ops.size();
         m_ops       = (Op*)malloc(sizeof(Op) * m_num_terms);
         memcpy(m_ops, ops.data(), sizeof(Op) * m_num_terms);
 
-        m_block_dims =
-            (detail::BlockDim*)malloc(sizeof(detail::BlockDim) * m_num_terms);
-        memcpy(m_block_dims,
-               block_dims.data(),
-               sizeof(detail::BlockDim) * m_num_terms);
+        m_block_shapes = (BlockShape*)malloc(sizeof(BlockShape) * m_num_terms);
+        memcpy(m_block_shapes,
+               block_shapes.data(),
+               sizeof(BlockShape) * m_num_terms);
 
         m_h_terms_rows_prefix =
             (IndexT*)malloc(sizeof(IndexT) * (m_num_terms + 1));
@@ -95,8 +94,8 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
         }
 
         // check that the y component for all blocks has the same dimensions
-        for (int i = 1; i < block_dims.size(); ++i) {
-            if (block_dims[i].y != block_dims[0].y) {
+        for (int i = 1; i < block_shapes.size(); ++i) {
+            if (block_shapes[i].y != block_shapes[0].y) {
                 RXMESH_ERROR(
                     "JacobianSparseMatrix::JacobianSparseMatrix() mismatch "
                     "in the block dim.");
@@ -108,7 +107,7 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
         m_num_cols = 0;
         for (int i = 0; i < m_num_terms; ++i) {
             auto [rows, cols] =
-                get_num_rows_and_cols(rx, m_ops[i], m_block_dims[i]);
+                get_num_rows_and_cols(rx, m_ops[i], m_block_shapes[i]);
 
             m_num_rows += rows;
             m_h_terms_rows_prefix[i] = rows;
@@ -133,7 +132,7 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
         }
 
         //????
-        /*if (add_diagonal && (block_dim.x != block_dim.y)) {
+        /*if (add_diagonal && (block_shape.x != block_shape.y)) {
             RXMESH_ERROR(
                 "SparseMatrix::SparseMatrix() adding diagonal blocks for "
                 "non-symmetric blocks has not been tested before!");
@@ -157,14 +156,14 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
                 m_ops[i] == Op::VV || m_ops[i] == Op::FF ||
                 m_ops[i] == Op::EE) {
 
-                if (m_block_dims[i].x == m_block_dims[i].y) {
+                if (m_block_shapes[i].x == m_block_shapes[i].y) {
                     add_diagonal = true;
                 }
             }
             this->mat_prescan(rx,
                               m_ops[i],
                               m_d_row_ptr + m_h_terms_rows_prefix[i],
-                              m_block_dims[i],
+                              m_block_shapes[i],
                               add_diagonal);
         }
 
@@ -206,7 +205,7 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
                 m_ops[i] == Op::VV || m_ops[i] == Op::FF ||
                 m_ops[i] == Op::EE) {
 
-                if (m_block_dims[i].x == m_block_dims[i].y) {
+                if (m_block_shapes[i].x == m_block_shapes[i].y) {
                     add_diagonal = true;
                 }
             }
@@ -215,7 +214,7 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
                                m_ops[i],
                                m_d_row_ptr + m_h_terms_rows_prefix[i],
                                m_d_col_idx,
-                               m_block_dims[i],
+                               m_block_shapes[i],
                                add_diagonal);
         }
 
@@ -248,7 +247,7 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
     __host__ virtual void release() override
     {
         free(m_ops);
-        free(m_block_dims);
+        free(m_block_shapes);
         free(m_h_terms_rows_prefix);
         GPU_FREE(m_d_terms_rows_prefix);
         SparseMatrix<T>::release();
@@ -335,8 +334,6 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
 
     /**
      * @brief get the start and end of the row index for a specific term
-     * @param i
-     * @return
      */
     __device__ __host__ std::pair<IndexT, IndexT> get_term_rows_range(
         IndexT i) const
@@ -346,20 +343,6 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
 #else
         return {m_h_terms_rows_prefix[i], m_h_terms_rows_prefix[i + 1]};
 #endif
-    }
-
-
-    /**
-     * @brief check if the input entry is a non-zero, i.e., if the corresponding
-     * hessian block is allocated
-     */
-    __device__ __host__ const bool is_non_zero(const VertexHandle& row_v,
-                                               const VertexHandle& col_v) const
-    {
-        const IndexT r_id = this->get_row_id(row_v) * this->m_replicate;
-        const IndexT c_id = this->get_row_id(col_v) * this->m_replicate;
-
-        return SparseMatrix<T>::is_non_zero(r_id, c_id);
     }
 
     __device__ __host__ const T& operator()(const IndexT& row_id,
@@ -385,11 +368,11 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
                                       const VertexHandle& col_v) = delete;
 
    private:
-    int               m_num_terms;
-    IndexT*           m_h_terms_rows_prefix;
-    IndexT*           m_d_terms_rows_prefix;
-    Op*               m_ops;
-    detail::BlockDim* m_block_dims;
+    int         m_num_terms;
+    IndexT*     m_h_terms_rows_prefix;
+    IndexT*     m_d_terms_rows_prefix;
+    Op*         m_ops;
+    BlockShape* m_block_shapes;
 };
 
 }  // namespace rxmesh
