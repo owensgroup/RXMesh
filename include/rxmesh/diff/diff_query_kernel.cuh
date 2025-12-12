@@ -570,12 +570,13 @@ __global__ static void diff_vector_kernel_active(
                 residual(fh, i) = res[i].val();
             }
 
-            // TODO jacobian
+            // Jacobian
             for (int i = 0; i < InputDim; ++i) {
                 for (int j = 0; j < VariableDim; ++j) {
                     // we don't need atomics here since each thread update
                     // the gradient of one element so there is no data race
-                    //jac(term_id, fh, fh, i, j) += res.grad()[local];
+                    assert(VariableDim == res[i].grad().size());
+                    jac(term_id, fh, fh, i, j) += res[i].grad()[j];
                 }
             }
         });
@@ -593,15 +594,14 @@ __global__ static void diff_vector_kernel_active(
                 residual(fh, i) = res[i].val();
             }
 
-
-            // TODO jacobian
+            // Jacobian
             for (int t = 0; t < iter.size(); ++t) {
+                assert(iter[t].is_valid());
                 for (int i = 0; i < InputDim; ++i) {
                     for (int j = 0; j < VariableDim; ++j) {
-
-                        //::atomicAdd(
-                        //    &jac(term_id, fh, iter[t], i, j),
-                        //    res.grad()[index_mapping(VariableDim, i, local)]);
+                        ::atomicAdd(
+                            &jac(term_id, fh, iter[t], i, j),
+                            res[i].grad()[index_mapping(VariableDim, t, j)]);
                     }
                 }
             }
