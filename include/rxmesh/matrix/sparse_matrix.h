@@ -246,7 +246,7 @@ struct SparseMatrix
         }
 
         for_each([&](IndexT r, IndexT c, T val) {
-            file << r + 1 << " " << c + 1 << " " << val << std::endl;
+            file << r  << " " << c  << " " << val << std::endl;
         });
         file.close();
     }
@@ -1663,7 +1663,7 @@ struct SparseMatrix
         m_allocated = m_allocated | HOST;
     }
 
-   public:
+   
     Context              m_context;
     cusparseHandle_t     m_cusparse_handle;
     cusparseSpMatDescr_t m_spdescr;

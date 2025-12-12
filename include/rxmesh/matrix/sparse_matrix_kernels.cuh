@@ -85,27 +85,28 @@ __global__ static void sparse_mat_col_fill(const rxmesh::Context context,
     if constexpr (op == Op::V || op == Op::E || op == Op::F) {
         // block-diagonal matrix
         for_each<op, blockThreads>(context, [&](const HandleT& h) {
-            IndexT v_global =
+            IndexT v_id =
                 context.prefix<HandleT>()[h.patch_id()] + h.local_id();
-            v_global *= block_shape.x;
+
+            IndexT v_global = v_id * block_shape.x;
 
             for (IndexT i = 0; i < block_shape.x; ++i) {
                 IndexT v_base_offset = row_ptr[v_global + i];
                 for (IndexT j = 0; j < block_shape.y; ++j) {
-                    col_idx[v_base_offset + j] = v_global + j;
+                    col_idx[v_base_offset + j] = v_id * block_shape.y + j;
                 }
             }
         });
 
     } else {
 
-        auto col_fillin = [&](HandleT& v_id, const IterT& iter) {
-            auto     ids      = v_id.unpack();
+        auto col_fillin = [&](HandleT& h, const IterT& iter) {
+            auto     ids      = h.unpack();
             uint32_t patch_id = ids.first;
             uint16_t local_id = ids.second;
 
-            IndexT v_global = context.prefix<HandleT>()[patch_id] + local_id;
-            v_global *= block_shape.x;
+            IndexT v_id     = context.prefix<HandleT>()[patch_id] + local_id;
+            IndexT v_global = v_id * block_shape.x;
 
             // "block" diagonal entries (which is stored as the first entry in
             // the col_idx for each row) with block_shape.x =1,  there is only
@@ -120,7 +121,7 @@ __global__ static void sparse_mat_col_fill(const rxmesh::Context context,
                 for (IndexT i = 0; i < block_shape.x; ++i) {
                     IndexT v_base_offset = row_ptr[v_global + i];
                     for (IndexT j = 0; j < block_shape.y; ++j) {
-                        col_idx[v_base_offset + j] = v_global + j;
+                        col_idx[v_base_offset + j] = v_id * block_shape.y + j;
                     }
                 }
             }

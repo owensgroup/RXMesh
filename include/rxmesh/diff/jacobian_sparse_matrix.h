@@ -15,7 +15,8 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
         : SparseMatrix<T>(),
           m_num_terms(0),
           m_ops(nullptr),
-          m_block_shapes(nullptr)
+          m_h_block_shapes(nullptr),
+          m_d_block_shapes(nullptr)
     {
     }
 
@@ -24,6 +25,8 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
                          const std::vector<BlockShape> block_shapes)
         : SparseMatrix<T>()
     {
+
+        this->m_context = rx.get_context();
 
         // we follow the same logic as in the SparseMatrix construction but the
         // difference here is we stuck multiple matrices along the
@@ -46,10 +49,19 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
         m_ops       = (Op*)malloc(sizeof(Op) * m_num_terms);
         memcpy(m_ops, ops.data(), sizeof(Op) * m_num_terms);
 
-        m_block_shapes = (BlockShape*)malloc(sizeof(BlockShape) * m_num_terms);
-        memcpy(m_block_shapes,
+        m_h_block_shapes =
+            (BlockShape*)malloc(sizeof(BlockShape) * m_num_terms);
+        memcpy(m_h_block_shapes,
                block_shapes.data(),
                sizeof(BlockShape) * m_num_terms);
+
+        CUDA_ERROR(cudaMalloc((void**)&m_d_block_shapes,
+                              sizeof(BlockShape) * m_num_terms));
+        CUDA_ERROR(cudaMemcpy(m_d_block_shapes,
+                              m_h_block_shapes,
+                              sizeof(BlockShape) * m_num_terms,
+                              cudaMemcpyHostToDevice));
+
 
         m_h_terms_rows_prefix =
             (IndexT*)malloc(sizeof(IndexT) * (m_num_terms + 1));
@@ -107,7 +119,7 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
         this->m_num_cols = 0;
         for (int i = 0; i < m_num_terms; ++i) {
             auto [rows, cols] =
-                this->get_num_rows_and_cols(rx, m_ops[i], m_block_shapes[i]);
+                this->get_num_rows_and_cols(rx, m_ops[i], m_h_block_shapes[i]);
 
             this->m_num_rows += rows;
             m_h_terms_rows_prefix[i] = rows;
@@ -156,14 +168,14 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
                 m_ops[i] == Op::VV || m_ops[i] == Op::FF ||
                 m_ops[i] == Op::EE) {
 
-                if (m_block_shapes[i].x == m_block_shapes[i].y) {
+                if (m_h_block_shapes[i].x == m_h_block_shapes[i].y) {
                     add_diagonal = true;
                 }
             }
             this->mat_prescan(rx,
                               m_ops[i],
                               this->m_d_row_ptr + m_h_terms_rows_prefix[i],
-                              m_block_shapes[i],
+                              m_h_block_shapes[i],
                               add_diagonal);
         }
 
@@ -205,7 +217,7 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
                 m_ops[i] == Op::VV || m_ops[i] == Op::FF ||
                 m_ops[i] == Op::EE) {
 
-                if (m_block_shapes[i].x == m_block_shapes[i].y) {
+                if (m_h_block_shapes[i].x == m_h_block_shapes[i].y) {
                     add_diagonal = true;
                 }
             }
@@ -214,7 +226,7 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
                                m_ops[i],
                                this->m_d_row_ptr + m_h_terms_rows_prefix[i],
                                this->m_d_col_idx,
-                               m_block_shapes[i],
+                               m_h_block_shapes[i],
                                add_diagonal);
         }
 
@@ -248,7 +260,7 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
     __host__ virtual void release() override
     {
         free(m_ops);
-        free(m_block_shapes);
+        free(m_h_block_shapes);
         free(m_h_terms_rows_prefix);
         GPU_FREE(m_d_terms_rows_prefix);
         SparseMatrix<T>::release();
@@ -369,32 +381,32 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
                                       const IndexT   local_i,
                                       const IndexT   local_j)
     {
-        IndexT r_id =
-            this->get_row_id(row) * this->m_block_shapes[term].x + local_i;
-        r_id += m_h_terms_rows_prefix[term];
 
+#ifdef __CUDA_ARCH__
+        IndexT r_id =
+            this->get_row_id(row) * this->m_d_block_shapes[term].x + local_i;
+        r_id += m_d_terms_rows_prefix[term];
         IndexT c_id =
-            this->get_row_id(col) * this->m_block_shapes[term].y + local_j;
+            this->get_row_id(col) * this->m_d_block_shapes[term].y + local_j;
+#else
+        IndexT r_id =
+            this->get_row_id(row) * this->m_h_block_shapes[term].x + local_i;
+        r_id += m_h_terms_rows_prefix[term];
+        IndexT c_id =
+            this->get_row_id(col) * this->m_h_block_shapes[term].y + local_j;
+#endif
+        assert(this->is_non_zero(r_id, c_id));
 
         return SparseMatrix<T>::operator()(r_id, c_id);
     }
-
-    // delete the functions that access the matrix using only the VertexHandle
-    // since with the Hessian, we should also have the local index (the index
-    // within the kxk matrix)
-    __device__ __host__ const T& operator()(const VertexHandle& row_v,
-                                            const VertexHandle& col_v) const =
-        delete;
-
-    __device__ __host__ T& operator()(const VertexHandle& row_v,
-                                      const VertexHandle& col_v) = delete;
 
    private:
     int         m_num_terms;
     IndexT*     m_h_terms_rows_prefix;
     IndexT*     m_d_terms_rows_prefix;
     Op*         m_ops;
-    BlockShape* m_block_shapes;
+    BlockShape* m_h_block_shapes;
+    BlockShape* m_d_block_shapes;
 };
 
 }  // namespace rxmesh
