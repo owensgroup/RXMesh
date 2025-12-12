@@ -104,8 +104,8 @@ struct HessianSparseMatrix : public SparseMatrix<T>
      * @brief check if the input entry is a non-zero, i.e., if the corresponding
      * hessian block is allocated
      */
-    __device__ __host__ const bool is_non_zero(const VertexHandle& row_v,
-                                               const VertexHandle& col_v) const
+    __device__ __host__ bool is_non_zero(const VertexHandle& row_v,
+                                         const VertexHandle& col_v) const
     {
         const IndexT r_id = this->get_row_id(row_v) * this->m_block_shape.x;
         const IndexT c_id = this->get_row_id(col_v) * this->m_block_shape.y;

@@ -103,18 +103,18 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
         }
 
         // calc num_rows and cols in the matrix
-        m_num_rows = 0;
-        m_num_cols = 0;
+        this->m_num_rows = 0;
+        this->m_num_cols = 0;
         for (int i = 0; i < m_num_terms; ++i) {
             auto [rows, cols] =
-                get_num_rows_and_cols(rx, m_ops[i], m_block_shapes[i]);
+                this->get_num_rows_and_cols(rx, m_ops[i], m_block_shapes[i]);
 
-            m_num_rows += rows;
+            this->m_num_rows += rows;
             m_h_terms_rows_prefix[i] = rows;
             if (i == 0) {
-                m_num_cols = cols;
+                this->m_num_cols = cols;
             } else {
-                if (cols != m_num_cols) {
+                if (cols != this->m_num_cols) {
                     RXMESH_ERROR(
                         "JacobianSparseMatrix::JacobianSparseMatrix() mismatch "
                         "in the number of columns!");
@@ -140,13 +140,13 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
 
 
         // row pointer allocation and init with prefix sum for CSR
-        CUDA_ERROR(cudaMalloc((void**)&m_d_row_ptr,
-                              (m_num_rows + 1) * sizeof(IndexT)));
-        CUDA_ERROR(
-            cudaMalloc((void**)&m_d_row_acc, m_num_rows * sizeof(IndexT)));
+        CUDA_ERROR(cudaMalloc((void**)&this->m_d_row_ptr,
+                              (this->m_num_rows + 1) * sizeof(IndexT)));
+        CUDA_ERROR(cudaMalloc((void**)&this->m_d_row_acc,
+                              this->m_num_rows * sizeof(IndexT)));
 
-        CUDA_ERROR(
-            cudaMemset(m_d_row_ptr, 0, (m_num_rows + 1) * sizeof(IndexT)));
+        CUDA_ERROR(cudaMemset(
+            this->m_d_row_ptr, 0, (this->m_num_rows + 1) * sizeof(IndexT)));
 
 
         // count the nnz per row
@@ -162,41 +162,41 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
             }
             this->mat_prescan(rx,
                               m_ops[i],
-                              m_d_row_ptr + m_h_terms_rows_prefix[i],
+                              this->m_d_row_ptr + m_h_terms_rows_prefix[i],
                               m_block_shapes[i],
                               add_diagonal);
         }
 
 
         // prefix sum using CUB.
-        m_d_cub_temp_storage = nullptr;
+        this->m_d_cub_temp_storage = nullptr;
 
-        cub::DeviceScan::ExclusiveSum(m_d_cub_temp_storage,
-                                      m_cub_temp_storage_bytes,
-                                      m_d_row_ptr,
-                                      m_d_row_ptr,
-                                      m_num_rows + 1);
-        CUDA_ERROR(cudaMalloc((void**)&m_d_cub_temp_storage,
-                              m_cub_temp_storage_bytes));
+        cub::DeviceScan::ExclusiveSum(this->m_d_cub_temp_storage,
+                                      this->m_cub_temp_storage_bytes,
+                                      this->m_d_row_ptr,
+                                      this->m_d_row_ptr,
+                                      this->m_num_rows + 1);
+        CUDA_ERROR(cudaMalloc((void**)&this->m_d_cub_temp_storage,
+                              this->m_cub_temp_storage_bytes));
 
-        cub::DeviceScan::ExclusiveSum(m_d_cub_temp_storage,
-                                      m_cub_temp_storage_bytes,
-                                      m_d_row_ptr,
-                                      m_d_row_ptr,
-                                      m_num_rows + 1);
+        cub::DeviceScan::ExclusiveSum(this->m_d_cub_temp_storage,
+                                      this->m_cub_temp_storage_bytes,
+                                      this->m_d_row_ptr,
+                                      this->m_d_row_ptr,
+                                      this->m_num_rows + 1);
 
 
         // get nnz
-        CUDA_ERROR(cudaMemcpy(&m_nnz,
-                              (m_d_row_ptr + m_num_rows),
+        CUDA_ERROR(cudaMemcpy(&this->m_nnz,
+                              (this->m_d_row_ptr + this->m_num_rows),
                               sizeof(IndexT),
                               cudaMemcpyDeviceToHost));
 
         this->update_max_nnz();
 
         // column index allocation and init
-        CUDA_ERROR(
-            cudaMalloc((void**)&m_d_col_idx, m_max_nnz * sizeof(IndexT)));
+        CUDA_ERROR(cudaMalloc((void**)&this->m_d_col_idx,
+                              this->m_max_nnz * sizeof(IndexT)));
 
         // fill in col_idx
         for (int i = 0; i < m_num_terms; ++i) {
@@ -212,33 +212,34 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
 
             this->mat_col_fill(rx,
                                m_ops[i],
-                               m_d_row_ptr + m_h_terms_rows_prefix[i],
-                               m_d_col_idx,
+                               this->m_d_row_ptr + m_h_terms_rows_prefix[i],
+                               this->m_d_col_idx,
                                m_block_shapes[i],
                                add_diagonal);
         }
 
 
         // allocate value ptr
-        CUDA_ERROR(cudaMalloc((void**)&m_d_val, m_max_nnz * sizeof(T)));
-        CUDA_ERROR(cudaMemset(m_d_val, 0, m_nnz * sizeof(T)));
-        m_allocated = m_allocated | DEVICE;
+        CUDA_ERROR(
+            cudaMalloc((void**)&this->m_d_val, this->m_max_nnz * sizeof(T)));
+        CUDA_ERROR(cudaMemset(this->m_d_val, 0, this->m_nnz * sizeof(T)));
+        this->m_allocated = this->m_allocated | DEVICE;
 
-        alloce_and_move_to_host();
+        this->alloce_and_move_to_host();
 
 
         CUDA_ERROR(cudaMemcpy(m_d_terms_rows_prefix,
                               m_h_terms_rows_prefix,
-                              (m_num_terms + 1) * sizeof(IndexT),
+                              (this->m_num_terms + 1) * sizeof(IndexT),
                               cudaMemcpyHostToDevice));
 
         // create cusparse matrix
-        init_cusparse(*this);
+        this->init_cusparse(*this);
 
 #ifndef NDEBUG
-        check_repeated_indices();
+        this->check_repeated_indices();
 #endif
-        init_cudss(*this);
+        this->init_cudss(*this);
     }
 
     /**
