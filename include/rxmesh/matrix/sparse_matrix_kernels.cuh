@@ -82,6 +82,8 @@ __global__ static void sparse_mat_col_fill(const rxmesh::Context context,
     using HandleT = typename InputHandle<op>::type;
     using IterT   = typename IteratorType<op>::type;
 
+    using IterHandle = typename IterT::Handle;
+
     if constexpr (op == Op::V || op == Op::E || op == Op::F) {
         // block-diagonal matrix
         for_each<op, blockThreads>(context, [&](const HandleT& h) {
@@ -132,7 +134,7 @@ __global__ static void sparse_mat_col_fill(const rxmesh::Context context,
                 uint16_t q_local_id = q_ids.second;
 
                 IndexT q_global =
-                    context.prefix<HandleT>()[q_patch_id] + q_local_id;
+                    context.prefix<IterHandle>()[q_patch_id] + q_local_id;
                 q_global *= block_shape.y;
 
                 for (IndexT i = 0; i < block_shape.x; ++i) {
