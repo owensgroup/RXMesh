@@ -5,6 +5,8 @@
 
 #include "read_raw_field.h"
 
+#include "thrust/complex.h"
+
 using namespace rxmesh;
 using T = float;
 
@@ -140,6 +142,7 @@ int main(int argc, char** argv)
 {
     rx_init(0);
 
+    // cheburashka
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "cheburashka.obj");
 
     if (!rx.is_closed()) {
@@ -152,7 +155,7 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
     }
 
-    const int N = 4;
+    constexpr int N = 4;
 
     AlgoSetting algo_settings;
 
@@ -198,6 +201,103 @@ int main(int argc, char** argv)
 
     compute_per_edge_transport_term(rx, v, e_f_conj, e_g_conj, t_fg_4, t_fg_2);
 
+
+    using ProblemT = DiffVectorProblem<T, N, FaceHandle>;
+
+    ProblemT problem(rx);
+
+    problem.add_term<Op::EF, 7>(
+        [=] __device__(const auto& eh, const auto& iter, auto& objective) {
+            assert(iter.size() == 2);
+
+            using ActiveT = ACTIVE_TYPE(eh);
+
+            Eigen::Vector<ActiveT, 7> res;
+
+            // two faces incident to the edge eh
+            FaceHandle f_idx = iter[0];
+            FaceHandle g_idx = iter[1];
+
+            // 4 variables in face f
+            Eigen::Vector4<ActiveT> vars_f =
+                iter_val<ActiveT, 4>(eh, iter, objective, 0);
+
+            // 4 variables in face g
+            Eigen::Vector4<ActiveT> vars_g =
+                iter_val<ActiveT, 4>(eh, iter, objective, 1);
+
+
+            thrust::complex<ActiveT> alpha_f(vars_f[0], vars_f[1]);
+            thrust::complex<ActiveT> beta_f(vars_f[2], vars_f[3]);
+            thrust::complex<ActiveT> alpha_g(vars_g[0], vars_g[1]);
+            thrust::complex<ActiveT> beta_g(vars_g[2], vars_g[3]);
+
+            // Smoothness term:
+            // Compare complex coefficients of smoothness polynomial across edge
+            // [Diamanti 2015, Eq. 17, 18]
+            thrust::complex<ActiveT> C_f_0 = sqr(alpha_f) * sqr(beta_f);
+            thrust::complex<ActiveT> C_g_0 = sqr(alpha_g) * sqr(beta_g);
+            thrust::complex<ActiveT> C_f_2 = -(sqr(alpha_f) + sqr(beta_f));
+            thrust::complex<ActiveT> C_g_2 = -(sqr(alpha_g) + sqr(beta_g));
+
+            thrust::complex<ActiveT> fg_4(t_fg_4(eh).x, t_fg_4(eh).y);
+            thrust::complex<ActiveT> fg_2(t_fg_2(eh).x, t_fg_2(eh).y);
+
+            thrust::complex<ActiveT> C_0_residual = C_f_0 * fg_4 - C_g_0;
+            thrust::complex<ActiveT> C_2_residual = C_f_2 * fg_2 - C_g_2;
+
+            T w_smooth_sqrt = sqrt(algo_settings.w_smooth);
+
+            res[0] = w_smooth_sqrt * C_0_residual.real();
+            res[1] = w_smooth_sqrt * C_0_residual.imag();
+            res[2] = w_smooth_sqrt * C_2_residual.real();
+            res[3] = w_smooth_sqrt * C_2_residual.imag();
+
+
+            // PolyCurl term:
+            // Compare real coefficients of polycurl polynomial across edge
+            // [Diamanti 2015, Eq. 11, 19]
+            thrust::complex<ActiveT> f_conj(e_f_conj(eh).x, e_f_conj(eh).y);
+            thrust::complex<ActiveT> g_conj(e_g_conj(eh).x, e_g_conj(eh).y);
+
+            ActiveT af_ef = (alpha_f * f_conj).real();
+            ActiveT ag_eg = (alpha_g * g_conj).real();
+            ActiveT bf_ef = (beta_f * f_conj).real();
+            ActiveT bg_eg = (beta_g * g_conj).real();
+            ActiveT c_f_0 = sqr(af_ef) * sqr(bf_ef);
+            ActiveT c_g_0 = sqr(ag_eg) * sqr(bg_eg);
+            ActiveT c_f_2 = -(sqr(af_ef) + sqr(bf_ef));
+            ActiveT c_g_2 = -(sqr(ag_eg) + sqr(bg_eg));
+            res[4]        = algo_settings.w_polycurl * (c_f_0 - c_g_0);
+            res[5]        = sqrt(algo_settings.w_polycurl) * (c_f_2 - c_g_2);
+
+            // PolyQuotient term:
+            // Compare real coefficients of polyquotient terms across edge
+            // [Diamanti 2015, Eq. 21] There are typos in Eq. 14 and 21, where +
+            // should be -.
+            ActiveT q1 = (sqr(bf_ef) - sqr(af_ef)) * ag_eg * bg_eg;
+            ActiveT q2 = (sqr(bg_eg) - sqr(ag_eg)) * af_ef * bf_ef;
+            res[6]     = sqrt(algo_settings.w_polyquotient) * (q1 - q2);
+
+            return res;
+        });
+
+
+    problem.add_term<Op::F, 5>([=] __device__(const auto& eh, auto& objective) {
+        using ActiveT = ACTIVE_TYPE(eh);
+
+        Eigen::Vector<ActiveT, 5> res;
+
+
+        return res;
+    });
+
+
+    problem.prep_eval();
+
+    // problem.jac->to_file("jj");
+
+    problem.eval_terms();
 
 #if USE_POLYSCOPE
     rx.get_polyscope_mesh()->addFaceVectorQuantity("xInit", x_init);
