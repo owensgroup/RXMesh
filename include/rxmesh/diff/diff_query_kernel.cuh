@@ -531,6 +531,7 @@ template <uint32_t blockThreads,
           typename LambdaT>
 __global__ static void diff_vector_kernel_active(
     const Context                                               context,
+    int                                                         term_id,
     JacobianSparseMatrix<typename ScalarT::PassiveType>         jac,
     DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor> residual,
     Attribute<typename ScalarT::PassiveType, ObjHandleT>        objective,
@@ -570,10 +571,12 @@ __global__ static void diff_vector_kernel_active(
             }
 
             // TODO jacobian
-            for (int local = 0; local < VariableDim; ++local) {
-                // we don't need atomics here since each thread update
-                // the gradient of one element so there is no data race
-                // grad(fh, local) += res.grad()[local];
+            for (int i = 0; i < InputDim; ++i) {
+                for (int j = 0; j < VariableDim; ++j) {
+                    // we don't need atomics here since each thread update
+                    // the gradient of one element so there is no data race
+                    //jac(term_id, fh, fh, i, j) += res.grad()[local];
+                }
             }
         });
     } else {
@@ -592,12 +595,14 @@ __global__ static void diff_vector_kernel_active(
 
 
             // TODO jacobian
-            for (int i = 0; i < iter.size(); ++i) {
-                for (int local = 0; local < VariableDim; ++local) {
+            for (int t = 0; t < iter.size(); ++t) {
+                for (int i = 0; i < InputDim; ++i) {
+                    for (int j = 0; j < VariableDim; ++j) {
 
-                    //::atomicAdd(
-                    //    &grad(iter[i], local),
-                    //    res.grad()[index_mapping(VariableDim, i, local)]);
+                        //::atomicAdd(
+                        //    &jac(term_id, fh, iter[t], i, j),
+                        //    res.grad()[index_mapping(VariableDim, i, local)]);
+                    }
                 }
             }
         };

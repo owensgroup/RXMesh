@@ -20,7 +20,8 @@ namespace rxmesh {
 template <typename T, typename ObjHandleT>
 struct VectorTerm
 {
-    virtual void eval_active(Attribute<T, ObjHandleT>&        obj,
+    virtual void eval_active(int                              term_id,
+                             Attribute<T, ObjHandleT>&        obj,
                              DenseMatrix<T, Eigen::RowMajor>& residual,
                              JacobianSparseMatrix<T>&         jac,
                              cudaStream_t                     stream) = 0;
@@ -86,7 +87,8 @@ struct TemplatedVectorTerm
     /**
      * @brief Evaluate the energy term using active/differentiable type
      */
-    void eval_active(Attribute<T, ObjHandleT>&        obj,
+    void eval_active(int                              term_id,
+                     Attribute<T, ObjHandleT>&        obj,
                      DenseMatrix<T, Eigen::RowMajor>& residual,
                      JacobianSparseMatrix<T>&         jac,
                      cudaStream_t                     stream)
@@ -101,6 +103,7 @@ struct TemplatedVectorTerm
                                                         VariableDim,
                                                         LambdaT>,
                       stream,
+                      term_id,
                       jac,
                       residual,
                       obj,

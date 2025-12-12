@@ -141,13 +141,8 @@ struct DiffVectorProblem
 
         for (size_t i = 0; i < terms.size(); ++i) {
             terms[i]->eval_active(
-                *objective, residual_reshaped[i], *jac, stream);
-
-            {
-                CUDA_ERROR(cudaGetLastError());
-                CUDA_ERROR(cudaDeviceSynchronize());
-            }
-        }        
+                i, *objective, residual_reshaped[i], *jac, stream);
+        }
     }
 
 

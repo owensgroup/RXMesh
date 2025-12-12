@@ -357,6 +357,27 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
         return SparseMatrix<T>::operator()(row_id, col_id);
     }
 
+    /**
+     * @brief access the Jacobian given the term id, row and col handles and
+     * local index in the block
+     */
+    template <typename HandleT0, typename HandleT1>
+    __device__ __host__ T& operator()(int            term,
+                                      const HandleT0 row,
+                                      const HandleT1 col,
+                                      const IndexT   local_i,
+                                      const IndexT   local_j)
+    {
+        IndexT r_id =
+            this->get_row_id(row) * this->m_block_shapes[term].x + local_i;
+        r_id += m_h_terms_rows_prefix[term];
+
+        IndexT c_id =
+            this->get_row_id(col) * this->m_block_shapes[term].y + local_j;
+
+        return SparseMatrix<T>::operator()(r_id, c_id);
+    }
+
     // delete the functions that access the matrix using only the VertexHandle
     // since with the Hessian, we should also have the local index (the index
     // within the kxk matrix)
