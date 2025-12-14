@@ -27,6 +27,9 @@ namespace rxmesh {
 template <typename T>
 struct SparseMatrix
 {
+    template<typename U>
+    friend class VCycle;
+
     using IndexT = int;
 
     using Type = T;
