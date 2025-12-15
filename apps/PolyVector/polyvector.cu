@@ -10,18 +10,6 @@
 using namespace rxmesh;
 using T = float;
 
-struct AlgoSetting
-{
-    T       w_smooth              = 1.0;
-    const T w_smooth_decay        = 0.8;
-    const T w_polycurl            = 100.0;
-    const T w_polyquotient        = 10.0;
-    const T w_close_unconstrained = 1e-3;
-    const T w_close_constrained   = 100.0;
-    const T w_barrier             = 0.1;
-    const T s_barrier             = 0.9;
-};
-
 template <typename FAttrT>
 int inline viz_field(RXMeshStatic& rx, const int N, FAttrT& attr)
 {
@@ -115,26 +103,48 @@ void inline compute_per_edge_transport_term(RXMeshStatic& rx,
             // face g's basis
             Eigen::Vector3<T> g_b1;
             Eigen::Vector3<T> g_b2;
-            compute_basis(x0, x2, x3, f_b1, f_b2);
-
+            compute_basis(x0, x2, x3, g_b1, g_b2);
 
             Eigen::Vector3<T> e = (x2 - x0).normalized();
 
+            // printf(
+            //     "\n eh= %d, f_b1 (%f, %f, %f), f_b2 (%f, %f, %f), g_b1 (%f, "
+            //     "%f, %f), g_b2 (%f, %f, %f)",
+            //     eh.local_id(),
+            //     f_b1[0],
+            //     f_b1[1],
+            //     f_b1[2],
+            //     f_b2[0],
+            //     f_b2[1],
+            //     f_b2[2],
+            //     g_b1[0],
+            //     g_b1[1],
+            //     g_b1[2],
+            //     g_b2[0],
+            //     g_b2[1],
+            //     g_b2[2]);
 
-            cuComplex f_conj = make_cuComplex(f_b1.dot(e), f_b2.dot(e));
-            cuComplex g_conj = make_cuComplex(g_b1.dot(e), g_b2.dot(e));
+            e_f_conj(eh) =
+                thrust::conj(thrust::complex<T>(f_b1.dot(e), f_b2.dot(e)));
 
-            e_f_conj(eh) = cuConjf(f_conj);
-            e_g_conj(eh) = cuConjf(g_conj);
+            e_g_conj(eh) =
+                thrust::conj(thrust::complex<T>(g_b1.dot(e), g_b2.dot(e)));
 
-            cuComplex fg = cuCdivf(f_conj, g_conj);
+            thrust::complex<T> t_fg = e_f_conj(eh) / e_g_conj(eh);
 
-            cuComplex fg_2 = cuCmulf(fg, fg);
-            cuComplex fg_4 = cuCmulf(fg_2, fg_2);
-
-            t_fg_2(eh) = fg_2;
-            t_fg_4(eh) = fg_4;
+            t_fg_2(eh) = sqr(t_fg);
+            t_fg_4(eh) = sqr(t_fg_2(eh));
         });
+
+    //{
+    //    CUDA_ERROR(cudaGetLastError());
+    //    CUDA_ERROR(cudaDeviceSynchronize());
+    //}
+
+    e_f_conj.move(DEVICE, HOST);
+    e_g_conj.move(DEVICE, HOST);
+    t_fg_4.move(DEVICE, HOST);
+    t_fg_2.move(DEVICE, HOST);
 }
 
 
@@ -157,7 +167,14 @@ int main(int argc, char** argv)
 
     constexpr int N = 4;
 
-    AlgoSetting algo_settings;
+    const T w_smooth                   = 1.0;
+    const T w_smooth_decay             = 0.8;
+    const T w_polycurl                 = 100.0;
+    const T w_polyquotient             = 10.0;
+    const T w_close_unconstrained_sqrt = std::sqrt(1e-3);
+    const T w_close_constrained_sqrt   = 10.0;
+    const T w_barrier                  = 0.1;
+    const T s_barrier                  = 0.9;
 
     // input coordinates
     auto v = *rx.get_input_vertex_coordinates();
@@ -181,9 +198,6 @@ int main(int argc, char** argv)
         return EXIT_FAILURE;
     }
 
-    auto x = *rx.add_face_attribute<T>("x", N);
-    x.copy_from(x_init, DEVICE, DEVICE);
-
     auto x_prev = *rx.add_face_attribute<T>("x_prev", N);
     x_prev.copy_from(x_init, DEVICE, DEVICE);
 
@@ -195,19 +209,49 @@ int main(int argc, char** argv)
 
 
     // constant transport terms for polynomial coefficients per edge
-    // TODO replace cuComplex with thrust::complex
-    auto e_f_conj = *rx.add_edge_attribute<cuComplex>("e_f_conj", 1);
-    auto e_g_conj = *rx.add_edge_attribute<cuComplex>("e_g_conj", 1);
-    auto t_fg_4   = *rx.add_edge_attribute<cuComplex>("t_fg_4", 1);
-    auto t_fg_2   = *rx.add_edge_attribute<cuComplex>("t_fg_2", 1);
+    auto e_f_conj = *rx.add_edge_attribute<thrust::complex<T>>("e_f_conj", 1);
+    auto e_g_conj = *rx.add_edge_attribute<thrust::complex<T>>("e_g_conj", 1);
+    auto t_fg_4   = *rx.add_edge_attribute<thrust::complex<T>>("t_fg_4", 1);
+    auto t_fg_2   = *rx.add_edge_attribute<thrust::complex<T>>("t_fg_2", 1);
 
     compute_per_edge_transport_term(rx, v, e_f_conj, e_g_conj, t_fg_4, t_fg_2);
 
 
     using ProblemT = DiffVectorProblem<T, N, FaceHandle>;
 
-    ProblemT problem(rx);
+    // rx.for_each_face(HOST, [&](const FaceHandle fh) {
+    //     int id = rx.map_to_global(fh);
+    //
+    //     printf("\n fh= %d, id = %d, x_init(%f, %f, %f, %f)",
+    //            fh.local_id(),
+    //            id,
+    //            x_init(fh, 0),
+    //            x_init(fh, 1),
+    //            x_init(fh, 2),
+    //            x_init(fh, 3));
+    // });
+    //
+    // rx.for_each_edge(HOST, [&](const EdgeHandle eh) {
+    //     int id = rx.map_to_global(eh);
+    //
+    //     printf(
+    //         "\n eh= %d, id = %d, e_f_conj(%f, %f),  e_g_conj(%f, %f),  "
+    //         "t_fg_4(%f, %f),  t_fg_2(%f, %f)",
+    //         eh.local_id(),
+    //         id,
+    //         e_f_conj(eh).real(),
+    //         e_f_conj(eh).imag(),
+    //         e_g_conj(eh).real(),
+    //         e_g_conj(eh).imag(),
+    //         t_fg_4(eh).real(),
+    //         t_fg_4(eh).imag(),
+    //         t_fg_2(eh).real(),
+    //         t_fg_2(eh).imag());
+    // });
+    ///
 
+
+    ProblemT problem(rx);
     problem.add_term<Op::EF, 7>(
         [=] __device__(const auto& eh, const auto& iter, auto& objective) {
             assert(iter.size() == 2);
@@ -219,6 +263,11 @@ int main(int argc, char** argv)
             // two faces incident to the edge eh
             FaceHandle f_idx = iter[0];
             FaceHandle g_idx = iter[1];
+
+            // printf("\n eh= %d, f= %d, g= %d",
+            //        eh.local_id(),
+            //        f_idx.local_id(),
+            //        g_idx.local_id());
 
             // 4 variables in face f
             Eigen::Vector4<ActiveT> vars_f =
@@ -242,13 +291,13 @@ int main(int argc, char** argv)
             thrust::complex<ActiveT> C_f_2 = -(sqr(alpha_f) + sqr(beta_f));
             thrust::complex<ActiveT> C_g_2 = -(sqr(alpha_g) + sqr(beta_g));
 
-            thrust::complex<ActiveT> fg_4(t_fg_4(eh).x, t_fg_4(eh).y);
-            thrust::complex<ActiveT> fg_2(t_fg_2(eh).x, t_fg_2(eh).y);
+            thrust::complex<ActiveT> fg_4(t_fg_4(eh).real(), t_fg_4(eh).imag());
+            thrust::complex<ActiveT> fg_2(t_fg_2(eh).real(), t_fg_2(eh).imag());
 
             thrust::complex<ActiveT> C_0_residual = C_f_0 * fg_4 - C_g_0;
             thrust::complex<ActiveT> C_2_residual = C_f_2 * fg_2 - C_g_2;
 
-            T w_smooth_sqrt = sqrt(algo_settings.w_smooth);
+            T w_smooth_sqrt = sqrt(w_smooth);
 
             res[0] = w_smooth_sqrt * C_0_residual.real();
             res[1] = w_smooth_sqrt * C_0_residual.imag();
@@ -259,8 +308,10 @@ int main(int argc, char** argv)
             // PolyCurl term:
             // Compare real coefficients of polycurl polynomial across edge
             // [Diamanti 2015, Eq. 11, 19]
-            thrust::complex<ActiveT> f_conj(e_f_conj(eh).x, e_f_conj(eh).y);
-            thrust::complex<ActiveT> g_conj(e_g_conj(eh).x, e_g_conj(eh).y);
+            thrust::complex<ActiveT> f_conj(e_f_conj(eh).real(),
+                                            e_f_conj(eh).imag());
+            thrust::complex<ActiveT> g_conj(e_g_conj(eh).real(),
+                                            e_g_conj(eh).imag());
 
             ActiveT af_ef = (alpha_f * f_conj).real();
             ActiveT ag_eg = (alpha_g * g_conj).real();
@@ -270,8 +321,8 @@ int main(int argc, char** argv)
             ActiveT c_g_0 = sqr(ag_eg) * sqr(bg_eg);
             ActiveT c_f_2 = -(sqr(af_ef) + sqr(bf_ef));
             ActiveT c_g_2 = -(sqr(ag_eg) + sqr(bg_eg));
-            res[4]        = algo_settings.w_polycurl * (c_f_0 - c_g_0);
-            res[5]        = sqrt(algo_settings.w_polycurl) * (c_f_2 - c_g_2);
+            res[4]        = w_polycurl * (c_f_0 - c_g_0);
+            res[5]        = sqrt(w_polycurl) * (c_f_2 - c_g_2);
 
             // PolyQuotient term:
             // Compare real coefficients of polyquotient terms across edge
@@ -279,18 +330,17 @@ int main(int argc, char** argv)
             // should be -.
             ActiveT q1 = (sqr(bf_ef) - sqr(af_ef)) * ag_eg * bg_eg;
             ActiveT q2 = (sqr(bg_eg) - sqr(ag_eg)) * af_ef * bf_ef;
-            res[6]     = sqrt(algo_settings.w_polyquotient) * (q1 - q2);
+            res[6]     = sqrt(w_polyquotient) * (q1 - q2);
 
             return res;
         });
-
 
     auto ctx = rx.get_context();
 
     problem.add_term<Op::F, 5>([=] __device__(const auto& fh, auto& objective) {
         using ActiveT = ACTIVE_TYPE(fh);
 
-        uint32_t id = ctx.linear_id(fh);
+        uint32_t id = ctx.linear_id_fast(fh);
 
         Eigen::Vector<ActiveT, 5> res;
 
@@ -315,17 +365,24 @@ int main(int argc, char** argv)
 
         thrust::complex<T> beta_ref(x_ref[2], x_ref[3]);
 
-        T w_close_sqrt;
+
+        T w_close_sqrt = 0;
         if (id == 0) {
-            T w_close_sqrt = sqrt(algo_settings.w_close_constrained);
+            w_close_sqrt = w_close_constrained_sqrt;
         } else {
-            T w_close_sqrt = sqrt(algo_settings.w_close_unconstrained);
+            w_close_sqrt = w_close_unconstrained_sqrt;
         }
 
-        res[0] = w_close_sqrt * (alpha.real() - alpha_ref.real());
-        res[1] = w_close_sqrt * (alpha.imag() - alpha_ref.imag());
-        res[2] = w_close_sqrt * (beta.real() - beta_ref.real());
-        res[3] = w_close_sqrt * (beta.imag() - beta_ref.imag());
+
+        ActiveT alpha_real = alpha.real() - alpha_ref.real();
+        ActiveT alpha_imag = alpha.imag() - alpha_ref.imag();
+        ActiveT beta_real  = beta.real() - beta_ref.real();
+        ActiveT beta_imag  = beta.imag() - beta_ref.imag();
+
+        res[0] = w_close_sqrt * alpha_real;
+        res[1] = w_close_sqrt * alpha_imag;
+        res[2] = w_close_sqrt * beta_real;
+        res[3] = w_close_sqrt * beta_imag;
 
 
         // Barrier term:
@@ -338,19 +395,20 @@ int main(int argc, char** argv)
             using PassiveT = PassiveType<ActiveT>;
 
             barrier = ActiveT(std::numeric_limits<PassiveT>::max());
-        } else if (barrier_x < algo_settings.s_barrier) {
+        } else if (barrier_x < s_barrier) {
             ActiveT b =
-                barrier_x * sqr(barrier_x) /
-                    (algo_settings.s_barrier * sqr(algo_settings.s_barrier)) -
-                3.0 * sqr(barrier_x) / sqr(algo_settings.s_barrier) +
-                3.0 * barrier_x / algo_settings.s_barrier;
+                barrier_x * sqr(barrier_x) / (s_barrier * sqr(s_barrier)) -
+                3.0 * sqr(barrier_x) / sqr(s_barrier) +
+                3.0 * barrier_x / s_barrier;
             barrier = 1.0 / b - 1.0;
         }
-        res[4] = sqrt(algo_settings.w_barrier) * barrier;
+        res[4] = sqrt(w_barrier) * barrier;
 
         return res;
     });
 
+
+    problem.objective->copy_from(x_init, LOCATION_ALL, LOCATION_ALL);
 
     problem.prep_eval();
 
