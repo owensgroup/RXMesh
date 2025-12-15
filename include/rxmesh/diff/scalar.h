@@ -26,7 +26,7 @@ namespace rxmesh {
  * gradient-only mode.
  */
 template <typename PassiveT, int k, bool WithHessian = true>
-struct Scalar
+struct ALIGN(32) Scalar
 {
     static constexpr int  k_           = k;
     static constexpr bool WithHessian_ = WithHessian;
@@ -44,12 +44,11 @@ struct Scalar
 
 
    private:
-    int dk;  // k in case of dynamic size
+    // int dk;  // k in case of dynamic size
 
     // ///////////////////////////////////////////////////////////////////////
     // Data
     // ///////////////////////////////////////////////////////////////////////
-    PassiveT m_val = 0.0;  // Scalar value of this (intermediate) variable.
 
     // Gradient (first derivative) of val w.r.t. the active variable vector.
     GradType m_grad;
@@ -60,6 +59,8 @@ struct Scalar
     // Hessian (second derivative) of val w.r.t. the active variable vector.
     HessType m_hess;
     // alignas(16) std::byte m_map_hess[sizeof(HessMapType)];
+
+    PassiveT m_val = 0.0;  // Scalar value of this (intermediate) variable.
 
    public:
     // ///////////////////////////////////////////////////////////////////////
@@ -72,7 +73,8 @@ struct Scalar
     __device__ __host__ constexpr int dim() const
     {
         if constexpr (k == Eigen::Dynamic) {
-            return dk;
+            // return dk;
+            return 0;
         } else {
             return k_;
         }
@@ -148,7 +150,7 @@ struct Scalar
     // ///////////////////////////////////////////////////////////////////////
 
     /// Default constructor, copy, move, assignment
-    __host__ __device__ Scalar() : m_val(0), dk(-1)
+    __host__ __device__ Scalar() : m_val(0) /*, dk(-1)*/
     {
         if constexpr (k != Eigen::Dynamic) {
             m_grad = GradType::Zero(k);
@@ -172,7 +174,7 @@ struct Scalar
         // lockstep, we can safely update and use `shrd_alloc` within each
         // thread independently while being aware of other threads allocation.
 
-        dk = dimension;
+        // dk = dimension;
 
         assert(k == Eigen::Dynamic);
 
@@ -182,7 +184,7 @@ struct Scalar
 
             // grad allocation
 
-            PassiveT* shmem_g = shrd_alloc.alloc<PassiveT>(dk);
+            // PassiveT* shmem_g = shrd_alloc.alloc<PassiveT>(dk);
 
             // new (&m_map_grad) GradMapType(shmem_g, dk);
 
@@ -209,7 +211,7 @@ struct Scalar
 
     /// Passive variable a.k.a. constant.
     /// Gradient and Hessian are zero.
-    __host__ __device__ Scalar(PassiveT _val) : m_val(_val), dk(-1)
+    __host__ __device__ Scalar(PassiveT _val) : m_val(_val) /*, dk(-1)*/
     {
         if constexpr (k != Eigen::Dynamic) {
             m_grad = GradType::Zero(k);
@@ -225,7 +227,7 @@ struct Scalar
     /// Active variable.
     /// _idx: index in variable vector
     __host__ __device__ Scalar(PassiveT _val, Eigen::Index _idx)
-        : m_val(_val), dk(-1)
+        : m_val(_val) /*, dk(-1)*/
     {
         if constexpr (k != Eigen::Dynamic) {
             m_grad = GradType::Zero(k);
