@@ -1,7 +1,7 @@
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/diff/diff_vector_problem.h"
-#include "rxmesh/diff/newton_solver.h"
+#include "rxmesh/diff/gauss_newton_solver.h"
 
 #include "read_raw_field.h"
 
@@ -167,14 +167,19 @@ int main(int argc, char** argv)
 
     constexpr int N = 4;
 
-    const T w_smooth                   = 1.0;
-    const T w_smooth_decay             = 0.8;
-    const T w_polycurl                 = 100.0;
-    const T w_polyquotient             = 10.0;
-    const T w_close_unconstrained_sqrt = std::sqrt(1e-3);
-    const T w_close_constrained_sqrt   = 10.0;
-    const T w_barrier                  = 0.1;
-    const T s_barrier                  = 0.9;
+    const T   w_smooth_decay             = 0.8;
+    const T   w_polycurl                 = 100.0;
+    const T   w_polyquotient             = 10.0;
+    const T   w_close_unconstrained_sqrt = std::sqrt(1e-3);
+    const T   w_close_constrained_sqrt   = 10.0;
+    const T   w_barrier                  = 0.1;
+    const T   s_barrier                  = 0.9;
+    T         step_size                  = 0.1;
+    const int max_iters                  = 60;
+
+    DenseMatrix<T> w_smooth(1, 1, LOCATION_ALL);
+    w_smooth(0) = 1.0;
+    w_smooth.move(HOST, DEVICE);
 
     // input coordinates
     auto v = *rx.get_input_vertex_coordinates();
@@ -204,9 +209,13 @@ int main(int argc, char** argv)
     auto x_constr = *rx.add_face_attribute<T>("x_constr", N);
     x_constr.copy_from(x_init, DEVICE, DEVICE);
 
-    // soft constraints only face 0
-    const FaceHandle constr_face(0, 0);
+    using ProblemT = DiffVectorProblem<T, N, FaceHandle>;
+    ProblemT problem(rx);
 
+    // used in line search
+    auto x_new = *rx.add_attribute_like("x_new", *problem.objective);
+
+    GaussNetwtonSolver<T, N, FaceHandle> solver(problem);
 
     // constant transport terms for polynomial coefficients per edge
     auto e_f_conj = *rx.add_edge_attribute<thrust::complex<T>>("e_f_conj", 1);
@@ -217,41 +226,6 @@ int main(int argc, char** argv)
     compute_per_edge_transport_term(rx, v, e_f_conj, e_g_conj, t_fg_4, t_fg_2);
 
 
-    using ProblemT = DiffVectorProblem<T, N, FaceHandle>;
-
-    // rx.for_each_face(HOST, [&](const FaceHandle fh) {
-    //     int id = rx.map_to_global(fh);
-    //
-    //     printf("\n fh= %d, id = %d, x_init(%f, %f, %f, %f)",
-    //            fh.local_id(),
-    //            id,
-    //            x_init(fh, 0),
-    //            x_init(fh, 1),
-    //            x_init(fh, 2),
-    //            x_init(fh, 3));
-    // });
-    //
-    // rx.for_each_edge(HOST, [&](const EdgeHandle eh) {
-    //     int id = rx.map_to_global(eh);
-    //
-    //     printf(
-    //         "\n eh= %d, id = %d, e_f_conj(%f, %f),  e_g_conj(%f, %f),  "
-    //         "t_fg_4(%f, %f),  t_fg_2(%f, %f)",
-    //         eh.local_id(),
-    //         id,
-    //         e_f_conj(eh).real(),
-    //         e_f_conj(eh).imag(),
-    //         e_g_conj(eh).real(),
-    //         e_g_conj(eh).imag(),
-    //         t_fg_4(eh).real(),
-    //         t_fg_4(eh).imag(),
-    //         t_fg_2(eh).real(),
-    //         t_fg_2(eh).imag());
-    // });
-    ///
-
-
-    ProblemT problem(rx);
     problem.add_term<Op::EF, 7>(
         [=] __device__(const auto& eh, const auto& iter, auto& objective) {
             assert(iter.size() == 2);
@@ -261,13 +235,8 @@ int main(int argc, char** argv)
             Eigen::Vector<ActiveT, 7> res;
 
             // two faces incident to the edge eh
-            FaceHandle f_idx = iter[0];
-            FaceHandle g_idx = iter[1];
-
-            // printf("\n eh= %d, f= %d, g= %d",
-            //        eh.local_id(),
-            //        f_idx.local_id(),
-            //        g_idx.local_id());
+            // FaceHandle f_idx = iter[0];
+            // FaceHandle g_idx = iter[1];
 
             // 4 variables in face f
             Eigen::Vector4<ActiveT> vars_f =
@@ -297,7 +266,7 @@ int main(int argc, char** argv)
             thrust::complex<ActiveT> C_0_residual = C_f_0 * fg_4 - C_g_0;
             thrust::complex<ActiveT> C_2_residual = C_f_2 * fg_2 - C_g_2;
 
-            T w_smooth_sqrt = sqrt(w_smooth);
+            T w_smooth_sqrt = sqrt(w_smooth(0));
 
             res[0] = w_smooth_sqrt * C_0_residual.real();
             res[1] = w_smooth_sqrt * C_0_residual.imag();
@@ -407,14 +376,68 @@ int main(int argc, char** argv)
         return res;
     });
 
-
     problem.objective->copy_from(x_init, LOCATION_ALL, LOCATION_ALL);
 
     problem.prep_eval();
+    solver.prep_solver();
 
-    // problem.jac->to_file("jj");
 
-    problem.eval_terms();
+    for (int iter = 0; iter < max_iters; ++iter) {
+        // Compute derivatives and Gauss-Newton direction
+
+        // compute g = -J^T r
+        // the -1.0 is used here so we don't need to scale things again
+        // in the gauss-newton which solves (J^T J).dir = -J^T r
+        problem.eval_terms_sum_of_squares(-1.0);
+
+        T f = problem.get_current_loss();
+
+        RXMESH_INFO("Iteration: {}, Energy: {}", iter, f);
+
+        // compute new direction
+        solver.compute_direction();
+
+        // Line search
+        while (true) {
+            // take step
+            rx.for_each_face(
+                DEVICE,
+                [x_new = x_new,
+                 obj   = *problem.objective,
+                 dir   = solver.dir,
+                 sz    = step_size] __device__(const FaceHandle fh) mutable {
+                    for (int i = 0; i < N; ++i) {
+                        x_new(fh, i) = obj(fh, i) + sz * dir(fh, i);
+                    }
+                });
+
+            // eval current energy
+            problem.eval_terms_passive(&x_new);
+
+            T f_new = problem.get_current_loss();
+
+            if (f_new < f) {
+                // Line search success. Increase step size in next iteration.
+                step_size *= 2.0;
+                break;
+            } else {
+                // Decrease step size and try again.
+                step_size *= 0.5;
+                if (step_size < 1e-10) {
+                    RXMESH_ERROR("Line search failed");
+                }
+            }
+        }
+
+        x_prev.copy_from(*problem.objective, DEVICE, DEVICE);
+        problem.objective->copy_from(x_new, DEVICE, DEVICE);
+
+
+        // Decay smoothness term after every 5 iters
+        if ((iter + 1) % 5 == 0) {
+            w_smooth.multiply(w_smooth_decay);
+        }
+    }
 
 #if USE_POLYSCOPE
     rx.get_polyscope_mesh()->addFaceVectorQuantity2D("xInit", x_init);

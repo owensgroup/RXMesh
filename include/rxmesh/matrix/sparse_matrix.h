@@ -27,7 +27,7 @@ namespace rxmesh {
 template <typename T>
 struct SparseMatrix
 {
-    template<typename U>
+    template <typename U>
     friend class VCycle;
 
     using IndexT = int;
@@ -121,6 +121,16 @@ struct SparseMatrix
 #ifndef NDEBUG
         check_repeated_indices();
 #endif
+        init_cudss(*this);
+    }
+
+    /**
+     * @brief create a placeholder sparse matrix with num_rows, num_cols but
+     * zero non-zero values
+     */
+    SparseMatrix(IndexT num_rows, IndexT num_cols) : SparseMatrix()
+    {
+        init_cusparse(*this);
         init_cudss(*this);
     }
 
@@ -249,7 +259,7 @@ struct SparseMatrix
         }
 
         for_each([&](IndexT r, IndexT c, T val) {
-            file << r  << " " << c  << " " << val << std::endl;
+            file << r << " " << c << " " << val << std::endl;
         });
         file.close();
     }

@@ -20,8 +20,11 @@ struct DiffVectorProblem
 
     RXMeshStatic& rx;
 
-    std::shared_ptr<Attribute<T, ObjHandleT>>               objective;
-    std::shared_ptr<DenseMatT>                              residual;
+    std::shared_ptr<Attribute<T, ObjHandleT>> objective;
+    std::shared_ptr<DenseMatT>                residual;
+    std::shared_ptr<DenseMatT>                grad;
+
+    // residual_reshaped is a view in residual for different terms
     std::vector<DenseMatT>                                  residual_reshaped;
     std::shared_ptr<JacSpMatT>                              jac;
     std::vector<Op>                                         ops;
@@ -119,6 +122,8 @@ struct DiffVectorProblem
         residual =
             std::make_shared<DenseMatT>(rx, jac->rows(), 1, LOCATION_ALL);
 
+        grad = std::make_shared<DenseMatT>(rx, jac->cols(), 1, LOCATION_ALL);
+
         // populate residual_reshaped
         for (int i = 0; i < jac->get_num_terms(); ++i) {
 
@@ -126,10 +131,12 @@ struct DiffVectorProblem
 
             residual_reshaped.emplace_back(residual->segment_range(st, end));
         }
+
+        jac->alloc_multiply_buffer(*residual, *grad, true, false);
     }
 
     /**
-     * @brief evaluate all terms in active mode
+     * @brief evaluate all terms in active mode and calculate the Jacobian
      */
     void eval_terms(cudaStream_t stream = NULL)
     {
@@ -143,6 +150,25 @@ struct DiffVectorProblem
             terms[i]->eval_active(
                 i, *objective, residual_reshaped[i], *jac, stream);
         }
+    }
+
+    /**
+     * @brief evaluate all terms in active mode and calculate Jacobin and grad
+     * where grad = scale*Jac^T*res
+     */
+    void eval_terms_sum_of_squares(T scale = T(1.), cudaStream_t stream = NULL)
+    {
+        eval_terms(stream);
+
+        jac->multiply(*residual, *grad, true, false, scale, T(0.), stream);
+    }
+
+    /**
+     * @brief compute the current loss as norm2 of the residual
+     */
+    T get_current_loss(cudaStream_t stream = NULL)
+    {
+        return residual->norm2(stream);
     }
 
 
