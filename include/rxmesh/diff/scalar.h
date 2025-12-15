@@ -12,6 +12,8 @@
 #include <Eigen/Dense>
 #include <cmath>
 
+#include "rxmesh/util/macros.h"
+
 #include "rxmesh/kernels/shmem_allocator.cuh"
 
 #include "rxmesh/diff/util.h"
