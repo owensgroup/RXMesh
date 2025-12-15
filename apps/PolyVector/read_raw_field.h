@@ -7,7 +7,9 @@
 template <typename FAttrT>
 int inline read_raw_field(const std::string&    file_name,
                           rxmesh::RXMeshStatic& rx,
-                          FAttrT&               attr)
+                          FAttrT&               attr,
+                          const FAttrT&         B1,
+                          const FAttrT&         B2)
 {
     using namespace rxmesh;
 
@@ -36,7 +38,7 @@ int inline read_raw_field(const std::string&    file_name,
             return -1;
         }
 
-        if (attr.cols() != 3 * N) {
+        if (attr.cols() != N) {
             RXMESH_ERROR(
                 "read_raw_field() mismatch between the number of components "
                 "({}) in the file ({}) and the number of attributes in the "
@@ -61,9 +63,20 @@ int inline read_raw_field(const std::string&    file_name,
 
             assert(f_global_id <= num_f);
 
-            for (int j = 0; j < 3 * N; ++j) {
-                attr(fh, j) = raw_field(f_global_id, j);
-            }
+            Eigen::Vector3<T> s0(raw_field(f_global_id, 0),
+                                 raw_field(f_global_id, 1),
+                                 raw_field(f_global_id, 2));
+            Eigen::Vector3<T> s1(raw_field(f_global_id, 3),
+                                 raw_field(f_global_id, 4),
+                                 raw_field(f_global_id, 5));
+
+            Eigen::Vector3<T> b1 = B1.template to_eigen<3>(fh);
+            Eigen::Vector3<T> b2 = B2.template to_eigen<3>(fh);
+
+            attr(fh, 0) = b1.dot(s0);
+            attr(fh, 1) = b2.dot(s0);
+            attr(fh, 2) = b1.dot(s1);
+            attr(fh, 3) = b2.dot(s1);
         });
 
         attr.move(HOST, DEVICE);

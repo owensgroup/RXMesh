@@ -159,41 +159,43 @@ int main(int argc, char** argv)
 
     AlgoSetting algo_settings;
 
+    // input coordinates
+    auto v = *rx.get_input_vertex_coordinates();
+
+    // local basis
+    auto b1 = *rx.add_face_attribute<T>("B1", 3);
+    auto b2 = *rx.add_face_attribute<T>("B2", 3);
+
+    compute_local_basis(rx, v, b1, b2);
+    b1.move(DEVICE, HOST);
+    b2.move(DEVICE, HOST);
+
     // input field
-    auto x_init = *rx.add_face_attribute<T>("xInit", 3 * N);
+    auto x_init = *rx.add_face_attribute<T>("xInit", N);
     x_init.reset(0, LOCATION_ALL);
 
     if (read_raw_field(
-            STRINGIFY(INPUT_DIR) "cheburashka.rawfield", rx, x_init) != N) {
+            STRINGIFY(INPUT_DIR) "cheburashka.rawfield", rx, x_init, b1, b2) !=
+        N) {
         RXMESH_ERROR("Failed reading the input rawfield file!");
         return EXIT_FAILURE;
     }
 
-    auto x = *rx.add_face_attribute<T>("x", 3 * N);
+    auto x = *rx.add_face_attribute<T>("x", N);
     x.copy_from(x_init, DEVICE, DEVICE);
 
-    auto x_prev = *rx.add_face_attribute<T>("x_prev", 3 * N);
+    auto x_prev = *rx.add_face_attribute<T>("x_prev", N);
     x_prev.copy_from(x_init, DEVICE, DEVICE);
 
-    auto x_constr = *rx.add_face_attribute<T>("x_constr", 3 * N);
+    auto x_constr = *rx.add_face_attribute<T>("x_constr", N);
     x_constr.copy_from(x_init, DEVICE, DEVICE);
 
     // soft constraints only face 0
     const FaceHandle constr_face(0, 0);
 
-    // input coordinates
-    auto v = *rx.get_input_vertex_coordinates();
-
-    //// local basis
-    // auto b1 = *rx.add_face_attribute<T>("B1", 3);
-    // auto b2 = *rx.add_face_attribute<T>("B2", 3);
-
-    // compute_local_basis(rx, v, b1, b2);
-    // b1.move(DEVICE, HOST);
-    // b2.move(DEVICE, HOST);
-
 
     // constant transport terms for polynomial coefficients per edge
+    // TODO replace cuComplex with thrust::complex
     auto e_f_conj = *rx.add_edge_attribute<cuComplex>("e_f_conj", 1);
     auto e_g_conj = *rx.add_edge_attribute<cuComplex>("e_g_conj", 1);
     auto t_fg_4   = *rx.add_edge_attribute<cuComplex>("t_fg_4", 1);
@@ -283,11 +285,68 @@ int main(int argc, char** argv)
         });
 
 
-    problem.add_term<Op::F, 5>([=] __device__(const auto& eh, auto& objective) {
-        using ActiveT = ACTIVE_TYPE(eh);
+    auto ctx = rx.get_context();
+
+    problem.add_term<Op::F, 5>([=] __device__(const auto& fh, auto& objective) {
+        using ActiveT = ACTIVE_TYPE(fh);
+
+        uint32_t id = ctx.linear_id(fh);
 
         Eigen::Vector<ActiveT, 5> res;
 
+        // Get 2D vectors (alpha, beta) in local basis of face f
+        Eigen::Vector4<ActiveT> vars = iter_val<ActiveT, 4>(fh, objective);
+
+        thrust::complex<ActiveT> alpha(vars[0], vars[1]);
+        thrust::complex<ActiveT> beta(vars[2], vars[3]);
+
+        // Closeness term:
+        // Either soft penalty towards constraint or towards previous iteration.
+        // Get reference vectors (alpha_ref, beta_ref).
+        // Either from x_constr or from x_prev.
+        Eigen::Matrix<T, N, 1> x_ref;
+        if (id == 0) {
+            x_ref = x_constr.template to_eigen<N>(fh);
+        } else {
+            x_ref = x_prev.template to_eigen<N>(fh);
+        }
+
+        thrust::complex<T> alpha_ref(x_ref[0], x_ref[1]);
+
+        thrust::complex<T> beta_ref(x_ref[2], x_ref[3]);
+
+        T w_close_sqrt;
+        if (id == 0) {
+            T w_close_sqrt = sqrt(algo_settings.w_close_constrained);
+        } else {
+            T w_close_sqrt = sqrt(algo_settings.w_close_unconstrained);
+        }
+
+        res[0] = w_close_sqrt * (alpha.real() - alpha_ref.real());
+        res[1] = w_close_sqrt * (alpha.imag() - alpha_ref.imag());
+        res[2] = w_close_sqrt * (beta.real() - beta_ref.real());
+        res[3] = w_close_sqrt * (beta.imag() - beta_ref.imag());
+
+
+        // Barrier term:
+        // Ensure convex angle between alpha and beta
+        ActiveT barrier_x = (beta * thrust::conj(alpha)).imag();
+
+        ActiveT barrier = 0.0;
+
+        if (barrier_x <= 0.0) {
+            using PassiveT = PassiveType<ActiveT>;
+
+            barrier = ActiveT(std::numeric_limits<PassiveT>::max());
+        } else if (barrier_x < algo_settings.s_barrier) {
+            ActiveT b =
+                barrier_x * sqr(barrier_x) /
+                    (algo_settings.s_barrier * sqr(algo_settings.s_barrier)) -
+                3.0 * sqr(barrier_x) / sqr(algo_settings.s_barrier) +
+                3.0 * barrier_x / algo_settings.s_barrier;
+            barrier = 1.0 / b - 1.0;
+        }
+        res[4] = sqrt(algo_settings.w_barrier) * barrier;
 
         return res;
     });
@@ -300,7 +359,7 @@ int main(int argc, char** argv)
     problem.eval_terms();
 
 #if USE_POLYSCOPE
-    rx.get_polyscope_mesh()->addFaceVectorQuantity("xInit", x_init);
+    rx.get_polyscope_mesh()->addFaceVectorQuantity2D("xInit", x_init);
     // rx.get_polyscope_mesh()->addFaceVectorQuantity("B1", b1);
     // rx.get_polyscope_mesh()->addFaceVectorQuantity("B2", b2);
     polyscope::show();
