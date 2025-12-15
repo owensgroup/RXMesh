@@ -50,6 +50,8 @@ struct VertexHandle
 {
     using LocalT = LocalVertexT;
 
+    using Handle = VertexHandle;
+
     /**
      * @brief Default constructor
      */
@@ -150,6 +152,8 @@ struct VertexHandle
 struct EdgeHandle
 {
     using LocalT = LocalEdgeT;
+
+    using Handle = EdgeHandle;
 
     /**
      * @brief Default constructor
@@ -252,6 +256,8 @@ struct EdgeHandle
 struct DEdgeHandle
 {
     using LocalT = LocalEdgeT;
+
+    using Handle = EdgeHandle;
 
     /**
      * @brief Default constructor
@@ -398,6 +404,8 @@ struct DEdgeHandle
 struct FaceHandle
 {
     using LocalT = LocalFaceT;
+
+    using Handle = FaceHandle;
 
     /**
      * @brief Default constructor

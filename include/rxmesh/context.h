@@ -267,6 +267,27 @@ class Context
         }
     }
 
+
+    /**
+     * @brief fast and unsafe method to returnt the linear id.
+     */
+    template <typename HandleT>
+    __device__ __inline__ uint32_t linear_id_fast(HandleT input) const
+    {
+
+        if constexpr (std::is_same_v<typename HandleT::Handle, VertexHandle>) {
+            return m_d_vertex_prefix[input.patch_id()] + input.local_id();
+        }
+        if constexpr (std::is_same_v<typename HandleT::Handle, EdgeHandle>) {
+            return m_d_edge_prefix[input.patch_id()] + input.local_id();
+        }
+        if constexpr (std::is_same_v<typename HandleT::Handle, FaceHandle>) {
+            return m_d_face_prefix[input.patch_id()] + input.local_id();
+        }
+
+        return INVALID32;
+    }
+
     /**
      * @brief compute a linear compact index for a give vertex/edge/face handle.
      * This is only valid for static mesh processing i.e., RXMeshStatic.
@@ -274,7 +295,7 @@ class Context
      * @param input handle
      */
     template <typename HandleT>
-    __device__ __host__ __inline__ uint32_t linear_id(HandleT input) const
+    __device__ __inline__ uint32_t linear_id(HandleT input) const
     {
         assert(input.is_valid());
 
@@ -297,13 +318,13 @@ class Context
             m_patches_info[p_id].get_active_mask<HandleT>(),
             ret);
 
-        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+        if constexpr (std::is_same_v<typename HandleT::Handle, VertexHandle>) {
             return ret + m_d_vertex_prefix[p_id];
         }
-        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+        if constexpr (std::is_same_v<typename HandleT::Handle, EdgeHandle>) {
             return ret + m_d_edge_prefix[p_id];
         }
-        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+        if constexpr (std::is_same_v<typename HandleT::Handle, FaceHandle>) {
             return ret + m_d_face_prefix[p_id];
         }
     }
