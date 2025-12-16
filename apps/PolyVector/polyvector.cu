@@ -96,7 +96,7 @@ int main(int argc, char** argv)
     rx_init(0);
 
     // cheburashka
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "cheburashka.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "torus2.obj");
 
     if (!rx.is_closed()) {
         RXMESH_ERROR("The input mesh is not closed mesh!");
@@ -140,8 +140,7 @@ int main(int argc, char** argv)
     x_init.reset(0, LOCATION_ALL);
 
     if (read_raw_field(
-            STRINGIFY(INPUT_DIR) "cheburashka.rawfield", rx, x_init, b1, b2) !=
-        N) {
+            STRINGIFY(INPUT_DIR) "torus2.rawfield", rx, x_init, b1, b2) != N) {
         RXMESH_ERROR("Failed reading the input rawfield file!");
         return EXIT_FAILURE;
     }
@@ -323,7 +322,7 @@ int main(int argc, char** argv)
     problem.objective->copy_from(x_init, LOCATION_ALL, LOCATION_ALL);
 
     problem.prep_eval();
-    // solver.prep_solver();
+    solver.prep_solver();
 
 
     for (int iter = 0; iter < max_iters; ++iter) {
@@ -346,10 +345,13 @@ int main(int argc, char** argv)
             // take step
             rx.for_each_face(
                 DEVICE,
-                [x_new = x_new,
-                 obj   = *problem.objective,
-                 dir   = solver.dir,
-                 sz    = step_size] __device__(const FaceHandle fh) mutable {
+                [x_new   = x_new,
+                 obj     = *problem.objective,
+                 dir     = solver.dir,
+                 sz      = step_size,
+                 n_faces = rx.get_num_faces()] __device__(const FaceHandle
+                                                              fh) mutable {
+                    dir.reshape(n_faces, N);
                     for (int i = 0; i < N; ++i) {
                         x_new(fh, i) = obj(fh, i) + sz * dir(fh, i);
                     }
@@ -389,4 +391,7 @@ int main(int argc, char** argv)
     // rx.get_polyscope_mesh()->addFaceVectorQuantity("B2", b2);
     polyscope::show();
 #endif
+
+    solver.release();
+    w_smooth.release();
 }
