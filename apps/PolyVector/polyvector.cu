@@ -1,3 +1,7 @@
+// Integrable PolyVector Fields
+// https://igl.ethz.ch/projects/integrable/integrable-polyvector-fields.pdf
+// Major part of this code is taken from TinyAD
+
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/diff/diff_vector_problem.h"
@@ -9,29 +13,6 @@
 
 using namespace rxmesh;
 using T = float;
-
-template <typename FAttrT>
-int inline viz_field(RXMeshStatic& rx, const int N, FAttrT& attr)
-{
-    assert(N == 4);
-
-    int M = N / 2;
-
-    Eigen::MatrixX<T> vec0(attr.rows(), M);
-    Eigen::MatrixX<T> vec1(attr.rows(), M);
-
-    /*rx.for_each_face(HOST, [&](const FaceHandle fh) {
-        int f_global_id = rx.map_to_global(fh);
-
-        assert(f_global_id <= num_f);
-
-        for (int j = 0; j < 3 * M; ++j) {
-
-            attr(fh, j) = raw_field(f_global_id, j);
-        }
-    });*/
-}
-
 
 template <typename FAttrT, typename VAttrT>
 void inline compute_local_basis(RXMeshStatic& rx,
@@ -59,94 +40,56 @@ void inline compute_local_basis(RXMeshStatic& rx,
         });
 }
 
-template <typename EAttrT, typename VAttrT>
+template <typename EAttrT, typename VAttrT, typename FAttrT>
 void inline compute_per_edge_transport_term(RXMeshStatic& rx,
                                             const VAttrT& v,
+                                            const FAttrT& b1,
+                                            const FAttrT& b2,
                                             EAttrT&       e_f_conj,
-                                            EAttrT&       e_g_conj,
-                                            EAttrT&       t_fg_4,
-                                            EAttrT&       t_fg_2)
+                                            EAttrT&       e_g_conj)
 {
-    rx.run_query_kernel<Op::EVDiamond, 256>(
+    // compute the edge normalized edge length and (hijack) store it in e_f_conj
+    // and e_g_conj, so we can use it in the next step
+    rx.run_query_kernel<Op::EV, 256>(
         [=] __device__(const EdgeHandle& eh, const VertexIterator& vv) mutable {
-            // v0, v2 are from-to vertices
-            // v1, v3 are the two opposite vertices
-
-            // 1st triangle (f): v0, v1, v2
-            // 2nd triangle (g): v0, v2, v3
-
-            auto compute_basis = [&](const Eigen::Vector3<T>& x0,
-                                     const Eigen::Vector3<T>& x1,
-                                     const Eigen::Vector3<T>& x2,
-                                     Eigen::Vector3<T>&       f_b1,
-                                     Eigen::Vector3<T>&       f_b2) {
-                Eigen::Vector3<T> v1 = (x1 - x0).normalized();
-                Eigen::Vector3<T> t  = x2 - x0;
-                Eigen::Vector3<T> v3 = v1.cross(t).normalized();  // face normal
-                Eigen::Vector3<T> v2 = v1.cross(v3).normalized();
-                v2                   = -v2;
-
-                f_b1 = v1;
-                f_b2 = v2;
-            };
-
             Eigen::Vector3<T> x0 = v.template to_eigen<3>(vv[0]);
-            Eigen::Vector3<T> x1 = v.template to_eigen<3>(vv[1]);
-            Eigen::Vector3<T> x2 = v.template to_eigen<3>(vv[2]);
-            Eigen::Vector3<T> x3 = v.template to_eigen<3>(vv[3]);
-
-            // face g's basis
-            Eigen::Vector3<T> f_b1;
-            Eigen::Vector3<T> f_b2;
-            compute_basis(x0, x1, x2, f_b1, f_b2);
-
-            // face g's basis
-            Eigen::Vector3<T> g_b1;
-            Eigen::Vector3<T> g_b2;
-            compute_basis(x0, x2, x3, g_b1, g_b2);
+            Eigen::Vector3<T> x2 = v.template to_eigen<3>(vv[1]);
 
             Eigen::Vector3<T> e = (x2 - x0).normalized();
+            e_f_conj(eh)        = thrust::complex<T>(e[0], e[1]);
+            e_g_conj(eh)        = thrust::complex<T>(e[2], 0);
+        });
 
-            // printf(
-            //     "\n eh= %d, f_b1 (%f, %f, %f), f_b2 (%f, %f, %f), g_b1 (%f, "
-            //     "%f, %f), g_b2 (%f, %f, %f)",
-            //     eh.local_id(),
-            //     f_b1[0],
-            //     f_b1[1],
-            //     f_b1[2],
-            //     f_b2[0],
-            //     f_b2[1],
-            //     f_b2[2],
-            //     g_b1[0],
-            //     g_b1[1],
-            //     g_b1[2],
-            //     g_b2[0],
-            //     g_b2[1],
-            //     g_b2[2]);
+    auto ctx = rx.get_context();
+
+    rx.run_query_kernel<Op::EF, 256>(
+        [=] __device__(const EdgeHandle& eh, FaceIterator& iter) mutable {
+            FaceHandle f(iter[0]), g(iter[1]);
+
+            if (ctx.linear_id_fast(f) < ctx.linear_id_fast(g)) {
+                f = iter[1];
+                g = iter[0];
+            }
+
+            Eigen::Vector3<T> f_b1 = b1.template to_eigen<3>(f);
+            Eigen::Vector3<T> f_b2 = b2.template to_eigen<3>(f);
+
+            Eigen::Vector3<T> g_b1 = b1.template to_eigen<3>(g);
+            Eigen::Vector3<T> g_b2 = b2.template to_eigen<3>(g);
+
+            Eigen::Vector3<T> e(
+                e_f_conj(eh).real(), e_f_conj(eh).imag(), e_g_conj(eh).real());
 
             e_f_conj(eh) =
                 thrust::conj(thrust::complex<T>(f_b1.dot(e), f_b2.dot(e)));
 
             e_g_conj(eh) =
                 thrust::conj(thrust::complex<T>(g_b1.dot(e), g_b2.dot(e)));
-
-            thrust::complex<T> t_fg = e_f_conj(eh) / e_g_conj(eh);
-
-            t_fg_2(eh) = sqr(t_fg);
-            t_fg_4(eh) = sqr(t_fg_2(eh));
         });
-
-    //{
-    //    CUDA_ERROR(cudaGetLastError());
-    //    CUDA_ERROR(cudaDeviceSynchronize());
-    //}
 
     e_f_conj.move(DEVICE, HOST);
     e_g_conj.move(DEVICE, HOST);
-    t_fg_4.move(DEVICE, HOST);
-    t_fg_2.move(DEVICE, HOST);
 }
-
 
 int main(int argc, char** argv)
 {
@@ -220,11 +163,10 @@ int main(int argc, char** argv)
     // constant transport terms for polynomial coefficients per edge
     auto e_f_conj = *rx.add_edge_attribute<thrust::complex<T>>("e_f_conj", 1);
     auto e_g_conj = *rx.add_edge_attribute<thrust::complex<T>>("e_g_conj", 1);
-    auto t_fg_4   = *rx.add_edge_attribute<thrust::complex<T>>("t_fg_4", 1);
-    auto t_fg_2   = *rx.add_edge_attribute<thrust::complex<T>>("t_fg_2", 1);
 
-    compute_per_edge_transport_term(rx, v, e_f_conj, e_g_conj, t_fg_4, t_fg_2);
+    compute_per_edge_transport_term(rx, v, b1, b2, e_f_conj, e_g_conj);
 
+    auto ctx = rx.get_context();
 
     problem.add_term<Op::EF, 7>(
         [=] __device__(const auto& eh, const auto& iter, auto& objective) {
@@ -234,17 +176,26 @@ int main(int argc, char** argv)
 
             Eigen::Vector<ActiveT, 7> res;
 
-            // two faces incident to the edge eh
-            // FaceHandle f_idx = iter[0];
-            // FaceHandle g_idx = iter[1];
+            // face f is the one with highest id (to make it consistent with
+            //  how we calculated the basis)
+            //
+            //  4 variables in face f and g
+            Eigen::Vector4<ActiveT> vars_f, vars_g;
+            if (ctx.linear_id_fast(iter[0]) > ctx.linear_id_fast(iter[1])) {
+                vars_f = iter_val<ActiveT, 4>(eh, iter, objective, 0);
+                vars_g = iter_val<ActiveT, 4>(eh, iter, objective, 1);
+            } else {
+                vars_f = iter_val<ActiveT, 4>(eh, iter, objective, 1);
+                vars_g = iter_val<ActiveT, 4>(eh, iter, objective, 0);
+            }
 
-            // 4 variables in face f
-            Eigen::Vector4<ActiveT> vars_f =
-                iter_val<ActiveT, 4>(eh, iter, objective, 0);
+            thrust::complex<T> f_conj = e_f_conj(eh);
+            thrust::complex<T> g_conj = e_g_conj(eh);
 
-            // 4 variables in face g
-            Eigen::Vector4<ActiveT> vars_g =
-                iter_val<ActiveT, 4>(eh, iter, objective, 1);
+            thrust::complex<T> t_fg = f_conj / g_conj;
+
+            thrust::complex<T> fg_2 = sqr(t_fg);
+            thrust::complex<T> fg_4 = sqr(fg_2);
 
 
             thrust::complex<ActiveT> alpha_f(vars_f[0], vars_f[1]);
@@ -260,8 +211,6 @@ int main(int argc, char** argv)
             thrust::complex<ActiveT> C_f_2 = -(sqr(alpha_f) + sqr(beta_f));
             thrust::complex<ActiveT> C_g_2 = -(sqr(alpha_g) + sqr(beta_g));
 
-            thrust::complex<ActiveT> fg_4(t_fg_4(eh).real(), t_fg_4(eh).imag());
-            thrust::complex<ActiveT> fg_2(t_fg_2(eh).real(), t_fg_2(eh).imag());
 
             thrust::complex<ActiveT> C_0_residual = C_f_0 * fg_4 - C_g_0;
             thrust::complex<ActiveT> C_2_residual = C_f_2 * fg_2 - C_g_2;
@@ -277,10 +226,6 @@ int main(int argc, char** argv)
             // PolyCurl term:
             // Compare real coefficients of polycurl polynomial across edge
             // [Diamanti 2015, Eq. 11, 19]
-            thrust::complex<ActiveT> f_conj(e_f_conj(eh).real(),
-                                            e_f_conj(eh).imag());
-            thrust::complex<ActiveT> g_conj(e_g_conj(eh).real(),
-                                            e_g_conj(eh).imag());
 
             ActiveT af_ef = (alpha_f * f_conj).real();
             ActiveT ag_eg = (alpha_g * g_conj).real();
@@ -304,7 +249,6 @@ int main(int argc, char** argv)
             return res;
         });
 
-    auto ctx = rx.get_context();
 
     problem.add_term<Op::F, 5>([=] __device__(const auto& fh, auto& objective) {
         using ActiveT = ACTIVE_TYPE(fh);
@@ -379,7 +323,7 @@ int main(int argc, char** argv)
     problem.objective->copy_from(x_init, LOCATION_ALL, LOCATION_ALL);
 
     problem.prep_eval();
-    solver.prep_solver();
+    // solver.prep_solver();
 
 
     for (int iter = 0; iter < max_iters; ++iter) {
