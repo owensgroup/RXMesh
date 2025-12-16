@@ -14,6 +14,108 @@
 using namespace rxmesh;
 using T = float;
 
+template <typename FAttrT, typename EAttrT>
+void inline viz_curl(RXMeshStatic& rx,
+                     std::string   name,
+                     const FAttrT& x,
+                     const EAttrT& e_f_conj,
+                     const EAttrT& e_g_conj,
+                     const FAttrT& b1,
+                     const FAttrT& b2,
+                     const double  curl_min = 1e-6,
+                     const double  curl_max = 0.02)
+{
+    auto vcolor = *rx.add_vertex_attribute<T>(name + "v", 1);
+    vcolor.reset(DEVICE, 0);
+
+    auto ecurl = *rx.add_edge_attribute<T>(name + "e", 1);
+
+    auto xa3d = *rx.add_face_attribute<T>(name + "_alpha", 3);
+    auto xb3d = *rx.add_face_attribute<T>(name + "_beta", 3);
+
+    auto ctx = rx.get_context();
+
+    rx.run_query_kernel<Op::EF, 256>(
+        [=] __device__(const EdgeHandle& eh, FaceIterator& iter) mutable {
+            FaceHandle f(iter[0]), g(iter[1]);
+
+            if (ctx.linear_id_fast(f) < ctx.linear_id_fast(g)) {
+                f = iter[1];
+                g = iter[0];
+            }
+
+            thrust::complex<T> alpha_f(x(f, 0), x(f, 1));
+            thrust::complex<T> beta_f(x(f, 2), x(f, 3));
+
+            thrust::complex<T> alpha_g(x(g, 0), x(g, 1));
+            thrust::complex<T> beta_g(x(g, 2), x(g, 3));
+
+            T af_ef = (alpha_f * e_f_conj(eh)).real();
+            T ag_eg = (alpha_g * e_g_conj(eh)).real();
+            T bf_ef = (beta_f * e_f_conj(eh)).real();
+            T bg_eg = (beta_g * e_g_conj(eh)).real();
+            T c_f_0 = sqr(af_ef) * sqr(bf_ef);
+            T c_g_0 = sqr(ag_eg) * sqr(bg_eg);
+            T c_f_2 = -(sqr(af_ef) + sqr(bf_ef));
+            T c_g_2 = -(sqr(ag_eg) + sqr(bg_eg));
+
+            ecurl(eh) = sqr(c_f_0 - c_g_0) + sqr(c_f_2 - c_g_2);
+        });
+
+    rx.run_query_kernel<Op::EV, 256>(
+        [=] __device__(const EdgeHandle& eh, const VertexIterator& vv) mutable {
+            T curl = ecurl(eh);
+
+            ::atomicAdd(&vcolor(vv[0]), curl);
+
+            ::atomicAdd(&vcolor(vv[1]), curl);
+        });
+
+    rx.run_query_kernel<Op::VV, 256>(
+        [=] __device__(const VertexHandle&   vh,
+                       const VertexIterator& vv) mutable {
+            T curl = vcolor(vh);
+
+            curl /= vv.size();
+
+            // curl = (log(curl) - log(curl_min)) / (log(curl_max) -
+            // log(curl_min));
+            //
+            // curl = min(max(curl, 0.0), 1.0);
+
+            vcolor(vh) = curl;
+        });
+
+    rx.for_each_face(HOST, [&](const FaceHandle fh) {
+        T ax = x(fh, 0);
+        T ay = x(fh, 1);
+        T bx = x(fh, 2);
+        T by = x(fh, 3);
+
+        Eigen::Vector3<T> f_b1 = b1.template to_eigen<3>(fh);
+        Eigen::Vector3<T> f_b2 = b2.template to_eigen<3>(fh);
+
+        Eigen::Vector3<T> a3 = ax * f_b1 + ay * f_b2;
+        Eigen::Vector3<T> b3 = bx * f_b1 + by * f_b2;
+
+        xa3d.from_eigen(fh, a3);
+
+        xb3d.from_eigen(fh, b3);
+    });
+
+    vcolor.move(DEVICE, HOST);
+
+    rx.get_polyscope_mesh()
+        ->addVertexScalarQuantity(name, vcolor)
+        ->setMapRange({curl_min, curl_max});
+
+    rx.get_polyscope_mesh()->addFaceVectorQuantity(name + "_alpha", xa3d);
+    rx.get_polyscope_mesh()->addFaceVectorQuantity(name + "_beta", xb3d);
+
+    rx.remove_attribute(name + "v");
+    rx.remove_attribute(name + "e");
+}
+
 template <typename FAttrT, typename VAttrT>
 void inline compute_local_basis(RXMeshStatic& rx,
                                 const VAttrT& v,
@@ -96,7 +198,7 @@ int main(int argc, char** argv)
     rx_init(0);
 
     // cheburashka
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "torus2.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "cheburashka.obj");
 
     if (!rx.is_closed()) {
         RXMESH_ERROR("The input mesh is not closed mesh!");
@@ -140,7 +242,8 @@ int main(int argc, char** argv)
     x_init.reset(0, LOCATION_ALL);
 
     if (read_raw_field(
-            STRINGIFY(INPUT_DIR) "torus2.rawfield", rx, x_init, b1, b2) != N) {
+            STRINGIFY(INPUT_DIR) "cheburashka.rawfield", rx, x_init, b1, b2) !=
+        N) {
         RXMESH_ERROR("Failed reading the input rawfield file!");
         return EXIT_FAILURE;
     }
@@ -386,9 +489,13 @@ int main(int argc, char** argv)
     }
 
 #if USE_POLYSCOPE
-    rx.get_polyscope_mesh()->addFaceVectorQuantity2D("xInit", x_init);
-    // rx.get_polyscope_mesh()->addFaceVectorQuantity("B1", b1);
-    // rx.get_polyscope_mesh()->addFaceVectorQuantity("B2", b2);
+    problem.objective->move(DEVICE, HOST);
+
+    viz_curl(rx, "xInit", x_init, e_f_conj, e_g_conj, b1, b2);
+    viz_curl(rx, "x", *problem.objective, e_f_conj, e_g_conj, b1, b2);
+
+    rx.get_polyscope_mesh()->addFaceVectorQuantity("B1", b1);
+    rx.get_polyscope_mesh()->addFaceVectorQuantity("B2", b2);
     polyscope::show();
 #endif
 
