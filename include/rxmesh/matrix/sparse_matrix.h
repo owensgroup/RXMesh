@@ -30,6 +30,9 @@ struct SparseMatrix
     template <typename U>
     friend class VCycle;
 
+    template <typename U0, int U1, typename U2>
+    friend struct GaussNetwtonSolver;
+
     using IndexT = int;
 
     using Type = T;
@@ -62,7 +65,9 @@ struct SparseMatrix
           m_d_cub_temp_storage(nullptr),
           m_cub_temp_storage_bytes(0),
           m_capacity_factor(1.0f),
-          m_extra_nnz_entires(0)
+          m_extra_nnz_entires(0),
+          m_trans_buffer_size(0),
+          m_trans_buffer(nullptr)
     {
     }
 
@@ -124,16 +129,6 @@ struct SparseMatrix
         init_cudss(*this);
     }
 
-    /**
-     * @brief create a placeholder sparse matrix with num_rows, num_cols but
-     * zero non-zero values
-     */
-    SparseMatrix(IndexT num_rows, IndexT num_cols) : SparseMatrix()
-    {
-        init_cusparse(*this);
-        init_cudss(*this);
-    }
-
    protected:
     SparseMatrix(const RXMeshStatic& rx,
                  const float         capacity_factor,
@@ -165,7 +160,9 @@ struct SparseMatrix
           m_d_cub_temp_storage(nullptr),
           m_cub_temp_storage_bytes(0),
           m_capacity_factor(capacity_factor),
-          m_extra_nnz_entires(extra_nnz_entries)
+          m_extra_nnz_entires(extra_nnz_entries),
+          m_trans_buffer_size(0),
+          m_trans_buffer(nullptr)
     {
 
         if (add_diagonal && (block_shape.x != block_shape.y)) {
@@ -819,7 +816,7 @@ struct SparseMatrix
      * Thus, it is not recommended to call it during the application multiple
      * times
      */
-    __host__ SparseMatrix<T> transpose() const
+    __host__ SparseMatrix<T> transpose()
     {
         if (m_op == Op::EVDiamond) {
             RXMESH_ERROR(
@@ -855,7 +852,7 @@ struct SparseMatrix
         init_cusparse(ret);
         init_cudss(ret);
 
-        size_t buffer_size(0);
+        m_trans_buffer_size = 0;
 
         CUSPARSE_ERROR(cusparseCsr2cscEx2_bufferSize(
             ret.m_cusparse_handle,
@@ -872,11 +869,10 @@ struct SparseMatrix
             CUSPARSE_ACTION_NUMERIC,
             CUSPARSE_INDEX_BASE_ZERO,
             CUSPARSE_CSR2CSC_ALG_DEFAULT,  // CUSPARSE_CSR2CSC_ALG1
-            &buffer_size));
+            &m_trans_buffer_size));
 
-        void* buffer(nullptr);
 
-        CUDA_ERROR(cudaMalloc((void**)&buffer, buffer_size));
+        CUDA_ERROR(cudaMalloc((void**)&m_trans_buffer, m_trans_buffer_size));
 
         CUSPARSE_ERROR(cusparseCsr2cscEx2(
             ret.m_cusparse_handle,
@@ -893,13 +889,75 @@ struct SparseMatrix
             CUSPARSE_ACTION_NUMERIC,
             CUSPARSE_INDEX_BASE_ZERO,
             CUSPARSE_CSR2CSC_ALG_DEFAULT,  // CUSPARSE_CSR2CSC_ALG1
-            buffer));
-
-        GPU_FREE(buffer);
+            m_trans_buffer));
 
         ret.move(DEVICE, HOST);
 
         return ret;
+    }
+
+
+    /**
+     * @brief compute the transpose and store it in ret. ret should have already
+     * been allocated with the right size and nnz
+     */
+    __host__ void transpose(SparseMatrix<T>& ret)
+    {
+
+        if (rows() != ret.cols() || cols() != ret.rows() ||
+            non_zeros() != ret.non_zeros()) {
+            RXMESH_ERROR(
+                "SparseMatrix<T>::transpose() size mismatch. Input: {} x {} "
+                "with nnz= {}. Output: {} x {} with nnz= {}.",
+                rows(),
+                cols(),
+                non_zeros(),
+                ret.rows(),
+                ret.cols(),
+                ret.non_zeros());
+            return;
+        }
+
+        if (m_trans_buffer_size == 0) {
+
+            CUSPARSE_ERROR(cusparseCsr2cscEx2_bufferSize(
+                ret.m_cusparse_handle,
+                m_num_rows,
+                m_num_cols,
+                m_nnz,
+                m_d_val,
+                m_d_row_ptr,
+                m_d_col_idx,
+                ret.m_d_val,
+                ret.m_d_row_ptr,
+                ret.m_d_col_idx,
+                cuda_type<T>(),
+                CUSPARSE_ACTION_NUMERIC,
+                CUSPARSE_INDEX_BASE_ZERO,
+                CUSPARSE_CSR2CSC_ALG_DEFAULT,  // CUSPARSE_CSR2CSC_ALG1
+                &m_trans_buffer_size));
+
+
+            CUDA_ERROR(
+                cudaMalloc((void**)&m_trans_buffer, m_trans_buffer_size));
+        }
+
+        CUSPARSE_ERROR(cusparseCsr2cscEx2(
+            ret.m_cusparse_handle,
+            m_num_rows,
+            m_num_cols,
+            m_nnz,
+            m_d_val,
+            m_d_row_ptr,
+            m_d_col_idx,
+            ret.m_d_val,
+            ret.m_d_row_ptr,
+            ret.m_d_col_idx,
+            cuda_type<T>(),
+            CUSPARSE_ACTION_NUMERIC,
+            CUSPARSE_INDEX_BASE_ZERO,
+            CUSPARSE_CSR2CSC_ALG_DEFAULT,  // CUSPARSE_CSR2CSC_ALG1
+            m_trans_buffer));
     }
 
     /**
@@ -1709,6 +1767,10 @@ struct SparseMatrix
     // cuSparse multiply buffer
     size_t m_spmm_buffer_size;
     size_t m_spmv_buffer_size;
+
+    // transpose buffer
+    size_t m_trans_buffer_size;
+    void*  m_trans_buffer;
 
     void* m_d_cusparse_spmm_buffer;
     void* m_d_cusparse_spmv_buffer;
