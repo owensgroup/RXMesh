@@ -198,8 +198,8 @@ struct cuDSSCholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
                                  m_cudss_config,
                                  m_cudss_data,
                                  m_A,
-                                 m_X,
-                                 m_B));
+                                 X_mat.get_cudss_matrix(),
+                                 B_mat.get_cudss_matrix()));
     }
 
 

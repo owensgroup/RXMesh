@@ -258,7 +258,7 @@ int main(int argc, char** argv)
                         " -input:             Input OBJ mesh file. Default is {} \n"                  
                         " -uv:                Input UV OBJ file. If empty, will compyte tutte embedding. Default is {} \n"                        
                         " -o:                 JSON file output folder. Default is {} \n"
-                        " -solver:            Solver to use. Options are cg_mat_free, cg, pcg, chol, or lu. Default is {}\n"
+                        " -solver:            Solver to use. Options are cg_mat_free, cg, pcg, chol, cudss_chol, or lu. Default is {}\n"
                         " -abs_eps:           Iterative solvers absolute tolerance. Default is {}\n"
                         " -rel_eps:           Iterative solvers relative tolerance. Default is {}\n"
                         " -cg_max_iter:       Maximum number of iterations for iterative solvers. Default is {}\n"
@@ -346,6 +346,9 @@ int main(int argc, char** argv)
 
     if (Arg.solver == "chol") {
         CholeskySolver<HessMatT, Order> solver(problem.hess.get());
+        parameterize<T>(rx, problem, solver);
+    } else if (Arg.solver == "cudss_chol") {
+        cuDSSCholeskySolver<HessMatT, Order> solver(problem.hess.get());
         parameterize<T>(rx, problem, solver);
     } else if (Arg.solver == "lu") {
         CholeskySolver<HessMatT, Order> solver(problem.hess.get());

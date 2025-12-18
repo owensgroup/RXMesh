@@ -357,6 +357,7 @@ struct DenseMatrix
                                                cuda_type<T>(),
                                                CUSPARSE_ORDER_COL));
         }
+        init_cudss();
 #endif
     }
 
@@ -1218,7 +1219,6 @@ struct DenseMatrix
                                             cuda_type<T>(),
                                             CUDSS_LAYOUT_COL_MAJOR));
         }
-
 #endif
     }
 

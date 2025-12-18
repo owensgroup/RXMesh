@@ -7,6 +7,7 @@
 #include "rxmesh/matrix/cg_mat_free_solver.h"
 #include "rxmesh/matrix/cg_solver.h"
 #include "rxmesh/matrix/cholesky_solver.h"
+#include "rxmesh/matrix/cudss_cholesky_solver.h"
 #include "rxmesh/matrix/lu_solver.h"
 #include "rxmesh/matrix/pcg_solver.h"
 #include "rxmesh/matrix/qr_solver.h"
@@ -89,10 +90,41 @@ struct NetwtonSolver
             GPUTimer timer;
             timer.start();
 
-            // solver->solve_hl_api(problem.grad, dir);
+            int r = problem.grad.rows();
+            int c = problem.grad.cols();
+
+            problem.grad.reshape(r * c, 1);
+            dir.reshape(r * c, 1);
 
             solver->pre_solve(problem.rx);
             solver->solve(problem.grad, dir, stream);
+
+            problem.grad.reshape(r, c);
+            dir.reshape(r, c);
+
+            timer.stop();
+            solve_time += timer.elapsed_millis();
+        }
+
+          // cuDSS Cholesky
+        if constexpr (std::is_base_of_v<
+                          cuDSSCholeskySolver<HessMatT, DenseMatT::OrderT>,
+                          SolverT>) {
+
+            GPUTimer timer;
+            timer.start();
+
+            int r = problem.grad.rows();
+            int c = problem.grad.cols();
+
+            problem.grad.reshape(r * c, 1);
+            dir.reshape(r * c, 1);
+
+            solver->pre_solve(problem.rx, problem.grad, dir);
+            solver->solve(problem.grad, dir, stream);
+
+            problem.grad.reshape(r, c);
+            dir.reshape(r, c);
 
             timer.stop();
             solve_time += timer.elapsed_millis();
