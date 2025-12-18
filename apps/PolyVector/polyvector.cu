@@ -265,10 +265,10 @@ int main(int argc, char** argv)
     auto x_new = *rx.add_attribute_like("x_new", *problem.objective);
 
 #ifdef USE_CUDSS
-    // using SolverT =
-    //     cuDSSCholeskySolver<SparseMatrix<T>, ProblemT::DenseMatT::OrderT>;
+     using SolverT =
+         cuDSSCholeskySolver<SparseMatrix<T>, ProblemT::DenseMatT::OrderT>;
 
-    using SolverT = PCGSolver<T, ProblemT::DenseMatT::OrderT>;
+    //using SolverT = PCGSolver<T, ProblemT::DenseMatT::OrderT>;
 #else
     using SolverT =
         CholeskySolver<SparseMatrix<T>, ProblemT::DenseMatT::OrderT>;
@@ -441,7 +441,10 @@ int main(int argc, char** argv)
     problem.prep_eval();
     solver.prep_solver();
 
+    Timers<GPUTimer> timer;
+    timer.add("Total");
 
+    timer.start("Total");
     for (int iter = 0; iter < max_iters; ++iter) {
         // Compute derivatives and Gauss-Newton direction
 
@@ -501,6 +504,11 @@ int main(int argc, char** argv)
             w_smooth.multiply(w_smooth_decay);
         }
     }
+    timer.stop("Total");
+
+    RXMESH_INFO("PolyVector: iterations= {}, time={} (ms)",
+                max_iters,
+                timer.elapsed_millis("Total"));
 
     RXMESH_INFO("Solve time: {} (ms)", solver.solve_time);
 #if USE_POLYSCOPE
