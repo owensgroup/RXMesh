@@ -347,9 +347,11 @@ int main(int argc, char** argv)
     if (Arg.solver == "chol") {
         CholeskySolver<HessMatT, Order> solver(problem.hess.get());
         parameterize<T>(rx, problem, solver);
+#ifdef USE_CUDSS
     } else if (Arg.solver == "cudss_chol") {
         cuDSSCholeskySolver<HessMatT, Order> solver(problem.hess.get());
         parameterize<T>(rx, problem, solver);
+#endif
     } else if (Arg.solver == "lu") {
         CholeskySolver<HessMatT, Order> solver(problem.hess.get());
         parameterize<T>(rx, problem, solver);

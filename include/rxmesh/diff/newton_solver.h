@@ -106,7 +106,8 @@ struct NetwtonSolver
             solve_time += timer.elapsed_millis();
         }
 
-          // cuDSS Cholesky
+#ifdef USE_CUDSS
+        // cuDSS Cholesky
         if constexpr (std::is_base_of_v<
                           cuDSSCholeskySolver<HessMatT, DenseMatT::OrderT>,
                           SolverT>) {
@@ -129,6 +130,7 @@ struct NetwtonSolver
             timer.stop();
             solve_time += timer.elapsed_millis();
         }
+#endif
 
         //  Iterative Solver (CG/PCG) either matrix-based or matrix-free
         if constexpr (std::is_base_of_v<CGSolver<T, DenseMatT::OrderT>,
