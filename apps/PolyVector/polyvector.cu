@@ -265,8 +265,10 @@ int main(int argc, char** argv)
     auto x_new = *rx.add_attribute_like("x_new", *problem.objective);
 
 #ifdef USE_CUDSS
-    using SolverT =
-        cuDSSCholeskySolver<SparseMatrix<T>, ProblemT::DenseMatT::OrderT>;
+    // using SolverT =
+    //     cuDSSCholeskySolver<SparseMatrix<T>, ProblemT::DenseMatT::OrderT>;
+
+    using SolverT = PCGSolver<T, ProblemT::DenseMatT::OrderT>;
 #else
     using SolverT =
         CholeskySolver<SparseMatrix<T>, ProblemT::DenseMatT::OrderT>;
@@ -500,6 +502,7 @@ int main(int argc, char** argv)
         }
     }
 
+    RXMESH_INFO("Solve time: {} (ms)", solver.solve_time);
 #if USE_POLYSCOPE
     problem.objective->move(DEVICE, HOST);
 

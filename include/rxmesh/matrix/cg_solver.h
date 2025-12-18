@@ -110,9 +110,10 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
 
 
         RXMESH_WARN(
-            "CGSolver::solve() did not converge after {} iterations. Residual "
-            "= {}",
+            "CGSolver::solve() did not converge after {} iterations. Start "
+            "Residual = {}, Final residual= {}",
             this->m_iter_taken,
+            this->m_start_residual,
             delta_new);
 
         this->m_final_residual = delta_new;

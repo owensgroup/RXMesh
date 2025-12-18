@@ -47,7 +47,9 @@ struct GaussNetwtonSolver
      * @brief should be called only after prep_eval in the given problem
      * (DiffVectorProblem)
      */
-    void prep_solver()
+    void prep_solver(int cg_max_iter = 1000,
+                     T   cg_abs_tol  = 1e-3,
+                     T   cg_rel_tol  = 0.0)
     {
         is_prep_solver_called = true;
 
@@ -75,6 +77,13 @@ struct GaussNetwtonSolver
                           SolverT>) {
             solver.emplace(&JtJ);
             solver->pre_solve(problem.rx);
+        }
+
+        // CG
+        if constexpr (std::is_base_of_v<CGSolver<T, DenseMatT::OrderT>,
+                                        SolverT>) {
+            solver.emplace(JtJ, 1, cg_max_iter, cg_abs_tol, cg_rel_tol);
+            solver->pre_solve(*problem.grad, dir);
         }
     }
 
@@ -111,6 +120,13 @@ struct GaussNetwtonSolver
                           CholeskySolver<SpMatT, DenseMatT::OrderT>,
                           SolverT>) {
             solver->pre_solve(problem.rx);
+            solver->solve(*problem.grad, dir, stream);
+        }
+
+        // CG
+        if constexpr (std::is_base_of_v<CGSolver<T, DenseMatT::OrderT>,
+                                        SolverT>) {
+            solver->pre_solve(*problem.grad, dir, stream);
             solver->solve(*problem.grad, dir, stream);
         }
 

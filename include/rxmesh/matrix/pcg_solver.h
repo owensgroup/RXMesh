@@ -126,11 +126,11 @@ struct PCGSolver : public CGSolver<T, DenseMatOrder>
             this->m_iter_taken++;
         }
         RXMESH_WARN(
-            "PCGSolver::solve() did not converge after {} "
-            "iterations. Residual "
-            "= {}",
+            "PCGSolver::solve() did not converge after {} iterations. Start "
+            "Residual = {}, Final residual= {}",
             this->m_iter_taken,
-            this->delta_new);
+            this->m_start_residual,
+            delta_new);
 
         this->m_final_residual = this->delta_new;
     }
