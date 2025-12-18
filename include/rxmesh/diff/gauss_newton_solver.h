@@ -12,14 +12,13 @@
 
 namespace rxmesh {
 
-template <typename T, int VariableDim, typename ObjHandleT>
+template <typename T, int VariableDim, typename ObjHandleT, typename SolverT>
 struct GaussNetwtonSolver
 {
 
     using DiffProblemT = DiffVectorProblem<T, VariableDim, ObjHandleT>;
     using SpMatT       = SparseMatrix<T>;
     using DenseMatT    = typename DiffProblemT::DenseMatT;
-    using SolverT      = cuDSSCholeskySolver<SpMatT, DenseMatT::OrderT>;
     using IndexT       = typename SpMatT::IndexT;
 
     DiffProblemT&          problem;
@@ -59,8 +58,24 @@ struct GaussNetwtonSolver
         create_JtJ();
 
         // create an instance of SolverT (solver)
-        solver.emplace(&JtJ);
-        solver->pre_solve(problem.rx, *problem.grad, dir);
+
+#ifdef USE_CUDSS
+        // cuDSS Cholesky
+        if constexpr (std::is_base_of_v<
+                          cuDSSCholeskySolver<SpMatT, DenseMatT::OrderT>,
+                          SolverT>) {
+            solver.emplace(&JtJ);
+            solver->pre_solve(problem.rx, *problem.grad, dir);
+        }
+#endif
+
+        // cuSolver Cholesky
+        if constexpr (std::is_base_of_v<
+                          CholeskySolver<SpMatT, DenseMatT::OrderT>,
+                          SolverT>) {
+            solver.emplace(&JtJ);
+            solver->pre_solve(problem.rx);
+        }
     }
 
     /**
@@ -81,9 +96,23 @@ struct GaussNetwtonSolver
         GPUTimer timer;
         timer.start();
 
-        solver->pre_solve(problem.rx, dir, *problem.grad);
-        solver->solve(*problem.grad, dir, stream);
+#ifdef USE_CUDSS
+        // cuDSS Cholesky
+        if constexpr (std::is_base_of_v<
+                          cuDSSCholeskySolver<SpMatT, DenseMatT::OrderT>,
+                          SolverT>) {
+            solver->pre_solve(problem.rx, dir, *problem.grad);
+            solver->solve(*problem.grad, dir, stream);
+        }
+#endif
 
+        // cuSolver Cholesky
+        if constexpr (std::is_base_of_v<
+                          CholeskySolver<SpMatT, DenseMatT::OrderT>,
+                          SolverT>) {
+            solver->pre_solve(problem.rx);
+            solver->solve(*problem.grad, dir, stream);
+        }
 
         timer.stop();
         solve_time += timer.elapsed_millis();
@@ -153,9 +182,13 @@ struct GaussNetwtonSolver
         JtJ.m_is_user_managed = false;
         JtJ.m_op              = Op::INVALID;
 
+        // device
         CUDA_ERROR(
             cudaMalloc((void**)&JtJ.m_d_row_ptr, (n + 1) * sizeof(IndexT)));
         CUDA_ERROR(cudaMemset(JtJ.m_d_row_ptr, 0, (n + 1) * sizeof(IndexT)));
+
+        // host
+        JtJ.m_h_row_ptr = (IndexT*)malloc((n + 1) * sizeof(IndexT));
 
         // We do not allocate d_col_idx/d_val yet (unknown nnz)
         JtJ.m_d_col_idx = nullptr;
@@ -163,6 +196,7 @@ struct GaussNetwtonSolver
 
         // Mark device allocation so release() logic behaves
         JtJ.m_allocated = (JtJ.m_allocated | DEVICE);
+        JtJ.m_allocated = (JtJ.m_allocated | HOST);
 
         // Create cusparse handle + placeholder CSR descriptor for JtJ
         JtJ.init_cusparse(JtJ);
@@ -258,11 +292,15 @@ struct GaussNetwtonSolver
         // Allocate C col/val
         JtJ.m_nnz = static_cast<IndexT>(C_nnz1);
 
-
+        // device
         CUDA_ERROR(
             cudaMalloc((void**)&JtJ.m_d_col_idx, JtJ.m_nnz * sizeof(IndexT)));
         CUDA_ERROR(cudaMalloc((void**)&JtJ.m_d_val, JtJ.m_nnz * sizeof(T)));
         CUDA_ERROR(cudaMemset(JtJ.m_d_val, 0, JtJ.m_nnz * sizeof(T)));
+
+        // host
+        JtJ.m_h_col_idx = (IndexT*)malloc(JtJ.m_nnz * sizeof(IndexT));
+        JtJ.m_h_val     = (T*)malloc(JtJ.m_nnz * sizeof(T));
 
         // Update matC descriptor pointers to the real storage
         CUSPARSE_ERROR(cusparseCsrSetPointers(
@@ -302,6 +340,20 @@ struct GaussNetwtonSolver
 
 
         m_spgemm_ready = true;
+
+        // populate host
+        CUDA_ERROR(cudaMemcpy(JtJ.m_h_row_ptr,
+                              JtJ.m_d_row_ptr,
+                              (n + 1) * sizeof(IndexT),
+                              cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(JtJ.m_h_val,
+                              JtJ.m_d_val,
+                              JtJ.m_nnz * sizeof(T),
+                              cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemcpy(JtJ.m_h_col_idx,
+                              JtJ.m_d_col_idx,
+                              JtJ.m_nnz * sizeof(IndexT),
+                              cudaMemcpyDeviceToHost));
     }
 
     void compute_JtJ()

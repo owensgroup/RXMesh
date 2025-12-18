@@ -70,7 +70,7 @@ struct NetwtonSolver
             timer.start();
 
             solver->pre_solve(problem.rx);
-            solver->solve(problem.grad, dir);
+            solver->solve(problem.grad, dir, stream);
             timer.stop();
 
             solve_time += timer.elapsed_millis();
@@ -92,7 +92,7 @@ struct NetwtonSolver
             // solver->solve_hl_api(problem.grad, dir);
 
             solver->pre_solve(problem.rx);
-            solver->solve(problem.grad, dir);
+            solver->solve(problem.grad, dir, stream);
 
             timer.stop();
             solve_time += timer.elapsed_millis();
@@ -112,7 +112,7 @@ struct NetwtonSolver
             dir.reshape(r * c, 1);
 
             solver->pre_solve(problem.grad, dir);
-            solver->solve(problem.grad, dir);
+            solver->solve(problem.grad, dir, stream);
 
             timer.stop();
             solve_time += timer.elapsed_millis();

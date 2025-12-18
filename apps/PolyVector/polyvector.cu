@@ -197,8 +197,14 @@ int main(int argc, char** argv)
 {
     rx_init(0);
 
+    std::string base_mesh_name = STRINGIFY(INPUT_DIR) "cheburashka";
+
+    if (argc >= 2) {
+        base_mesh_name = std::string(argv[1]);
+    }
+
     // cheburashka
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "cheburashka.obj");
+    RXMeshStatic rx(base_mesh_name + ".obj");
 
     if (!rx.is_closed()) {
         RXMESH_ERROR("The input mesh is not closed mesh!");
@@ -241,9 +247,7 @@ int main(int argc, char** argv)
     auto x_init = *rx.add_face_attribute<T>("xInit", N);
     x_init.reset(0, LOCATION_ALL);
 
-    if (read_raw_field(
-            STRINGIFY(INPUT_DIR) "cheburashka.rawfield", rx, x_init, b1, b2) !=
-        N) {
+    if (read_raw_field(base_mesh_name + ".rawfield", rx, x_init, b1, b2) != N) {
         RXMESH_ERROR("Failed reading the input rawfield file!");
         return EXIT_FAILURE;
     }
@@ -260,7 +264,15 @@ int main(int argc, char** argv)
     // used in line search
     auto x_new = *rx.add_attribute_like("x_new", *problem.objective);
 
-    GaussNetwtonSolver<T, N, FaceHandle> solver(problem);
+#ifdef USE_CUDSS
+    using SolverT =
+        cuDSSCholeskySolver<SparseMatrix<T>, ProblemT::DenseMatT::OrderT>;
+#else
+    using SolverT =
+        CholeskySolver<SparseMatrix<T>, ProblemT::DenseMatT::OrderT>;
+#endif
+
+    GaussNetwtonSolver<T, N, FaceHandle, SolverT> solver(problem);
 
     // constant transport terms for polynomial coefficients per edge
     auto e_f_conj = *rx.add_edge_attribute<thrust::complex<T>>("e_f_conj", 1);
