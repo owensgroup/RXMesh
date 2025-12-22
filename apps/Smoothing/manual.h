@@ -36,18 +36,65 @@ void manual(RXMeshStatic& rx)
         // calc gradients
         grad.reset(0, DEVICE);
 
-        rx.run_query_kernel<Op::VV, blockThreads>(
-            [=] __device__(const VertexHandle&   vh,
-                           const VertexIterator& iter) mutable {
-                for (int v = 0; v < iter.size(); ++v) {
-                    const VertexHandle uh = iter[v];
-
-                    for (int i = 0; i < cols; ++i) {
-                        grad(vh, i) += 2 * (pos(vh, i) - pos(uh, i));
+        if (Arg.area) {
+            rx.run_query_kernel<Op::VV, blockThreads>(
+                [=] __device__(const VertexHandle&   vh,
+                               const VertexIterator& iter) mutable {
+                    const int k = iter.size();
+                    if (k < 2) {
+                        return;
                     }
-                }
-            });
 
+                    Eigen::Vector3<T> xv(pos(vh, 0), pos(vh, 1), pos(vh, 2));
+
+                    Eigen::Vector3<T> gv(T(0), T(0), T(0));
+
+                    const T eps = T(1e-20);
+
+                    for (int t = 0; t < k; ++t) {
+                        const VertexHandle uh = iter[t];
+                        const VertexHandle wh = iter[(t + 1) % k];
+
+                        Eigen::Vector3<T> xu(
+                            pos(uh, 0), pos(uh, 1), pos(uh, 2));
+                        Eigen::Vector3<T> xw(
+                            pos(wh, 0), pos(wh, 1), pos(wh, 2));
+                        
+                        const Eigen::Vector3<T> e1 = xu - xv;
+                        const Eigen::Vector3<T> e2 = xw - xv;
+
+                        const Eigen::Vector3<T> n  = e1.cross(e2);
+
+                        const T                 nn = n.norm();
+
+                        if (nn <= eps) {
+                            continue;
+                        }
+
+                        const Eigen::Vector3<T> nhat = n / nn;
+
+                        
+                        gv += T(0.5) * (xu - xw).cross(nhat);
+                    }
+
+                    grad(vh, 0) += gv[0];
+                    grad(vh, 1) += gv[1];
+                    grad(vh, 2) += gv[2];
+                },
+                true);
+        } else {
+            rx.run_query_kernel<Op::VV, blockThreads>(
+                [=] __device__(const VertexHandle&   vh,
+                               const VertexIterator& iter) mutable {
+                    for (int v = 0; v < iter.size(); ++v) {
+                        const VertexHandle uh = iter[v];
+
+                        for (int i = 0; i < cols; ++i) {
+                            grad(vh, i) += 2 * (pos(vh, i) - pos(uh, i));
+                        }
+                    }
+                });
+        }
         // take step
         rx.for_each_vertex(
             DEVICE, [grad, pos, lr, cols] __device__(const VertexHandle& vh) {

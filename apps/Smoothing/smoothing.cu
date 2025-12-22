@@ -10,6 +10,7 @@ struct arg
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "bunnyhead.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
     uint32_t    device_id     = 0;
+    bool        area          = false;
     double      learning_rate = 0.01;
     int         num_iter      = 100;
     char**      argv;
@@ -41,26 +42,45 @@ void smoothing(RXMeshStatic& rx)
 
     problem.objective->copy_from(v_input_pos, DEVICE, DEVICE);
 
+    if (Arg.area) {
+        problem.template add_term<Op::FV>(
+            [=] __device__(const auto& fh, const auto& iter, auto& objective) {
+                assert(iter.size() == 3);
 
-    problem.template add_term<Op::EV>(
-        [=] __device__(const auto& eh, const auto& iter, auto& objective) {
-            assert(iter.size() == 2);
+                using ActiveT = ACTIVE_TYPE(fh);
 
-            using ActiveT = ACTIVE_TYPE(eh);
+                Eigen::Vector3<ActiveT> x0 =
+                    iter_val<ActiveT, 3>(fh, iter, objective, 0);
+                Eigen::Vector3<ActiveT> x1 =
+                    iter_val<ActiveT, 3>(fh, iter, objective, 1);
+                Eigen::Vector3<ActiveT> x2 =
+                    iter_val<ActiveT, 3>(fh, iter, objective, 2);
 
-            // pos
-            Eigen::Vector3<ActiveT> d0 =
-                iter_val<ActiveT, 3>(eh, iter, objective, 0);
-            Eigen::Vector3<ActiveT> d1 =
-                iter_val<ActiveT, 3>(eh, iter, objective, 1);
+                Eigen::Vector3<ActiveT> d0 = (x1 - x0);
+                Eigen::Vector3<ActiveT> d1 = (x2 - x0);
+                Eigen::Vector3<ActiveT> N  = d0.cross(d1);
 
-            Eigen::Vector3<ActiveT> dist = (d0 - d1);
+                return T(0.5) * N.norm();
+            });
+    } else {
+        problem.template add_term<Op::EV>(
+            [=] __device__(const auto& eh, const auto& iter, auto& objective) {
+                assert(iter.size() == 2);
 
-            ActiveT dist_sq = dist.squaredNorm();
+                using ActiveT = ACTIVE_TYPE(eh);
 
-            return dist_sq;
-        });
+                // pos
+                Eigen::Vector3<ActiveT> d0 =
+                    iter_val<ActiveT, 3>(eh, iter, objective, 0);
+                Eigen::Vector3<ActiveT> d1 =
+                    iter_val<ActiveT, 3>(eh, iter, objective, 1);
+                Eigen::Vector3<ActiveT> dist = (d0 - d1);
 
+                ActiveT dist_sq = dist.squaredNorm();
+
+                return dist_sq;
+            });
+    }
 
     GradientDescent gd(problem, Arg.learning_rate);
 
@@ -114,17 +134,21 @@ int main(int argc, char** argv)
         if (cmd_option_exists(argv, argc + argv, "-h")) {
             // clang-format off
             RXMESH_INFO("\nUsage: Param.exe < -option X>\n"
-                        " -h:                 Display this massage and exit\n"
+                        " -h:          Display this massage and exit\n"                        
                         " -input:      Input OBJ mesh file. Default is {} \n"
-                        " -iter:              Number of iterations. Default is {} \n"
-                        " -lr:                Gradient descent learning rate. Default is {} \n"
-                        " -o:                 JSON file output folder. Default is {} \n"
-                        " -device_id:         GPU device ID. Default is {}",
-            Arg.obj_file_name, Arg.num_iter, Arg.learning_rate, Arg.output_folder, Arg.device_id);
+                        " -area:       use area-based gradients. Default is {}\n"
+                        " -iter:       Number of iterations. Default is {} \n"
+                        " -lr:         Gradient descent learning rate. Default is {} \n"
+                        " -o:          JSON file output folder. Default is {} \n"
+                        " -device_id:  GPU device ID. Default is {}",
+            Arg.obj_file_name, (Arg.area? "true":"false"), Arg.num_iter, Arg.learning_rate, Arg.output_folder, Arg.device_id);
             // clang-format on
             exit(EXIT_SUCCESS);
         }
 
+        if (cmd_option_exists(argv, argc + argv, "-area")) {
+            Arg.area = true;
+        }
         if (cmd_option_exists(argv, argc + argv, "-input")) {
             Arg.obj_file_name =
                 std::string(get_cmd_option(argv, argv + argc, "-input"));
@@ -147,6 +171,7 @@ int main(int argc, char** argv)
     }
 
     RXMESH_INFO("input= {}", Arg.obj_file_name);
+    RXMESH_INFO("area= {}", (Arg.area ? "true" : "false"));
     RXMESH_INFO("iter= {}", Arg.num_iter);
     RXMESH_INFO("lr= {}", Arg.learning_rate);
     RXMESH_INFO("output_folder= {}", Arg.output_folder);
@@ -162,7 +187,7 @@ int main(int argc, char** argv)
 
     manual<T>(rx);
 
-    // #if USE_POLYSCOPE
-    //     polyscope::show();
-    // #endif
+#if USE_POLYSCOPE
+    polyscope::show();
+#endif
 }
