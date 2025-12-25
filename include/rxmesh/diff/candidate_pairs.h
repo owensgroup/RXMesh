@@ -40,6 +40,7 @@ struct CandidatePairs
     __host__ CandidatePairs(int            max_capacity,
                             HessMatT&      hess,
                             const Context& ctx)
+<<<<<<< HEAD
         : m_hess(hess),
           m_variable_dim(hess.K_),
           m_pairs_handle(DenseMatrix<PairT, Eigen::ColMajor>(max_capacity,
@@ -50,10 +51,24 @@ struct CandidatePairs
           m_context(ctx)
     {
 
+=======
+    {
+        m_hess = hess;
+        m_variable_dim = hess.K_;
+>>>>>>> acd6198 (wip)
         m_pairs_id = DenseMatrix<IndexT, Eigen::ColMajor>(
             max_capacity * m_variable_dim * m_variable_dim * 2,
             2,
             LOCATION_ALL);
+<<<<<<< HEAD
+=======
+        m_pairs_handle = DenseMatrix<PairT, Eigen::ColMajor>(max_capacity,
+                                                             1,
+                                                             LOCATION_ALL);
+        m_current_num_pairs = DenseMatrix<int>(1, 1, LOCATION_ALL);
+        m_current_num_index = DenseMatrix<int>(1, 1, LOCATION_ALL);
+        m_context = ctx;
+>>>>>>> acd6198 (wip)
 
         reset();
     }

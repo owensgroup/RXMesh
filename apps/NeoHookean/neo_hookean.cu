@@ -35,7 +35,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     using HessMatT = typename ProblemT::HessMatT;
 
     // Problem parameters
-    const int max_vv_candidate_pairs = 50;
+    const int max_vv_candidate_pairs = 500;
 
     const T        density        = 1000;  // rho
     const T        young_mod      = 1e5;   // E
@@ -48,7 +48,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     DenseMatrix<T> dbc_stiff(1, 1, LOCATION_ALL);
     dbc_stiff(0) = 1000;
     dbc_stiff.move(HOST, DEVICE);
-    const T dhat  = 0.01;
+    const T dhat  = 0.1;
     const T kappa = 1e5;
 
     // TODO the limits and velocity should be different for different Dirichlet
@@ -101,7 +101,9 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     contact_area.reset(dx, DEVICE);  // perimeter split to each vertex
 
     // Diff problem and solvers
+    printf("before problem declaration\n");
     ProblemT problem(rx, true, max_vv_candidate_pairs);
+    printf("after problem declaration\n");
 
 
     CGSolver<T, ProblemT::DenseMatT::OrderT> solver(*problem.hess, 1, 1000);
@@ -226,6 +228,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
             rx, is_dbc, x, v_dbc_vel, v_dbc_limit, time_step, dbc_target);
 
         // evaluate energy
+        printf("Adding Contact Energy.\n");
         add_contact(rx,
                     problem.vv_pairs,
                     v_dbc[0],
@@ -234,8 +237,11 @@ void neo_hookean(RXMeshStatic& rx, T dx)
                     is_dbc,
                     x,
                     dhat);
+        printf("Before update hessian.\n");
         problem.update_hessian();
+        printf("After update hessian.\n");
         problem.eval_terms();
+        printf("After eval terms.\n");
 
         grad.copy_from(problem.grad, DEVICE, DEVICE);
         // DBC satisfied
@@ -288,6 +294,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
             line_search_init_step = std::min(nh_step, bar_step);
 
             // TODO: line search should pass the step to the friction energy
+            printf("Before line search.\n");
             bool ls_success = newton_solver.line_search(
                 line_search_init_step, 0.5, 64, 0.0, [&](auto temp_x) {
                     add_contact(rx,
@@ -299,12 +306,14 @@ void neo_hookean(RXMeshStatic& rx, T dx)
                                 temp_x,
                                 dhat);
                 });
+            printf("After line search.\n");
 
             if (!ls_success) {
                 RXMESH_WARN("Line search failed!");
             }
 
             // evaluate energy
+            printf("towards end\n");
             add_contact(rx,
                         problem.vv_pairs,
                         v_dbc[0],
@@ -313,26 +322,40 @@ void neo_hookean(RXMeshStatic& rx, T dx)
                         is_dbc,
                         x,
                         dhat);
+            printf("towards end before update hessian\n");
             problem.update_hessian();
+            printf("towards end after update hessian");
             problem.eval_terms();
+            printf("towards end after eval terms\n");
 
             T f = problem.get_current_loss();
+            printf("loss calculated\n");
 
             // DBC satisfied
+            printf("Checking DBC satisfied\n");
             check_dbc_satisfied(
                 rx, is_dbc_satisfied, x, is_dbc, dbc_target, time_step, tol);
+            printf("DBC check completed\n");
 
             // how many DBC are satisfied
+            printf("Reducing DBC satisfied count\n");
             num_satisfied = rh.reduce(is_dbc_satisfied, cub::Sum(), 0);
+            printf("Number of DBC satisfied: %d\n", num_satisfied);
 
             // apply bc
+            printf("Applying boundary conditions\n");
             newton_solver.apply_bc(is_dbc_satisfied);
+            printf("BC applied\n");
 
             // get newton direction
+            printf("Computing Newton direction\n");
             newton_solver.compute_direction();
+            printf("Newton direction computed\n");
 
             // residual is abs_max(newton_dir)/ h
+            printf("Computing residual\n");
             residual = newton_solver.dir.abs_max() / time_step;
+            printf("Residual computed: %f\n", residual);
 
             RXMESH_INFO(
                 "  Subsetp: {}, F: {}, R: {}, line_search_init_step={}, "
@@ -345,6 +368,7 @@ void neo_hookean(RXMeshStatic& rx, T dx)
 
             iter++;
 
+            printf("end of iteration\n");
             if (iter > 10) {
                 break;
             }

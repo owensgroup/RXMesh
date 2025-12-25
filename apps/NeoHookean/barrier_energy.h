@@ -3,6 +3,10 @@
 #include "rxmesh/diff/candidate_pairs.h"
 #include "rxmesh/rxmesh_static.h"
 
+#define CUBQL_GPU_BUILDER_IMPLEMENTATION 1
+#include "cuBQL/bvh.h"
+#include "cuBQL/traversal/shrinkingRadiusQuery.h"
+
 using namespace rxmesh;
 
 template <typename ProblemT,
@@ -68,29 +72,112 @@ void add_contact(RXMeshStatic&      rx,
                  const VAttrT&      x,
                  const T            dhat)
 {
+    printf("Inside Contact Pairs\n");
+    printf("Contact Pairs Size Before Reset: %d\n", contact_pairs.num_pairs());
     contact_pairs.reset();
+    printf("Contact Pairs Size After Reset: %d\n", contact_pairs.num_pairs());
 
+    // Step 1: Get vertex count and context
+    uint32_t num_vertices = rx.get_num_elements<VertexHandle>();
+    auto     ctx          = rx.get_context();
+    printf("Number of vertices: %u\n", num_vertices);
+
+    // Step 2: Allocate and populate bounding boxes for BVH
+    // For point data, each box is degenerate (min == max)
+    using box_t = cuBQL::box_t<T, 3>;
+    box_t* d_boxes = nullptr;
+    CUDA_ERROR(cudaMalloc((void**)&d_boxes, sizeof(box_t) * num_vertices));
+    printf("Allocated memory for the bvh boxes: %u bytes.\n", sizeof(box_t) * num_vertices);
+
+    // Populate boxes from vertex positions
+    const int threads = 256;
+    const int blocks  = DIVIDE_UP(num_vertices, threads);
+
+    for_each_item<<<blocks, threads>>>(
+        num_vertices, [=] __device__(int i) mutable {
+            VertexHandle      vh  = ctx.template get_handle<VertexHandle>(i);
+            Eigen::Vector3<T> pos = x.template to_eigen<3>(vh);
+
+            // Create bounding box at vertex position
+            cuBQL::vec_t<T, 3> point;
+            point.x = pos[0];
+            point.y = pos[1];
+            point.z = pos[2];
+
+            d_boxes[i] = box_t().including(point);
+
+            // Print first few boxes for debugging
+            // if (i < 5) {
+            //     printf("Box[%d]: lower=(%f, %f, %f), upper=(%f, %f, %f)\n",
+            //            i,
+            //            d_boxes[i].lower.x, d_boxes[i].lower.y, d_boxes[i].lower.z,
+            //            d_boxes[i].upper.x, d_boxes[i].upper.y, d_boxes[i].upper.z);
+            // }
+        });
+
+    CUDA_ERROR(cudaDeviceSynchronize());
+
+    // Step 3: Build BVH
+    cuBQL::BinaryBVH<T, 3> bvh;
+    cuBQL::BuildConfig     build_config;
+    cuBQL::gpuBuilder(bvh, d_boxes, num_vertices, build_config);
+
+    // Calculate and print BVH memory usage
+    size_t nodes_memory = bvh.numNodes * sizeof(typename cuBQL::BinaryBVH<T, 3>::Node);
+    size_t primIDs_memory = bvh.numPrims * sizeof(uint32_t);
+    size_t total_bvh_memory = nodes_memory + primIDs_memory;
+
+    printf("Built the BVH.\n");
+    printf("  Number of nodes: %u\n", bvh.numNodes);
+    printf("  Number of primitives: %u\n", bvh.numPrims);
+    printf("  Nodes memory: %zu bytes (%.2f MB)\n", nodes_memory, nodes_memory / (1024.0f * 1024.0f));
+    printf("  PrimIDs memory: %zu bytes (%.2f MB)\n", primIDs_memory, primIDs_memory / (1024.0f * 1024.0f));
+    printf("  Total BVH memory: %zu bytes (%.2f MB)\n", total_bvh_memory, total_bvh_memory / (1024.0f * 1024.0f));
+
+    // Step 4: Query BVH for each vertex to find nearby vertices
     rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) mutable {
-        if (vh == dbc_vertex || is_dbc(vh)) {
-            return;
+        if (is_dbc(vh)) {
+            return;  // Skip DBC vertices
         }
-        const Eigen::Vector3<T> x_dbc = x.template to_eigen<3>(dbc_vertex);
-        const Eigen::Vector3<T> xi    = x.template to_eigen<3>(vh);
-        const Eigen::Vector3<T> normal(0.0, -1.0, 0.0);
 
-        T d = (xi - x_dbc).dot(normal);
+        const Eigen::Vector3<T> xi = x.template to_eigen<3>(vh);
+        const uint32_t          vh_id = ctx.template linear_id<VertexHandle>(vh);
 
-        if (d < dhat) {
-            bool inserted = contact_pairs.insert(vh, dbc_vertex);
-            assert(inserted);
+        // Query point for BVH traversal
+        cuBQL::vec_t<T, 3> query_point;
+        query_point.x = xi[0];
+        query_point.y = xi[1];
+        query_point.z = xi[2];
 
-            inserted = contact_pairs.insert(vh, dbc_vertex1);
-            assert(inserted);
+        // Fixed-radius query using shrinking radius approach
+        auto query_lambda = [&](uint32_t prim_id) -> float {
+            if (prim_id == vh_id) {
+                return dhat * dhat;  // Return SQUARED radius, skip self
+            }
 
-            inserted = contact_pairs.insert(vh, dbc_vertex2);
-            assert(inserted);
-        }
+            VertexHandle      other_vh = ctx.template get_handle<VertexHandle>(prim_id);
+            Eigen::Vector3<T> xj       = x.template to_eigen<3>(other_vh);
+
+            T dist = (xi - xj).norm();
+
+            if (dist < dhat) {
+                contact_pairs.insert(vh, other_vh);
+            }
+
+            return dhat * dhat;  // Return SQUARED radius for fixed-radius query
+        };
+
+        cuBQL::shrinkingRadiusQuery::forEachPrim<T, 3>(
+            query_lambda, bvh, query_point, dhat * dhat);
     });
+
+    printf("Traversed the BVH and executed the contact pair addition.\n");
+    printf("Contact Pairs Size After Traversal: %d\n", contact_pairs.num_pairs());
+
+    // Step 5: Cleanup
+    cuBQL::cuda::free(bvh);  // Free BVH memory (nodes and primIDs)
+    GPU_FREE(d_boxes);  // Free bounding boxes
+    printf("Released BVH and bounding box memory.\n");
 }
 
 template <typename ProblemT,
