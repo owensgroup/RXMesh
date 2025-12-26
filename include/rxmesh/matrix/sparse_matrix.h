@@ -769,6 +769,12 @@ struct SparseMatrix
 
         init_cusparse(*this);
 
+        // now that the matrix size changes, these buffers many need to be
+        // reallocated to fit the new size
+        GPU_FREE(m_d_cusparse_spmm_buffer);
+        m_spmm_buffer_size = 0;
+        GPU_FREE(m_d_cusparse_spmv_buffer);
+        m_spmv_buffer_size = 0;
         return true;
     }
 
@@ -1021,8 +1027,8 @@ struct SparseMatrix
     {
         if (m_d_cusparse_spmm_buffer == nullptr) {
 
-            T alpha;
-            T beta;
+            T alpha = 1.0;
+            T beta  = 0.0;
 
             cusparseSpMatDescr_t matA    = m_spdescr;
             cusparseDnMatDescr_t matB    = B_mat.m_dendescr;
@@ -1046,8 +1052,8 @@ struct SparseMatrix
                           CUSPARSE_OPERATION_CONJUGATE_TRANSPOSE;
             }
 
-            CUSPARSE_ERROR(cusparseSetStream(m_cusparse_handle, stream));
-
+            // CUSPARSE_ERROR(cusparseSetStream(m_cusparse_handle, stream));
+            m_spmm_buffer_size = 0;
             CUSPARSE_ERROR(cusparseSpMM_bufferSize(m_cusparse_handle,
                                                    opA,
                                                    opB,
@@ -1400,7 +1406,7 @@ struct SparseMatrix
 
         // cuSparse handle
         if (mat.m_cusparse_handle) {
-            CUSPARSE_ERROR(cusparseDestroy(m_cusparse_handle));
+            CUSPARSE_ERROR(cusparseDestroy(mat.m_cusparse_handle));
         }
         CUSPARSE_ERROR(cusparseCreate(&mat.m_cusparse_handle));
         CUSPARSE_ERROR(cusparseSetPointerMode(mat.m_cusparse_handle,
