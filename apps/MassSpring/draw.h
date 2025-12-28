@@ -9,7 +9,8 @@ void draw(RXMeshStatic& rx,
           VAttrT&       x_tilde,
           VAttrT&       velocity,
           FunT&         step_forward,
-          int&           time_step)
+          int&          time_step,
+          int           max_time_steps)
 {
 #if USE_POLYSCOPE
     polyscope::options::groundPlaneHeightFactor = 0.37;
@@ -36,7 +37,7 @@ void draw(RXMeshStatic& rx,
         }
 
         ImGui::SameLine();
-        if (ImGui::Button("Pause")) {
+        if (ImGui::Button("Pause") || time_step == max_time_steps) {
             is_running = false;
         }
 
