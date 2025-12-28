@@ -23,7 +23,7 @@ enum class Scenario
 };
 
 template <typename T>
-void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario)
+void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario, int max_time_steps)
 {
     constexpr int VariableDim = 3;
 
@@ -51,7 +51,7 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario)
     ProblemT problem(rx, true);
 
 #ifdef USE_CUDSS
-    cuDSSCholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(
+    CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(
         problem.hess.get());
 #else
     CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(
@@ -129,6 +129,7 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario)
     timer.add("LinearSolver");
     timer.add("Diff");
 
+    int totla_newton_iter = 0;
 
     auto step_forward = [&]() {
         // evaluate energy
@@ -136,6 +137,7 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario)
         problem.eval_terms();
         timer.stop("Diff");
 
+        int newton_iter = 1;
 
         // update x_tilde
         timer.start("Step");
@@ -159,16 +161,14 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario)
         T residual = newton_solver.dir.abs_max() / h;
 
 
-        T f = problem.get_current_loss();
+        // T f = problem.get_current_loss();
 
-
-        int iter = 0;
         while (residual > tol) {
 
-            RXMESH_INFO("Time step: {}, Energy: {}, Residual: {}",
-                        time_step,
-                        f,
-                        residual);
+            // RXMESH_INFO("Time step: {}, Energy: {}, Residual: {}",
+            //             time_step,
+            //             f,
+            //             residual);
 
             timer.start("LineSearch");
             T line_search_init_step = 1;
@@ -195,8 +195,19 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario)
             // residual is abs_max(newton_dir)/ h
             residual = newton_solver.dir.abs_max() / h;
 
-            iter++;
+            newton_iter++;
         }
+
+        totla_newton_iter += newton_iter;
+
+        RXMESH_INFO(
+            "iter: {}, newton_iter: {}, line-search: {}, linear-solve: {}, "
+            "diff: {}",
+            time_step,
+            newton_iter,
+            timer.get_timer("LineSearch")->elapsed_millis(),
+            timer.get_timer("LinearSolver")->elapsed_millis(),
+            timer.get_timer("Diff")->elapsed_millis());
 
         //  update velocity
         rx.for_each_vertex(
@@ -214,30 +225,42 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario)
     };
 
 #if USE_POLYSCOPE
-    draw(rx, x_tilde, velocity, step_forward, time_step);
+    draw(rx, x_tilde, velocity, step_forward, time_step, max_time_steps);
 #else
-    while (time_step < 5) {
+    while (time_step < max_time_steps) {
         step_forward();
     }
 #endif
 
 
     RXMESH_INFO(
-        "Mass-spring: #time_step ={}, time= {} (ms), "
+        "Mass-spring: #V= {}, #time_step ={}, time= {} (ms), "
         "timer/iteration= {} ms/iter",
+        rx.get_num_vertices(),
         time_step,
         timer.elapsed_millis("Step"),
         timer.elapsed_millis("Step") / float(time_step));
-    RXMESH_INFO("LinearSolver {} (ms), Diff {} (ms), LineSearch {} (ms)",
-                timer.elapsed_millis("LinearSolver"),
-                timer.elapsed_millis("Diff"),
-                timer.elapsed_millis("LineSearch"));
+    RXMESH_INFO(
+        "Num Newton Iter {}, LinearSolver {} (ms), Diff {} (ms), LineSearch {} "
+        "(ms)",
+        totla_newton_iter,
+        timer.elapsed_millis("LinearSolver"),
+        timer.elapsed_millis("Diff"),
+        timer.elapsed_millis("LineSearch"));
 
     RXMESH_INFO(
-        "LinearSolver/iter {} (ms), Diff/iter {} (ms), LineSearch/iter {} (ms)",
+        "LinearSolver/time_step {} (ms), Diff/time_step {} (ms), "
+        "LineSearch/time_step {} (ms)",
         timer.elapsed_millis("LinearSolver") / float(time_step),
         timer.elapsed_millis("Diff") / float(time_step),
         timer.elapsed_millis("LineSearch") / float(time_step));
+
+    RXMESH_INFO(
+        "LinearSolver/Newton_iter {} (ms), Diff/Newton_iter {} (ms), "
+        "LineSearch/Newton_iter {} (ms)",
+        timer.elapsed_millis("LinearSolver") / float(totla_newton_iter),
+        timer.elapsed_millis("Diff") / float(totla_newton_iter),
+        timer.elapsed_millis("LineSearch") / float(totla_newton_iter));
 }
 
 int main(int argc, char** argv)
@@ -251,13 +274,19 @@ int main(int argc, char** argv)
 
     int n = 16;
 
-    if (argc == 2) {
+    int max_time_steps = 100;
+
+    if (argc >= 2) {
         n = atoi(argv[1]);
+    }
+
+    if (argc >= 3) {
+        max_time_steps = atoi(argv[2]);
     }
 
     T dx = 1 / T(n - 1);
 
-    create_plane(verts, fv, n, n, 2, dx, false, vec3<float>(-0.5, -0.5, 0));
+    create_plane(verts, fv, n, n, 2, dx, false, vec3<float>(0, 0, 0));
 
     RXMeshStatic rx(fv);
     rx.add_vertex_coordinates(verts, "Coords");
@@ -266,5 +295,5 @@ int main(int argc, char** argv)
         "#Faces: {}, #Vertices: {}", rx.get_num_faces(), rx.get_num_vertices());
 
 
-    mass_spring<T>(rx, dx, Scenario::DropBox);
+    mass_spring<T>(rx, dx, Scenario::Flag, max_time_steps);
 }

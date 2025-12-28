@@ -96,6 +96,11 @@ struct Timers
 
     }
 
+    std::shared_ptr<TimerT> get_timer(std::string name)
+    {
+        return m_timers.at(name);
+    }
+
     float elapsed_millis(std::string name)
     {
         return m_total_time.at(name);

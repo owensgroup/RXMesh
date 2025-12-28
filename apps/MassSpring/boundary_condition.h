@@ -16,7 +16,7 @@ void flag_bc(RXMeshStatic&    rx,
     rx.for_each_vertex(
         DEVICE,
         [bb_upper, bb_lower, is_bc, x] __device__(const VertexHandle& vh) {
-            if (x(vh, 0) < std::numeric_limits<T>::min()) {
+            if (x(vh, 0) < bb_lower[0] + std::numeric_limits<T>::min()) {
                 is_bc(vh) = 1;
             }
         });
