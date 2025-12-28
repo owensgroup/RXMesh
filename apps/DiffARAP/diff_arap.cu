@@ -2,8 +2,6 @@
 
 #include "rxmesh/matrix/sparse_matrix.h"
 
-#include "rxmesh/util/svd3_cuda.h"
-
 #include "rxmesh/diff/diff_scalar_problem.h"
 #include "rxmesh/diff/newton_solver.h"
 
@@ -22,13 +20,13 @@ void arap(RXMeshStatic& rx)
 
     using HessMatT = typename ProblemT::HessMatT;
 
-    ProblemT problem(rx);
+    ProblemT problem(rx, true);
 
-    CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(&problem.hess);
+    CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(
+        problem.hess.get());
 
     NetwtonSolver newton_solver(problem, &solver);
 
-    // stays same across computation
     auto P = *rx.get_input_vertex_coordinates();
 
     // deformed vertex position that change every iteration
@@ -39,7 +37,10 @@ void arap(RXMeshStatic& rx)
     //  0 means free
     //  1 means user-displaced
     //  2 means fixed
-    auto constraints = *rx.add_vertex_attribute<T>("Constraints", 1);
+    auto constraints = *rx.add_vertex_attribute<int>("Constraints", 1);
+    auto bc          = *rx.add_vertex_attribute<int>("bc", 1);
+    constraints.reset(0, LOCATION_ALL);
+    bc.reset(0, LOCATION_ALL);
 
     // rotation matrix as a very attribute where every vertex has 3x3 matrix
     auto rotations = *rx.add_vertex_attribute<T>("RotationMatrix", 9);
@@ -56,19 +57,23 @@ void arap(RXMeshStatic& rx)
         // fix the bottom
         if (p[2] < -0.63) {
             constraints(vh) = 2;
+            bc(vh)          = 1;
         }
 
         // move the jaw
         if (glm::distance(p, sphere_center) < 0.1) {
             constraints(vh) = 1;
+            bc(vh)          = 1;
         }
     });
 
 #if USE_POLYSCOPE
     // move constraints to the host and add it to Polyscope
     constraints.move(DEVICE, HOST);
+    bc.move(DEVICE, HOST);
     rx.get_polyscope_mesh()->addVertexScalarQuantity("constraintsV",
                                                      constraints);
+    rx.get_polyscope_mesh()->addVertexScalarQuantity("bc", bc);
 #endif
 
 
@@ -80,44 +85,37 @@ void arap(RXMeshStatic& rx)
 
 
     // energy term
-    problem.template add_term<Op::VV, false>([=] __device__(const auto& vh,
-                                                            const auto& iter,
-                                                            auto& objective) {
-        using ActiveT = ACTIVE_TYPE(vh);
+    problem.template add_term<Op::EV, true>(
+        [=] __device__(const auto& eh, const auto& iter, auto& obj) {
+            using ActiveT = ACTIVE_TYPE(eh);
 
-        ActiveT E;
+            auto vi = iter[0];
+            auto vj = iter[1];
 
-        // pi_prime
-        Eigen::Vector3<ActiveT> pi_prime = iter_val<ActiveT, 3>(vh, objective);
+            Eigen::Vector3<ActiveT> pi_prime =
+                iter_val<ActiveT, 3>(eh, iter, obj, 0);
 
-        // pi
-        Eigen::Vector3<T> pi = P.to_eigen<3>(vh);
-
-        // r
-        Eigen::Matrix<T, 3, 3> ri;
-        for (int i = 0; i < 3; i++) {
-            for (int j = 0; j < 3; j++) {
-                ri(i, j) = rotations(vh, i * 3 + j);
-            }
-        }
-
-        for (int j = 0; j < iter.size(); j++) {
-
-            // pi
-            Eigen::Vector3<T> pj = P.to_eigen<3>(iter[j]);
-
-            // pj_prime
             Eigen::Vector3<ActiveT> pj_prime =
-                iter_val<ActiveT, 3>(vh, iter, objective, j);
+                iter_val<ActiveT, 3>(eh, iter, obj, 1);
+
+            Eigen::Vector3<T> pi = P.to_eigen<3>(vi);
+
+            Eigen::Vector3<T> pj = P.to_eigen<3>(vj);
+
+            // r
+            Eigen::Matrix<T, 3, 3> ri;
+            for (int i = 0; i < 3; i++) {
+                for (int j = 0; j < 3; j++) {
+                    ri(i, j) = rotations(vi, i * 3 + j);
+                }
+            }
 
             Eigen::Vector3<ActiveT> e = (pi_prime - pj_prime) - ri * (pi - pj);
 
-            E += weight_matrix(vh, iter[j]) * e.squaredNorm();
-        }
+            ActiveT E = weight_matrix(vi, vj) * e.squaredNorm();
 
-
-        return E;
-    });
+            return E;
+        });
 
 
     T   convergence_eps = 1e-2;
@@ -170,10 +168,10 @@ void arap(RXMeshStatic& rx)
                     "Iter {} =, Newton Iter= {}: Energy = {}", i, iter, f);
 
                 // apply bc
-                newton_solver.apply_bc(constraints);
+                newton_solver.apply_bc(bc);
 
                 // direction newton
-                newton_solver.newton_direction();
+                newton_solver.compute_direction();
 
 
                 // newton decrement
@@ -186,6 +184,7 @@ void arap(RXMeshStatic& rx)
                 newton_solver.line_search();
             }
         }
+
 
         // move mat to the host
         P_prime.move(DEVICE, HOST);
@@ -207,12 +206,12 @@ void arap(RXMeshStatic& rx)
 
 int main(int argc, char** argv)
 {
-    Log::init();
+    rx_init(0);
 
     const uint32_t device_id = 0;
     cuda_query(device_id);
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj", "", 128);
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
 
     if (!rx.is_closed()) {
         RXMESH_ERROR("Input mesh should be closed without boundaries");

@@ -246,7 +246,7 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
 
 int main(int argc, char** argv)
 {
-    Log::init(spdlog::level::info);
+    rx_init(0);
 
     using T = float;
 

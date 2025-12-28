@@ -1,6 +1,6 @@
 #pragma once
-#include "rxmesh/query.cuh"
-
+#include "rxmesh/rxmesh_static.h"
+#include "rxmesh/util/svd3_cuda.h"
 
 /**
  * @brief
@@ -115,99 +115,4 @@ __global__ static void calculate_rotation_matrix(
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
     query.dispatch<Op::VV>(block, shrd_alloc, cal_rot);
-}
-
-/**
- * @brief
- */
-template <typename T, uint32_t blockThreads>
-__global__ static void calculate_b(const rxmesh::Context            context,
-                                   const rxmesh::VertexAttribute<T> P,
-                                   const rxmesh::VertexAttribute<T> P_prime,
-                                   const rxmesh::VertexAttribute<T> rotations,
-                                   const rxmesh::SparseMatrix<T>    weight_mat,
-                                   rxmesh::DenseMatrix<T>           b_mat,
-                                   const rxmesh::VertexAttribute<T> constraints)
-{
-    using namespace rxmesh;
-
-    auto init_lambda = [&](VertexHandle v_id, VertexIterator& vv) {
-        // variable to store ith entry of b_mat
-        Eigen::Vector3f bi(0.0f, 0.0f, 0.0f);
-
-        // get rotation matrix for ith vertex
-        Eigen::Matrix3f Ri = Eigen::Matrix3f::Zero(3, 3);
-
-        for (int i = 0; i < 3; i++) {
-            for (int j = 0; j < 3; j++)
-                Ri(i, j) = rotations(v_id, i * 3 + j);
-        }
-
-        for (int nei_index = 0; nei_index < vv.size(); nei_index++) {
-            // get rotation matrix for neightbor j
-            Eigen::Matrix3f Rj = Eigen::Matrix3f::Zero(3, 3);
-            for (int i = 0; i < 3; i++)
-                for (int j = 0; j < 3; j++)
-                    Rj(i, j) = rotations(vv[nei_index], i * 3 + j);
-
-            // find rotation addition
-            Eigen::Matrix3f rot_add = Ri + Rj;
-            // find coord difference
-            Eigen::Vector3f vert_diff = {P(v_id, 0) - P(vv[nei_index], 0),
-                                         P(v_id, 1) - P(vv[nei_index], 1),
-                                         P(v_id, 2) - P(vv[nei_index], 2)};
-
-            // update bi
-            bi = bi +
-                 0.5 * weight_mat(v_id, vv[nei_index]) * rot_add * vert_diff;
-        }
-
-        if (constraints(v_id, 0) == 0) {
-            b_mat(v_id, 0) = bi[0];
-            b_mat(v_id, 1) = bi[1];
-            b_mat(v_id, 2) = bi[2];
-        } else {
-            b_mat(v_id, 0) = P_prime(v_id, 0);
-            b_mat(v_id, 1) = P_prime(v_id, 1);
-            b_mat(v_id, 2) = P_prime(v_id, 2);
-        }
-    };
-
-    auto                block = cooperative_groups::this_thread_block();
-    Query<blockThreads> query(context);
-    ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, init_lambda);
-}
-
-/**
- * @brief
- */
-template <typename T, uint32_t blockThreads>
-__global__ static void calculate_system_matrix(
-    const rxmesh::Context            context,
-    const rxmesh::SparseMatrix<T>    weight_matrix,
-    rxmesh::SparseMatrix<T>          laplace_mat,
-    const rxmesh::VertexAttribute<T> constraints)
-
-{
-    using namespace rxmesh;
-
-    auto calc_mat = [&](VertexHandle v_id, VertexIterator& vv) {
-        if (constraints(v_id, 0) == 0) {
-            for (int i = 0; i < vv.size(); i++) {
-                laplace_mat(v_id, v_id) += weight_matrix(v_id, vv[i]);
-                laplace_mat(v_id, vv[i]) -= weight_matrix(v_id, vv[i]);
-            }
-        } else {
-            for (int i = 0; i < vv.size(); i++) {
-                laplace_mat(v_id, vv[i]) = 0;
-            }
-            laplace_mat(v_id, v_id) = 1;
-        }
-    };
-
-    auto                block = cooperative_groups::this_thread_block();
-    Query<blockThreads> query(context);
-    ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, calc_mat);
 }
