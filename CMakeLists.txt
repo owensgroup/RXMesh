@@ -7,6 +7,8 @@ project(RXMesh
         LANGUAGES C CXX CUDA)
 
 
+set(CUDA_ARCHS 80)
+set(CMAKE_CUDA_ARCHITECTURES 80)
 set(RX_USE_POLYSCOPE "OFF" CACHE BOOL "Enable Ployscope for visualization")
 set(RX_BUILD_TESTS "ON" CACHE BOOL "Build RXMesh unit test")
 set(RX_BUILD_APPS "ON" CACHE BOOL "Build RXMesh applications")

@@ -229,14 +229,18 @@ void neo_hookean(RXMeshStatic& rx, T dx)
 
         // evaluate energy
         printf("Adding Contact Energy.\n");
-        add_contact(rx,
+        add_contact(problem,
+                    rx,
                     problem.vv_pairs,
                     v_dbc[0],
                     v_dbc[1],
                     v_dbc[2],
                     is_dbc,
                     x,
-                    dhat);
+                    contact_area,
+                    time_step,
+                    dhat,
+                    kappa);
         printf("Before update hessian.\n");
         problem.update_hessian();
         printf("After update hessian.\n");
@@ -297,14 +301,18 @@ void neo_hookean(RXMeshStatic& rx, T dx)
             printf("Before line search.\n");
             bool ls_success = newton_solver.line_search(
                 line_search_init_step, 0.5, 64, 0.0, [&](auto temp_x) {
-                    add_contact(rx,
+                    add_contact(problem,
+                                rx,
                                 problem.vv_pairs,
                                 v_dbc[0],
                                 v_dbc[1],
                                 v_dbc[2],
                                 is_dbc,
                                 temp_x,
-                                dhat);
+                                contact_area,
+                                time_step,
+                                dhat,
+                                kappa);
                 });
             printf("After line search.\n");
 
@@ -314,14 +322,18 @@ void neo_hookean(RXMeshStatic& rx, T dx)
 
             // evaluate energy
             printf("towards end\n");
-            add_contact(rx,
+            add_contact(problem,
+                        rx,
                         problem.vv_pairs,
                         v_dbc[0],
                         v_dbc[1],
                         v_dbc[2],
                         is_dbc,
                         x,
-                        dhat);
+                        contact_area,
+                        time_step,
+                        dhat,
+                        kappa);
             printf("towards end before update hessian\n");
             problem.update_hessian();
             printf("towards end after update hessian");
