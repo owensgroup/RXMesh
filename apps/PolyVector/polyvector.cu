@@ -441,6 +441,7 @@ int main(int argc, char** argv)
     problem.prep_eval();
     solver.prep_solver();
 
+    rx.run_query_kernel<Op::EF, 256>(
     Timers<GPUTimer> timer;
     timer.add("Total");
 

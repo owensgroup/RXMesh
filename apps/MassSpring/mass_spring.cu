@@ -50,8 +50,8 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario, int max_time_steps)
 
     ProblemT problem(rx, true);
 
-#ifdef USE_CUDSS
-    CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(
+#ifdef USE_CUDSS    
+    cuDSSCholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(
         problem.hess.get());
 #else
     CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(

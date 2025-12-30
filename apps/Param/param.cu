@@ -353,7 +353,7 @@ int main(int argc, char** argv)
         parameterize<T>(rx, problem, solver);
 #endif
     } else if (Arg.solver == "lu") {
-        CholeskySolver<HessMatT, Order> solver(problem.hess.get());
+        LUSolver<HessMatT, Order> solver(problem.hess.get());
         parameterize<T>(rx, problem, solver);
     } else if (Arg.solver == "cg") {
         CGSolver<T, Order> solver(
