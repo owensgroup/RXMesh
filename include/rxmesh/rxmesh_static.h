@@ -97,6 +97,87 @@ class RXMeshStatic : public RXMesh
     };
 
     /**
+     * @brief Constructor using path to multiple meshes
+     */
+    explicit RXMeshStatic(const std::vector<std::string> files_path,
+                          const uint32_t                 patch_size = 512)
+        : RXMesh(patch_size)
+    {
+        std::vector<std::vector<uint32_t>> fv;
+        std::vector<std::vector<float>>    vertices;
+
+        std::vector<int> region_num_faces;
+        std::vector<int> region_num_vertices;
+
+        for (auto path : files_path) {
+            if (!import_obj(path, vertices, fv, true)) {
+                RXMESH_ERROR(
+                    "RXMeshStatic::RXMeshStatic could not read the input file "
+                    "{}",
+                    path);
+                exit(EXIT_FAILURE);
+            }
+            region_num_faces.push_back(fv.size());
+            region_num_vertices.push_back(vertices.size());
+        }
+
+        this->init(fv, "", 1.0, 1.0, 0.8);
+
+        m_attr_container = std::make_shared<AttributeContainer>();
+
+        std::string name;
+        for (auto path : files_path) {
+            name += extract_file_name(path);
+        }
+
+#if USE_POLYSCOPE
+        name = polyscope::guessNiceNameFromPath(name);
+#endif
+        add_vertex_coordinates(vertices, name);
+
+        // add region labels for faces, vertices, and edges
+        m_face_label =
+            add_face_attribute<int>("rx:face_label", 1, LOCATION_ALL);
+        m_edge_label =
+            add_edge_attribute<int>("rx:edge_label", 1, LOCATION_ALL);
+        m_vertex_label =
+            add_vertex_attribute<int>("rx:vertex_label", 1, LOCATION_ALL);
+
+        for_each_face(HOST, [=](const FaceHandle fh) {
+            int id = map_to_global(fh);
+
+            auto lower = std::lower_bound(
+                region_num_faces.begin(), region_num_faces.end(), id);
+
+            (*m_face_label)(fh) =
+                std::distance(region_num_faces.begin(), lower);
+        });
+
+        for_each_vertex(HOST, [=](const VertexHandle vh) {
+            int id = map_to_global(vh);
+
+            auto lower = std::lower_bound(
+                region_num_vertices.begin(), region_num_vertices.end(), id);
+
+            (*m_vertex_label)(vh) =
+                std::distance(region_num_vertices.begin(), lower);
+        });
+        m_face_label->move(HOST, DEVICE);
+        m_vertex_label->move(HOST, DEVICE);
+
+        add_edge_labels(*m_face_label, *m_edge_label);
+
+        m_edge_label->move(DEVICE, HOST);
+
+
+#if USE_POLYSCOPE
+        m_polyscope_mesh->addFaceScalarQuantity("rx:FLabel", *m_face_label);
+        m_polyscope_mesh->addEdgeScalarQuantity("rx:ELabel", *m_edge_label);
+        m_polyscope_mesh->addVertexScalarQuantity("rx:VLabel", *m_vertex_label);
+#endif
+    };
+
+    /**
      * @brief Add vertex coordinates to the input mesh. When calling
      * RXMeshStatic constructor that takes the face's vertices, this function
      * can be called to then add vertex coordinates and also add the mesh to
@@ -1464,6 +1545,64 @@ class RXMeshStatic : public RXMesh
     }
 
     /**
+     * @brief return a shared pointer of the face region label
+     */
+    std::shared_ptr<FaceAttribute<int>> get_face_region_label()
+    {
+        if (!m_face_label) {
+            RXMESH_ERROR(
+                "RXMeshStatic::get_face_region_label() there is no region "
+                "label.");
+        }
+        return m_face_label;
+    }
+
+    /**
+     * @brief return a shared pointer of the edge region label
+     */
+    std::shared_ptr<EdgeAttribute<int>> get_edge_region_label()
+    {
+        if (!m_edge_label) {
+            RXMESH_ERROR(
+                "RXMeshStatic::get_edge_region_label() there is no region "
+                "label.");
+        }
+        return m_edge_label;
+    }
+
+    /**
+     * @brief return a shared pointer of the vertex region label
+     */
+    std::shared_ptr<VertexAttribute<int>> get_vertex_region_label()
+    {
+        if (!m_vertex_label) {
+            RXMESH_ERROR(
+                "RXMeshStatic::get_vertex_region_label() there is no region "
+                "label.");
+        }
+        return m_vertex_label;
+    }
+
+    /**
+     * @brief return a shared pointer of region label based on the template type
+     */
+    template <typename HandleT>
+    std::shared_ptr<Attribute<int, HandleT>> get_region_label()
+    {
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return get_face_region_label();
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return get_edge_region_label();
+        }
+
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return get_vertex_region_label();
+        }
+    }
+
+    /**
      * @brief scale the mesh so that it fits inside a bounding box defined by
      * the box lower and upper. Results are reflected on the coordinates
      * returned by get_input_vertex_coordinates()
@@ -2398,7 +2537,29 @@ class RXMeshStatic : public RXMesh
     EdgeMapT                m_polyscope_edges_map;
 #endif
 
+   public:
+    void add_edge_labels(FaceAttribute<int>& face_label,
+                         EdgeAttribute<int>& edge_label)
+    {
+
+        run_query_kernel<Op::FE, 256>(
+            [face_label, edge_label] __device__(const FaceHandle   fh,
+                                                const EdgeIterator iter) {
+                int label = face_label(fh);
+
+                edge_label(iter[0]) = label;
+                edge_label(iter[1]) = label;
+                edge_label(iter[2]) = label;
+            });
+    }
+
+
+   protected:
     std::shared_ptr<AttributeContainer>     m_attr_container;
     std::shared_ptr<VertexAttribute<float>> m_input_vertex_coordinates;
+
+    std::shared_ptr<FaceAttribute<int>>   m_face_label;
+    std::shared_ptr<EdgeAttribute<int>>   m_edge_label;
+    std::shared_ptr<VertexAttribute<int>> m_vertex_label;
 };
 }  // namespace rxmesh

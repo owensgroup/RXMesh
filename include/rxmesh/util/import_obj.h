@@ -24,7 +24,8 @@ bool import_obj(const std::string                 file_name,
                 std::vector<std::vector<DataT>>&  tex,
                 std::vector<std::vector<IndexT>>& face_tex,
                 std::vector<std::vector<DataT>>&  normals,
-                std::vector<std::vector<IndexT>>& face_normal)
+                std::vector<std::vector<IndexT>>& face_normal,
+                bool                              append)
 {
 
     FILE* Objfile = fopen(file_name.c_str(), "r");
@@ -37,12 +38,17 @@ bool import_obj(const std::string                 file_name,
 
 
     // make sure everything is clean
-    vertices.clear();
-    faces.clear();
-    tex.clear();
-    face_tex.clear();
-    normals.clear();
-    face_normal.clear();
+    int start_num_vertices = 0;
+    if (!append) {
+        vertices.clear();
+        faces.clear();
+        tex.clear();
+        face_tex.clear();
+        normals.clear();
+        face_normal.clear();
+    } else {
+        start_num_vertices = vertices.size();
+    }
 
     constexpr uint32_t max_line_length = 2048;
     char               line[max_line_length];
@@ -128,13 +134,21 @@ bool import_obj(const std::string                 file_name,
                         f.push_back(i < 0 ? i + vertices.size() : i - 1);
                         ft.push_back(i < 0 ? i + tex.size() : i - 1);
                         fn.push_back(i < 0 ? i + normals.size() : i - 1);
+
+                        f.back() += start_num_vertices;
+                        ft.back() += start_num_vertices;
+                        fn.back() += start_num_vertices;
                     } else if (sscanf(word, "%ld/%ld", &i, &it) == 2) {
                         // face, tex
                         f.push_back(i < 0 ? i + vertices.size() : i - 1);
                         ft.push_back(i < 0 ? i + tex.size() : i - 1);
+
+                        f.back() += start_num_vertices;
+                        ft.back() += start_num_vertices;
                     } else if (sscanf(word, "%ld", &i) == 1) {
                         // face
                         f.push_back(i < 0 ? i + vertices.size() : i - 1);
+                        f.back() += start_num_vertices;
                     } else {
                         RXMESH_ERROR(
                             "importOBJ() face has wrong format Line[{}]",
@@ -202,7 +216,8 @@ bool import_obj(const std::string                 file_name,
 template <typename DataT, typename IndexT>
 bool import_obj(const std::string                 file_name,
                 std::vector<std::vector<DataT>>&  vertices,
-                std::vector<std::vector<IndexT>>& faces)
+                std::vector<std::vector<IndexT>>& faces,
+                bool                              append = false)
 {
 
     std::vector<std::vector<DataT>>  tex;
@@ -210,6 +225,12 @@ bool import_obj(const std::string                 file_name,
     std::vector<std::vector<DataT>>  normals;
     std::vector<std::vector<IndexT>> face_normal;
 
-    return import_obj(
-        file_name, vertices, faces, tex, face_tex, normals, face_normal);
+    return import_obj(file_name,
+                      vertices,
+                      faces,
+                      tex,
+                      face_tex,
+                      normals,
+                      face_normal,
+                      append);
 }
