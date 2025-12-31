@@ -13,7 +13,7 @@ struct arg
     std::string obj_file_name   = STRINGIFY(INPUT_DIR) "bunnyhead.obj";
     std::string output_folder   = STRINGIFY(OUTPUT_DIR);
     std::string uv_file_name    = "";
-    std::string solver          = "chol";
+    std::string solver          = "cudss_chol";
     uint32_t    device_id       = 0;
     float       cg_abs_tol      = 1e-6;
     float       cg_rel_tol      = 0.0;
@@ -187,6 +187,7 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
 
     timer.start("Total");
 
+    rx.export_obj(extract_file_name(Arg.obj_file_name) + ".obj", coordinates);
 
     for (iter = 0; iter < Arg.newton_max_iter; ++iter) {
 
@@ -204,6 +205,25 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
         // get the current value of the loss function
         T f = problem.get_current_loss();
         RXMESH_INFO("Iteration= {}: Energy = {}", iter, f);
+
+        {
+            problem.hess->move(DEVICE, HOST);
+            problem.hess->to_mtx(extract_file_name(Arg.obj_file_name) +
+                                 "_slim_hess_" + std::to_string(iter) + ".mtx");
+
+
+            problem.grad.move(DEVICE, HOST);
+
+            int r = problem.grad.rows();
+            int c = problem.grad.cols();
+
+            problem.grad.reshape(r * c, 1);
+
+            problem.grad.to_mtx(extract_file_name(Arg.obj_file_name) +
+                                "_slim_grad_" + std::to_string(iter) + ".mtx");
+
+            problem.grad.reshape(r, c);
+        }
 
         // direction newton
         newton_solver.compute_direction();
