@@ -1,4 +1,5 @@
 #pragma once
+#include <iomanip>
 #include <vector>
 #include "cublas_v2.h"
 #include "cusparse.h"
@@ -1079,6 +1080,31 @@ struct DenseMatrix
                                        cudaMemcpyHostToDevice,
                                        stream));
         }
+    }
+
+    /**
+     * @brief export the matrix to MatrixMarket file
+     */
+    __host__ void to_mtx(std::string file_name)
+    {
+        std::ofstream file(file_name);
+        if (!file.is_open()) {
+            RXMESH_ERROR("DenseMatrix::to_mtx() Can not open file {}",
+                         file_name);
+            return;
+        }
+
+        file << "%%MatrixMarket matrix array real general\n";
+        file << "% rows cols\n";
+        file << rows() << " " << cols() << "\n";
+
+        for (IndexT j = 0; j < cols(); ++j) {
+            for (IndexT i = 0; i < rows(); ++i) {
+                file << std::setprecision(17) << operator()(i, j) << "\n";
+            }
+        }
+
+        file.close();
     }
 
     /**

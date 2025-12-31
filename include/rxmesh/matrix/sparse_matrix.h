@@ -273,7 +273,7 @@ struct SparseMatrix
             return;
         }
 
-        Eigen::saveMarket(to_eigen(), file_name);
+        Eigen::saveMarket(to_eigen_copy(), file_name);
     }
 
     /**
