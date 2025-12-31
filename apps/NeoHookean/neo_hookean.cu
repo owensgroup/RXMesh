@@ -169,6 +169,8 @@ void neo_hookean(RXMeshStatic& rx, T dx)
 
     ceiling_barrier_energy(
         problem, contact_area, time_step, ground_n, ground_o, dhat, kappa);
+    
+    vv_contact_energy(problem, contact_area, time_step, dhat, kappa);
 
     DenseMatrix<T, Eigen::RowMajor> dir(
         rx, problem.grad.rows(), problem.grad.cols(), LOCATION_ALL);

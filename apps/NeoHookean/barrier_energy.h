@@ -77,22 +77,17 @@ void vv_contact(ProblemT&          problem,
                 const T            dhat,
                 const T            kappa)
 {
-    // printf("Inside Contact Pairs\n");
-    // printf("Contact Pairs Size Before Reset: %d\n", contact_pairs.num_pairs());
     contact_pairs.reset();
-    // printf("Contact Pairs Size After Reset: %d\n", contact_pairs.num_pairs());
 
     // Step 1: Get vertex count and context
     uint32_t num_vertices = rx.get_num_elements<VertexHandle>();
     auto     ctx          = rx.get_context();
-    printf("Number of vertices: %u\n", num_vertices);
 
     // Step 2: Allocate and populate bounding boxes for BVH
     // For point data, each box is degenerate (min == max)
     using box_t = cuBQL::box_t<T, 3>;
     box_t* d_boxes = nullptr;
     CUDA_ERROR(cudaMalloc((void**)&d_boxes, sizeof(box_t) * num_vertices));
-    // printf("Allocated memory for the bvh boxes: %u bytes.\n", sizeof(box_t) * num_vertices);
 
     // Populate boxes from vertex positions
     const int threads = 256;
@@ -110,14 +105,6 @@ void vv_contact(ProblemT&          problem,
             point.z = pos[2];
 
             d_boxes[i] = box_t().including(point);
-
-            // Print first few boxes for debugging
-            // if (i < 5) {
-            //     printf("Box[%d]: lower=(%f, %f, %f), upper=(%f, %f, %f)\n",
-            //            i,
-            //            d_boxes[i].lower.x, d_boxes[i].lower.y, d_boxes[i].lower.z,
-            //            d_boxes[i].upper.x, d_boxes[i].upper.y, d_boxes[i].upper.z);
-            // }
         });
 
     CUDA_ERROR(cudaDeviceSynchronize());
@@ -131,13 +118,6 @@ void vv_contact(ProblemT&          problem,
     size_t nodes_memory = bvh.numNodes * sizeof(typename cuBQL::BinaryBVH<T, 3>::Node);
     size_t primIDs_memory = bvh.numPrims * sizeof(uint32_t);
     size_t total_bvh_memory = nodes_memory + primIDs_memory;
-
-    // printf("Built the BVH.\n");
-    // printf("  Number of nodes: %u\n", bvh.numNodes);
-    // printf("  Number of primitives: %u\n", bvh.numPrims);
-    // printf("  Nodes memory: %zu bytes (%.2f MB)\n", nodes_memory, nodes_memory / (1024.0f * 1024.0f));
-    // printf("  PrimIDs memory: %zu bytes (%.2f MB)\n", primIDs_memory, primIDs_memory / (1024.0f * 1024.0f));
-    // printf("  Total BVH memory: %zu bytes (%.2f MB)\n", total_bvh_memory, total_bvh_memory / (1024.0f * 1024.0f));
 
     // Step 4: Query BVH for each vertex to find nearby vertices
     rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) mutable {
@@ -177,14 +157,23 @@ void vv_contact(ProblemT&          problem,
     });
 
     // printf("Traversed the BVH and executed the contact pair addition.\n");
-    printf("Contact Pairs Size After Traversal: %d\n", contact_pairs.num_pairs());
+    // printf("Contact Pairs Size After Traversal: %d\n", contact_pairs.num_pairs());
 
     // Step 5: Cleanup
     cuBQL::cuda::free(bvh);  // Free BVH memory (nodes and primIDs)
     GPU_FREE(d_boxes);  // Free bounding boxes
     // printf("Released BVH and bounding box memory.\n");
+}
 
-    // Step 6: Add VV contact barrier energy term
+template <typename ProblemT,
+          typename VAttrT,
+          typename T = typename VAttrT::Type>
+void vv_contact_energy(ProblemT&     problem,
+                       const VAttrT& contact_area,
+                       const T       h,
+                       const T       dhat,
+                       const T       kappa)
+{
     const T h_sq = h * h;
 
     problem.template add_term<true>([=] __device__(const auto& id,
@@ -216,7 +205,8 @@ void vv_contact(ProblemT&          problem,
             T avg_contact_area = (contact_area(v0) + contact_area(v1)) * T(0.5);
 
             // Barrier energy: E = h^2 * A * dhat * 0.5 * kappa * (s - 1) * log(s)
-            E = h_sq * avg_contact_area * dhat * T(0.5) * kappa * (s - 1) * log(s);
+            // E = h_sq * avg_contact_area * dhat * T(0.5) * kappa * (s - 1) * log(s);
+            E = avg_contact_area * dhat * T(0.5) * kappa * (s - 1) * log(s);
         }
 
         return E;
