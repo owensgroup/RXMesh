@@ -24,7 +24,20 @@ using T = float;
 constexpr uint32_t num_dbc_vertices = 3;
 VertexHandle       v_dbc[num_dbc_vertices];  // Dirichlet node index
 
-void neo_hookean(RXMeshStatic& rx, T dx)
+struct PhysicsParams {
+    T density        = 1000;   // rho
+    T young_mod      = 1e5;    // E
+    T poisson_ratio  = 0.4;    // nu
+    T time_step      = 0.01;   // h
+    T fricition_coef = 0.11;   // mu
+    T stiffness_coef = 4e4;
+    T tol            = 0.01;
+    T dbc_stiff_val  = 1000;
+    T dhat           = 0.1;
+    T kappa          = 1e5;
+};
+
+void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 {
     constexpr int VariableDim = 3;
 
@@ -37,19 +50,19 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     // Problem parameters
     const int max_vv_candidate_pairs = 500;
 
-    const T        density        = 1000;  // rho
-    const T        young_mod      = 1e5;   // E
-    const T        poisson_ratio  = 0.4;   // nu
-    const T        time_step      = 0.01;  // h
-    const T        fricition_coef = 0.11;  // mu
-    const T        stiffness_coef = 4e4;
-    const T        tol            = 0.01;
+    const T        density        = params.density;
+    const T        young_mod      = params.young_mod;
+    const T        poisson_ratio  = params.poisson_ratio;
+    const T        time_step      = params.time_step;
+    const T        fricition_coef = params.fricition_coef;
+    const T        stiffness_coef = params.stiffness_coef;
+    const T        tol            = params.tol;
     const T        inv_time_step  = T(1) / time_step;
     DenseMatrix<T> dbc_stiff(1, 1, LOCATION_ALL);
-    dbc_stiff(0) = 1000;
+    dbc_stiff(0) = params.dbc_stiff_val;
     dbc_stiff.move(HOST, DEVICE);
-    const T dhat  = 0.1;
-    const T kappa = 1e5;
+    const T dhat  = params.dhat;
+    const T kappa = params.kappa;
 
     // TODO the limits and velocity should be different for different Dirichlet
     // nodes
@@ -419,6 +432,60 @@ int main(int argc, char** argv)
 {
     rx_init(0, spdlog::level::info);
 
+    // Parse command line arguments for physics parameters
+    PhysicsParams params;
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+        if (arg == "--density" && i + 1 < argc) {
+            params.density = std::atof(argv[++i]);
+        } else if (arg == "--young" && i + 1 < argc) {
+            params.young_mod = std::atof(argv[++i]);
+        } else if (arg == "--poisson" && i + 1 < argc) {
+            params.poisson_ratio = std::atof(argv[++i]);
+        } else if (arg == "--timestep" && i + 1 < argc) {
+            params.time_step = std::atof(argv[++i]);
+        } else if (arg == "--friction" && i + 1 < argc) {
+            params.fricition_coef = std::atof(argv[++i]);
+        } else if (arg == "--stiffness" && i + 1 < argc) {
+            params.stiffness_coef = std::atof(argv[++i]);
+        } else if (arg == "--tol" && i + 1 < argc) {
+            params.tol = std::atof(argv[++i]);
+        } else if (arg == "--dbc-stiff" && i + 1 < argc) {
+            params.dbc_stiff_val = std::atof(argv[++i]);
+        } else if (arg == "--dhat" && i + 1 < argc) {
+            params.dhat = std::atof(argv[++i]);
+        } else if (arg == "--kappa" && i + 1 < argc) {
+            params.kappa = std::atof(argv[++i]);
+        } else if (arg == "--help" || arg == "-h") {
+            printf("Usage: %s [options]\n", argv[0]);
+            printf("Options:\n");
+            printf("  --density <val>    Density (default: 1000)\n");
+            printf("  --young <val>      Young's modulus (default: 1e5)\n");
+            printf("  --poisson <val>    Poisson ratio (default: 0.4)\n");
+            printf("  --timestep <val>   Time step (default: 0.01)\n");
+            printf("  --friction <val>   Friction coefficient (default: 0.11)\n");
+            printf("  --stiffness <val>  Stiffness coefficient (default: 4e4)\n");
+            printf("  --tol <val>        Tolerance (default: 0.01)\n");
+            printf("  --dbc-stiff <val>  DBC stiffness (default: 1000)\n");
+            printf("  --dhat <val>       Contact distance threshold (default: 0.1)\n");
+            printf("  --kappa <val>      Contact stiffness (default: 1e5)\n");
+            printf("  --help, -h         Show this help message\n");
+            return 0;
+        }
+    }
+
+    RXMESH_INFO("Physics Parameters:");
+    RXMESH_INFO("  Density: {}", params.density);
+    RXMESH_INFO("  Young's modulus: {}", params.young_mod);
+    RXMESH_INFO("  Poisson ratio: {}", params.poisson_ratio);
+    RXMESH_INFO("  Time step: {}", params.time_step);
+    RXMESH_INFO("  Friction coefficient: {}", params.fricition_coef);
+    RXMESH_INFO("  Stiffness coefficient: {}", params.stiffness_coef);
+    RXMESH_INFO("  Tolerance: {}", params.tol);
+    RXMESH_INFO("  DBC stiffness: {}", params.dbc_stiff_val);
+    RXMESH_INFO("  dhat: {}", params.dhat);
+    RXMESH_INFO("  kappa: {}", params.kappa);
+
     // Load multiple meshes using RXMeshStatic's multiple mesh constructor
     std::vector<std::string> inputs = {"input/el_topo_sphere_1280.obj",
                                        "input/el_topo_sphere_1280.obj"};
@@ -463,5 +530,5 @@ int main(int argc, char** argv)
         false);
 
 
-    neo_hookean(rx, dx);
+    neo_hookean(rx, dx, params);
 }
