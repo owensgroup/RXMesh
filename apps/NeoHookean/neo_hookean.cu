@@ -100,10 +100,11 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     auto contact_area = *rx.add_vertex_attribute<T>("ContactArea", 1);
     contact_area.reset(dx, DEVICE);  // perimeter split to each vertex
 
+    // Get region labels for multiple meshes
+    auto region_label = *rx.get_vertex_region_label();
+
     // Diff problem and solvers
-    printf("before problem declaration\n");
     ProblemT problem(rx, true, max_vv_candidate_pairs);
-    printf("after problem declaration\n");
 
 
     CGSolver<T, ProblemT::DenseMatT::OrderT> solver(*problem.hess, 1, 1000);
@@ -230,7 +231,6 @@ void neo_hookean(RXMeshStatic& rx, T dx)
             rx, is_dbc, x, v_dbc_vel, v_dbc_limit, time_step, dbc_target);
 
         // evaluate energy
-        printf("Adding Contact Energy.\n");
         add_contact(problem,
                     rx,
                     problem.vv_pairs,
@@ -242,12 +242,10 @@ void neo_hookean(RXMeshStatic& rx, T dx)
                     contact_area,
                     time_step,
                     dhat,
-                    kappa);
-        printf("Before update hessian.\n");
+                    kappa,
+                    region_label);
         problem.update_hessian();
-        printf("After update hessian.\n");
         problem.eval_terms();
-        printf("After eval terms.\n");
 
         grad.copy_from(problem.grad, DEVICE, DEVICE);
         // DBC satisfied
@@ -300,7 +298,6 @@ void neo_hookean(RXMeshStatic& rx, T dx)
             line_search_init_step = std::min(nh_step, bar_step);
 
             // TODO: line search should pass the step to the friction energy
-            printf("Before line search.\n");
             bool ls_success = newton_solver.line_search(
                 line_search_init_step, 0.5, 64, 0.0, [&](auto temp_x) {
                     add_contact(problem,
@@ -314,16 +311,15 @@ void neo_hookean(RXMeshStatic& rx, T dx)
                                 contact_area,
                                 time_step,
                                 dhat,
-                                kappa);
+                                kappa,
+                                region_label);
                 });
-            printf("After line search.\n");
 
             if (!ls_success) {
                 RXMESH_WARN("Line search failed!");
             }
 
             // evaluate energy
-            printf("towards end\n");
             add_contact(problem,
                         rx,
                         problem.vv_pairs,
@@ -335,41 +331,28 @@ void neo_hookean(RXMeshStatic& rx, T dx)
                         contact_area,
                         time_step,
                         dhat,
-                        kappa);
-            printf("towards end before update hessian\n");
+                        kappa,
+                        region_label);
             problem.update_hessian();
-            printf("towards end after update hessian");
             problem.eval_terms();
-            printf("towards end after eval terms\n");
 
             T f = problem.get_current_loss();
-            printf("loss calculated\n");
 
             // DBC satisfied
-            printf("Checking DBC satisfied\n");
             check_dbc_satisfied(
                 rx, is_dbc_satisfied, x, is_dbc, dbc_target, time_step, tol);
-            printf("DBC check completed\n");
 
             // how many DBC are satisfied
-            printf("Reducing DBC satisfied count\n");
             num_satisfied = rh.reduce(is_dbc_satisfied, cub::Sum(), 0);
-            printf("Number of DBC satisfied: %d\n", num_satisfied);
 
             // apply bc
-            printf("Applying boundary conditions\n");
             newton_solver.apply_bc(is_dbc_satisfied);
-            printf("BC applied\n");
 
             // get newton direction
-            printf("Computing Newton direction\n");
             newton_solver.compute_direction();
-            printf("Newton direction computed\n");
 
             // residual is abs_max(newton_dir)/ h
-            printf("Computing residual\n");
             residual = newton_solver.dir.abs_max() / time_step;
-            printf("Residual computed: %f\n", residual);
 
             RXMESH_INFO(
                 "  Subsetp: {}, F: {}, R: {}, line_search_init_step={}, "
@@ -382,7 +365,6 @@ void neo_hookean(RXMeshStatic& rx, T dx)
 
             iter++;
 
-            printf("end of iteration\n");
             if (iter > 10) {
                 break;
             }
@@ -437,55 +419,27 @@ int main(int argc, char** argv)
 {
     rx_init(0, spdlog::level::info);
 
+    // Load multiple meshes using RXMeshStatic's multiple mesh constructor
+    std::vector<std::string> inputs = {"input/giraffe.obj",
+                                       "input/el_topo_sphere_1280.obj"};
 
-    std::vector<std::vector<T>>        verts;
-    std::vector<std::vector<uint32_t>> fv;
-
-    int n = 5;
-
-    if (argc == 2) {
-        n = atoi(argv[1]);
-    }
-
-    T dx = 1 / T(n - 1);
-
-    create_plane(verts, fv, n, n, 2, dx, false, vec3<float>(-0.5, -0.5, 0));
-
-    uint32_t t = verts.size();
-
-    // dirichlet nodes
-    const vec3<T> dbc[3] = {
-        {0.5f, 0.6f, 0.0f}, {-0.5f, 0.6f, 0.1f}, {-0.5f, 0.6f, -0.1f}};
-
-    assert(sizeof(dbc) / sizeof(vec3<T>) == num_dbc_vertices);
-
-    verts.push_back({dbc[0][0], dbc[0][1], dbc[0][2]});
-    verts.push_back({dbc[1][0], dbc[1][1], dbc[1][2]});
-    verts.push_back({dbc[2][0], dbc[2][1], dbc[2][2]});
-
-    fv.push_back({t, t + 1, t + 2});
-
-    RXMeshStatic rx(fv);
-    rx.add_vertex_coordinates(verts, "Coords");
+    RXMeshStatic rx(inputs);
 
     RXMESH_INFO(
         "#Faces: {}, #Vertices: {}", rx.get_num_faces(), rx.get_num_vertices());
 
+    T dx = 0.1f;  // mesh spacing for contact area
     auto x = *rx.get_input_vertex_coordinates();
 
+    // Find 3 vertices on the sphere to use as DBC
+    // We'll pick the first 3 vertices from the sphere mesh
+    int dbc_count = 0;
     rx.for_each_vertex(
         HOST,
         [&](VertexHandle vh) {
-            const vec3<T> p = x.to_glm<3>(vh);
-            for (int i = 0; i < 3; ++i) {
-                if (glm::distance2(p, dbc[i]) < 0.0001) {
-                    for (int j = 0; j < 3; ++j) {
-                        if (!v_dbc[j].is_valid()) {
-                            v_dbc[j] = vh;
-                            break;
-                        }
-                    }
-                }
+            if (dbc_count < num_dbc_vertices) {
+                v_dbc[dbc_count] = vh;
+                dbc_count++;
             }
         },
         NULL,

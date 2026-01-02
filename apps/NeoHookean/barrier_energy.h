@@ -75,7 +75,8 @@ void vv_contact(ProblemT&          problem,
                 VAttrT&            contact_area,
                 const T            h,
                 const T            dhat,
-                const T            kappa)
+                const T            kappa,
+                const VertexAttribute<int>& region_label)
 {
     contact_pairs.reset();
 
@@ -140,8 +141,17 @@ void vv_contact(ProblemT&          problem,
                 return dhat * dhat;  // Return SQUARED radius, skip self
             }
 
-            VertexHandle      other_vh = ctx.template get_handle<VertexHandle>(prim_id);
-            Eigen::Vector3<T> xj       = x.template to_eigen<3>(other_vh);
+            VertexHandle other_vh = ctx.template get_handle<VertexHandle>(prim_id);
+
+            // Only add contact pairs between vertices from different meshes
+            int region_vh = region_label(vh);
+            int region_other = region_label(other_vh);
+
+            if (region_vh == region_other) {
+                return dhat * dhat;  // Skip vertices from same mesh
+            }
+
+            Eigen::Vector3<T> xj = x.template to_eigen<3>(other_vh);
 
             T dist = (xi - xj).norm();
 
@@ -257,7 +267,6 @@ void vf_contact(ProblemT&     problem,
 {
     // Step 1: Get face count
     uint32_t num_faces = rx.get_num_elements<FaceHandle>();
-    printf("Number of faces: %u\n", num_faces);
 
     // Step 2: Allocate bounding boxes for BVH
     using box_t = cuBQL::box_t<T, 3>;
@@ -286,17 +295,17 @@ void vf_contact(ProblemT&     problem,
     size_t primIDs_memory   = bvh.numPrims * sizeof(uint32_t);
     size_t total_bvh_memory = nodes_memory + primIDs_memory;
 
-    printf("Built triangle BVH.\n");
-    printf("  Number of nodes: %u\n", bvh.numNodes);
-    printf("  Number of primitives: %u\n", bvh.numPrims);
-    printf("  Total BVH memory: %zu bytes (%.2f MB)\n",
-           total_bvh_memory,
-           total_bvh_memory / (1024.0f * 1024.0f));
+    // printf("Built triangle BVH.\n");
+    // printf("  Number of nodes: %u\n", bvh.numNodes);
+    // printf("  Number of primitives: %u\n", bvh.numPrims);
+    // printf("  Total BVH memory: %zu bytes (%.2f MB)\n",
+    //        total_bvh_memory,
+    //        total_bvh_memory / (1024.0f * 1024.0f));
 
     // Step 5: Cleanup
     cuBQL::cuda::free(bvh);
     GPU_FREE(d_boxes);
-    printf("Released triangle BVH and bounding box memory.\n");
+    // printf("Released triangle BVH and bounding box memory.\n");
 }
 
 template <typename ProblemT,
@@ -315,7 +324,8 @@ void add_contact(ProblemT&          problem,
                  VAttrT&            contact_area,
                  const T            h,
                  const T            dhat,
-                 const T            kappa)
+                 const T            kappa,
+                 const VertexAttribute<int>& region_label)
 {
     // Call VV contact handler
     vv_contact(problem,
@@ -329,7 +339,8 @@ void add_contact(ProblemT&          problem,
                contact_area,
                h,
                dhat,
-               kappa);
+               kappa,
+               region_label);
 
     // Call VF contact handler
     vf_contact(problem, rx, is_dbc, x, contact_area, h, dhat, kappa);
