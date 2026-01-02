@@ -215,8 +215,7 @@ void vv_contact_energy(ProblemT&     problem,
             T avg_contact_area = (contact_area(v0) + contact_area(v1)) * T(0.5);
 
             // Barrier energy: E = h^2 * A * dhat * 0.5 * kappa * (s - 1) * log(s)
-            // E = h_sq * avg_contact_area * dhat * T(0.5) * kappa * (s - 1) * log(s);
-            E = avg_contact_area * dhat * T(0.5) * kappa * (s - 1) * log(s);
+            E = h_sq * avg_contact_area * dhat * T(0.5) * kappa * (s - 1) * log(s);
         }
 
         return E;

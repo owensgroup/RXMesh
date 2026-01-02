@@ -83,7 +83,8 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     glm::vec3 bb = bb_upper - bb_lower;
 
     // mass per vertex = rho * volume /num_vertices
-    T mass = density * bb[0] * bb[0] /
+    T total_volume = bb[0] * bb[1] * bb[2];
+    T mass = density * total_volume /
              (rx.get_num_vertices() - num_dbc_vertices);  // m
 
     // Attributes
