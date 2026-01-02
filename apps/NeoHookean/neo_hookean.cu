@@ -420,7 +420,7 @@ int main(int argc, char** argv)
     rx_init(0, spdlog::level::info);
 
     // Load multiple meshes using RXMeshStatic's multiple mesh constructor
-    std::vector<std::string> inputs = {"input/giraffe.obj",
+    std::vector<std::string> inputs = {"input/el_topo_sphere_1280.obj",
                                        "input/el_topo_sphere_1280.obj"};
 
     RXMeshStatic rx(inputs);
@@ -430,6 +430,23 @@ int main(int argc, char** argv)
 
     T dx = 0.1f;  // mesh spacing for contact area
     auto x = *rx.get_input_vertex_coordinates();
+    auto region_label = *rx.get_vertex_region_label();
+
+    T translate_y = 10.0f;
+    rx.for_each_vertex(
+        DEVICE,
+        [=] __device__ (VertexHandle vh) mutable {
+          if (region_label(vh) == 1) {
+            x(vh, 1) += translate_y;
+          }
+        },
+        NULL,
+        false
+    );
+    x.move(DEVICE, HOST);
+#if USE_POLYSCOPE
+    rx.get_polyscope_mesh()->updateVertexPositions(x);
+#endif
 
     // Find 3 vertices on the sphere to use as DBC
     // We'll pick the first 3 vertices from the sphere mesh
