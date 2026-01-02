@@ -124,16 +124,16 @@ void neo_hookean(RXMeshStatic& rx, T dx)
     // Initializations
     init_volume_inverse_b(rx, x, volume, inv_b);
 
-    rx.for_each_vertex(HOST, [&](VertexHandle vh) mutable {
-        // doing it on the host since v_dbc is an array on the host
-        is_dbc(vh) = 0;
-        for (int i = 0; i < num_dbc_vertices; ++i) {
-            if (vh == v_dbc[i]) {
-                is_dbc(vh) = 1;
-            }
-        }
-    });
-    is_dbc.move(HOST, DEVICE);
+    //rx.for_each_vertex(HOST, [&](VertexHandle vh) mutable {
+    //    // doing it on the host since v_dbc is an array on the host
+    //    is_dbc(vh) = 0;
+    //    for (int i = 0; i < num_dbc_vertices; ++i) {
+    //        if (vh == v_dbc[i]) {
+    //            is_dbc(vh) = 1;
+    //        }
+    //    }
+    //});
+    //is_dbc.move(HOST, DEVICE);
 
 
     typename ProblemT::DenseMatT alpha(
@@ -432,7 +432,7 @@ int main(int argc, char** argv)
     auto x = *rx.get_input_vertex_coordinates();
     auto region_label = *rx.get_vertex_region_label();
 
-    T translate_y = 10.0f;
+    T translate_y = 2.5f;
     rx.for_each_vertex(
         DEVICE,
         [=] __device__ (VertexHandle vh) mutable {
