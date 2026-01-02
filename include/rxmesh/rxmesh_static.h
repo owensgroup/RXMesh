@@ -52,6 +52,8 @@ class RXMeshStatic : public RXMesh
                           const float       lp_hashtable_load_factor = 0.8)
         : RXMesh(patch_size)
     {
+        m_num_regions = 1;
+
         std::vector<std::vector<uint32_t>> fv;
         std::vector<std::vector<float>>    vertices;
         if (!import_obj(file_path, vertices, fv)) {
@@ -88,6 +90,7 @@ class RXMeshStatic : public RXMesh
                           const float lp_hashtable_load_factor           = 0.8)
         : RXMesh(patch_size), m_input_vertex_coordinates(nullptr)
     {
+        m_num_regions = 1;
         this->init(fv,
                    patcher_file,
                    capacity_factor,
@@ -103,6 +106,8 @@ class RXMeshStatic : public RXMesh
                           const uint32_t                 patch_size = 512)
         : RXMesh(patch_size)
     {
+        m_num_regions = files_path.size();
+
         std::vector<std::vector<uint32_t>> fv;
         std::vector<std::vector<float>>    vertices;
 
@@ -143,25 +148,35 @@ class RXMeshStatic : public RXMesh
         m_vertex_label =
             add_vertex_attribute<int>("rx:vertex_label", 1, LOCATION_ALL);
 
-        for_each_face(HOST, [=](const FaceHandle fh) {
-            int id = map_to_global(fh);
+        for_each_face(
+            HOST,
+            [=](const FaceHandle fh) {
+                int id = map_to_global(fh);
 
-            auto lower = std::lower_bound(
-                region_num_faces.begin(), region_num_faces.end(), id);
+                auto lower = std::upper_bound(
+                    region_num_faces.begin(), region_num_faces.end(), id);
 
-            (*m_face_label)(fh) =
-                std::distance(region_num_faces.begin(), lower);
-        });
+                int label = std::distance(region_num_faces.begin(), lower);
 
-        for_each_vertex(HOST, [=](const VertexHandle vh) {
-            int id = map_to_global(vh);
+                (*m_face_label)(fh) = label;
+            },
+            NULL,
+            false);
 
-            auto lower = std::lower_bound(
-                region_num_vertices.begin(), region_num_vertices.end(), id);
+        for_each_vertex(
+            HOST,
+            [=](const VertexHandle vh) {
+                int id = map_to_global(vh);
 
-            (*m_vertex_label)(vh) =
-                std::distance(region_num_vertices.begin(), lower);
-        });
+                auto lower = std::upper_bound(
+                    region_num_vertices.begin(), region_num_vertices.end(), id);
+
+                int label = std::distance(region_num_vertices.begin(), lower);
+
+                (*m_vertex_label)(vh) = label;
+            },
+            NULL,
+            false);
         m_face_label->move(HOST, DEVICE);
         m_vertex_label->move(HOST, DEVICE);
 
@@ -1545,6 +1560,14 @@ class RXMeshStatic : public RXMesh
     }
 
     /**
+     * @brief return the number of regions (labels) in the mesh.
+     */
+    int get_num_regions() const
+    {
+        return m_num_regions;
+    }
+
+    /**
      * @brief return a shared pointer of the face region label
      */
     std::shared_ptr<FaceAttribute<int>> get_face_region_label()
@@ -2561,5 +2584,6 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<FaceAttribute<int>>   m_face_label;
     std::shared_ptr<EdgeAttribute<int>>   m_edge_label;
     std::shared_ptr<VertexAttribute<int>> m_vertex_label;
+    int                                   m_num_regions;
 };
 }  // namespace rxmesh
