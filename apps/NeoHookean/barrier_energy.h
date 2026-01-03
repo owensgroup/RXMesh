@@ -326,6 +326,7 @@ void add_contact(ProblemT&          problem,
                  const T            kappa,
                  const VertexAttribute<int>& region_label)
 {
+    return;
     // Call VV contact handler
     vv_contact(problem,
                rx,

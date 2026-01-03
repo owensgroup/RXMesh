@@ -6,6 +6,7 @@
 #include "rxmesh/diff/newton_solver.h"
 
 #include "barrier_energy.h"
+#include "bending_energy.h"
 #include "boundary_condition.h"
 #include "draw.h"
 #include "friction_energy.h"
@@ -35,10 +36,13 @@ struct PhysicsParams {
     T dbc_stiff_val  = 1000;
     T dhat           = 0.1;
     T kappa          = 1e5;
+    T bending_stiff  = 1e3;    // k_b
 };
 
 void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 {
+    printf("neo_hookean: Starting function\n");
+
     constexpr int VariableDim = 3;
 
     constexpr uint32_t blockThreads = 256;
@@ -61,8 +65,9 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     DenseMatrix<T> dbc_stiff(1, 1, LOCATION_ALL);
     dbc_stiff(0) = params.dbc_stiff_val;
     dbc_stiff.move(HOST, DEVICE);
-    const T dhat  = params.dhat;
-    const T kappa = params.kappa;
+    const T dhat          = params.dhat;
+    const T kappa         = params.kappa;
+    const T bending_stiff = params.bending_stiff;
 
     // TODO the limits and velocity should be different for different Dirichlet
     // nodes
@@ -86,6 +91,8 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     T total_volume = bb[0] * bb[1] * bb[2];
     T mass = density * total_volume /
              (rx.get_num_vertices() - num_dbc_vertices);  // m
+
+    printf("neo_hookean: Setting up attributes\n");
 
     // Attributes
     auto velocity = *rx.add_vertex_attribute<T>("Velocity", 3);  // v
@@ -114,6 +121,13 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     auto contact_area = *rx.add_vertex_attribute<T>("ContactArea", 1);
     contact_area.reset(dx, DEVICE);  // perimeter split to each vertex
 
+    // Bending energy attributes
+    auto rest_angle = *rx.add_edge_attribute<T>("RestAngle", 1);
+    rest_angle.reset(0, DEVICE);
+
+    auto edge_area = *rx.add_edge_attribute<T>("EdgeArea", 1);
+    edge_area.reset(0, DEVICE);
+
     // Get region labels for multiple meshes
     auto region_label = *rx.get_vertex_region_label();
 
@@ -135,8 +149,44 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     auto x_tilde = *rx.add_vertex_attribute_like("x_tilde", x);
 
 
+    printf("neo_hookean: Running initializations\n");
+
     // Initializations
     init_volume_inverse_b(rx, x, volume, inv_b);
+    printf("neo_hookean: Finished init_volume_inverse_b\n");
+
+    init_bending(rx, x, rest_angle, edge_area);
+    printf("neo_hookean: Finished init_bending\n");
+
+    // // Debug: print bending initialization stats
+    // rest_angle.move(DEVICE, HOST);
+    // edge_area.move(DEVICE, HOST);
+
+    // T min_angle = std::numeric_limits<T>::max();
+    // T max_angle = std::numeric_limits<T>::lowest();
+    // T min_area = std::numeric_limits<T>::max();
+    // T max_area = std::numeric_limits<T>::lowest();
+    // int num_internal_edges = 0;
+
+    // rx.for_each_edge(HOST, [&](EdgeHandle eh) {
+    //     T angle = rest_angle(eh);
+    //     T area = edge_area(eh);
+    //     if (area > 0) {  // internal edge
+    //         num_internal_edges++;
+    //         min_angle = std::min(min_angle, angle);
+    //         max_angle = std::max(max_angle, angle);
+    //         min_area = std::min(min_area, area);
+    //         max_area = std::max(max_area, area);
+    //     }
+    // });
+
+    // RXMESH_INFO("Bending initialization:");
+    // RXMESH_INFO("  Internal edges: {}", num_internal_edges);
+    // RXMESH_INFO("  Rest angle range: [{}, {}] radians", min_angle, max_angle);
+    // RXMESH_INFO("  Edge area range: [{}, {}]", min_area, max_area);
+
+    // rest_angle.move(HOST, DEVICE);
+    // edge_area.move(HOST, DEVICE);
 
     //rx.for_each_vertex(HOST, [&](VertexHandle vh) mutable {
     //    // doing it on the host since v_dbc is an array on the host
@@ -162,15 +212,19 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     rx.get_polyscope_mesh()->addFaceScalarQuantity("Volume", volume);
 #endif
 
+    printf("neo_hookean: Adding energy terms\n");
+
     // add inertial energy term
     inertial_energy(problem, x_tilde, is_dbc, mass);
+    printf("neo_hookean: Added inertial energy\n");
 
     // add spring energy term
     spring_energy(problem, dbc_target, is_dbc, mass, dbc_stiff);
-
+    printf("neo_hookean: Added spring energy\n");
 
     // add gravity energy
     gravity_energy(problem, is_dbc, time_step, mass);
+    printf("neo_hookean: Added gravity energy\n");
 
     // add barrier energy
     floor_barrier_energy(problem,
@@ -182,10 +236,14 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                          dhat,
                          kappa);
 
+    printf("neo_hookean: Added floor barrier energy\n");
+
     ceiling_barrier_energy(
         problem, contact_area, time_step, ground_n, ground_o, dhat, kappa);
-    
+    printf("neo_hookean: Added ceiling barrier energy\n");
+
     vv_contact_energy(problem, contact_area, time_step, dhat, kappa);
+    printf("neo_hookean: Added vv contact energy\n");
 
     DenseMatrix<T, Eigen::RowMajor> dir(
         rx, problem.grad.rows(), problem.grad.cols(), LOCATION_ALL);
@@ -207,6 +265,11 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 
     // add neo hooken energy
     neo_hookean_energy(problem, is_dbc, volume, inv_b, mu_lame, time_step, lam);
+    printf("neo_hookean: Added neo-hookean energy\n");
+
+    // add bending energy
+    // bending_energy(problem, is_dbc, rest_angle, edge_area, bending_stiff, time_step);
+    printf("neo_hookean: Added bending energy\n");
 
 
     int steps = 0;
@@ -218,6 +281,8 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     timer.add("Diff");
 
     auto step_forward = [&]() {
+        printf("neo_hookean: step_forward() - Starting step %d\n", steps);
+
         // x_tilde = x + v*h
         timer.start("Step");
         rx.for_each_vertex(DEVICE, [=] __device__(VertexHandle vh) mutable {
@@ -245,6 +310,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
             rx, is_dbc, x, v_dbc_vel, v_dbc_limit, time_step, dbc_target);
 
         // evaluate energy
+        printf("neo_hookean: step_forward() - Adding contact\n");
         add_contact(problem,
                     rx,
                     problem.vv_pairs,
@@ -258,8 +324,11 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                     dhat,
                     kappa,
                     region_label);
+        printf("neo_hookean: step_forward() - Updating hessian\n");
         problem.update_hessian();
+        printf("neo_hookean: step_forward() - Evaluating terms\n");
         problem.eval_terms();
+        printf("neo_hookean: step_forward() - Finished evaluating terms\n");
 
         grad.copy_from(problem.grad, DEVICE, DEVICE);
         // DBC satisfied
@@ -275,11 +344,14 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
         newton_solver.apply_bc(is_dbc_satisfied);
 
         // get newton direction
+        printf("neo_hookean: step_forward() - Computing newton direction\n");
         newton_solver.compute_direction();
+        printf("neo_hookean: step_forward() - Finished computing newton direction\n");
 
         dir.copy_from(newton_solver.dir, DEVICE, DEVICE);
         // residual is abs_max(newton_dir)/ h
         T residual = newton_solver.dir.abs_max() / time_step;
+        printf("neo_hookean: step_forward() - Initial residual: %f\n", residual);
 
         T f = problem.get_current_loss();
         RXMESH_INFO(
@@ -290,16 +362,22 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
             num_satisfied);
 
         int iter = 0;
+        printf("neo_hookean: step_forward() - Entering iteration loop\n");
         while (residual > tol || num_satisfied != num_dbc_vertices) {
+            printf("neo_hookean: step_forward() - Iteration %d, residual: %f, num_satisfied: %d\n", iter, residual, num_satisfied);
 
             if (residual <= tol && num_satisfied != num_dbc_vertices) {
+                printf("neo_hookean: step_forward() - Increasing DBC stiffness\n");
                 dbc_stiff.multiply(T(2));
                 problem.eval_terms();
                 newton_solver.compute_direction();
             }
 
+            printf("neo_hookean: step_forward() - Computing neo_hookean_step_size\n");
             T nh_step = neo_hookean_step_size(rx, x, newton_solver.dir, alpha);
+            printf("neo_hookean: step_forward() - nh_step: %f\n", nh_step);
 
+            printf("neo_hookean: step_forward() - Computing barrier_step_size\n");
             T bar_step = barrier_step_size(rx,
                                            newton_solver.dir,
                                            alpha,
@@ -308,10 +386,13 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                                            is_dbc,
                                            ground_n,
                                            ground_o);
+            printf("neo_hookean: step_forward() - bar_step: %f\n", bar_step);
 
             line_search_init_step = std::min(nh_step, bar_step);
+            printf("neo_hookean: step_forward() - line_search_init_step: %f\n", line_search_init_step);
 
             // TODO: line search should pass the step to the friction energy
+            printf("neo_hookean: step_forward() - Starting line search\n");
             bool ls_success = newton_solver.line_search(
                 line_search_init_step, 0.5, 64, 0.0, [&](auto temp_x) {
                     add_contact(problem,
@@ -328,12 +409,14 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                                 kappa,
                                 region_label);
                 });
+            printf("neo_hookean: step_forward() - Finished line search, success: %d\n", ls_success);
 
             if (!ls_success) {
                 RXMESH_WARN("Line search failed!");
             }
 
             // evaluate energy
+            printf("neo_hookean: step_forward() - Re-evaluating energy after line search\n");
             add_contact(problem,
                         rx,
                         problem.vv_pairs,
@@ -347,10 +430,13 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                         dhat,
                         kappa,
                         region_label);
+            printf("neo_hookean: step_forward() - Updating hessian after line search\n");
             problem.update_hessian();
+            printf("neo_hookean: step_forward() - Evaluating terms after line search\n");
             problem.eval_terms();
 
             T f = problem.get_current_loss();
+            printf("neo_hookean: step_forward() - Current loss: %f\n", f);
 
             // DBC satisfied
             check_dbc_satisfied(
@@ -363,10 +449,12 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
             newton_solver.apply_bc(is_dbc_satisfied);
 
             // get newton direction
+            printf("neo_hookean: step_forward() - Computing newton direction (iteration %d)\n", iter);
             newton_solver.compute_direction();
 
             // residual is abs_max(newton_dir)/ h
             residual = newton_solver.dir.abs_max() / time_step;
+            printf("neo_hookean: step_forward() - New residual: %f\n", residual);
 
             RXMESH_INFO(
                 "  Subsetp: {}, F: {}, R: {}, line_search_init_step={}, "
@@ -402,6 +490,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
         timer.stop("Step");
     };
 
+    printf("declared everything. starting simulation.\n");
 #if USE_POLYSCOPE
     draw(rx, x, velocity, step_forward, dir, grad, steps);
 #else
@@ -457,6 +546,8 @@ int main(int argc, char** argv)
             params.dhat = std::atof(argv[++i]);
         } else if (arg == "--kappa" && i + 1 < argc) {
             params.kappa = std::atof(argv[++i]);
+        } else if (arg == "--bending" && i + 1 < argc) {
+            params.bending_stiff = std::atof(argv[++i]);
         } else if (arg == "--help" || arg == "-h") {
             printf("Usage: %s [options]\n", argv[0]);
             printf("Options:\n");
@@ -470,6 +561,7 @@ int main(int argc, char** argv)
             printf("  --dbc-stiff <val>  DBC stiffness (default: 1000)\n");
             printf("  --dhat <val>       Contact distance threshold (default: 0.1)\n");
             printf("  --kappa <val>      Contact stiffness (default: 1e5)\n");
+            printf("  --bending <val>    Bending stiffness (default: 1e3)\n");
             printf("  --help, -h         Show this help message\n");
             return 0;
         }
@@ -486,6 +578,7 @@ int main(int argc, char** argv)
     RXMESH_INFO("  DBC stiffness: {}", params.dbc_stiff_val);
     RXMESH_INFO("  dhat: {}", params.dhat);
     RXMESH_INFO("  kappa: {}", params.kappa);
+    RXMESH_INFO("  Bending stiffness: {}", params.bending_stiff);
 
     // Load multiple meshes using RXMeshStatic's multiple mesh constructor
     std::vector<std::string> inputs = {"input/el_topo_sphere_1280.obj",
