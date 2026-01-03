@@ -153,10 +153,10 @@ class RXMeshStatic : public RXMesh
             [=](const FaceHandle fh) {
                 int id = map_to_global(fh);
 
-                auto lower = std::upper_bound(
+                auto upper = std::upper_bound(
                     region_num_faces.begin(), region_num_faces.end(), id);
 
-                int label = std::distance(region_num_faces.begin(), lower);
+                int label = std::distance(region_num_faces.begin(), upper);
 
                 (*m_face_label)(fh) = label;
             },
@@ -168,10 +168,10 @@ class RXMeshStatic : public RXMesh
             [=](const VertexHandle vh) {
                 int id = map_to_global(vh);
 
-                auto lower = std::upper_bound(
+                auto upper = std::upper_bound(
                     region_num_vertices.begin(), region_num_vertices.end(), id);
 
-                int label = std::distance(region_num_vertices.begin(), lower);
+                int label = std::distance(region_num_vertices.begin(), upper);
 
                 (*m_vertex_label)(vh) = label;
             },

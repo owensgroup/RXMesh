@@ -1512,6 +1512,17 @@ void RXMesh::allocate_extra_patches()
                                   m_h_patches_info[p],
                                   m_d_patches_info[p]);
     }
+
+    for (uint32_t p = 0; p < get_max_num_patches(); ++p) {
+        m_max_capacity_lp_v = std::max(m_max_capacity_lp_v,
+                                       m_h_patches_info[p].lp_v.get_capacity());
+
+        m_max_capacity_lp_e = std::max(m_max_capacity_lp_e,
+                                       m_h_patches_info[p].lp_e.get_capacity());
+
+        m_max_capacity_lp_f = std::max(m_max_capacity_lp_f,
+                                       m_h_patches_info[p].lp_f.get_capacity());
+    }
 }
 
 void RXMesh::patch_graph_coloring()
