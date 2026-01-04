@@ -26,7 +26,7 @@ __device__ __host__ T compute_dihedral_angle(const Eigen::Vector3<T>& p,
     Eigen::Vector3<T> e = r - p;
     T e_norm = e.norm();
 
-    if (e_norm < T(1e-10)) {
+    if (e_norm < T(1e-7)) {
         n0_norm = T(0);
         n1_norm = T(0);
         return T(0);  // degenerate edge
@@ -39,7 +39,7 @@ __device__ __host__ T compute_dihedral_angle(const Eigen::Vector3<T>& p,
     Eigen::Vector3<T> n1 = (s - p).cross(r - p);
     n1_norm = n1.norm();
 
-    if (n0_norm < T(1e-10) || n1_norm < T(1e-10)) {
+    if (n0_norm < T(1e-7) || n1_norm < T(1e-7)) {
         return T(0);  // degenerate triangle
     }
 
@@ -47,22 +47,14 @@ __device__ __host__ T compute_dihedral_angle(const Eigen::Vector3<T>& p,
     Eigen::Vector3<T> n0_normalized = n0 / n0_norm;
     Eigen::Vector3<T> n1_normalized = n1 / n1_norm;
 
-    // Compute dihedral angle using atan2 for robustness
+    // Compute dihedral angle using acos (simpler, unsigned angle)
     T cos_theta = n0_normalized.dot(n1_normalized);
 
-    // Clamp to avoid numerical issues
-    cos_theta = (cos_theta < T(-1.0)) ? T(-1.0) : cos_theta;
-    cos_theta = (cos_theta > T(1.0)) ? T(1.0) : cos_theta;
+    // Clamp to avoid numerical issues with acos
+    cos_theta = (cos_theta <= T(-1.0)) ? T(-0.99999f) : cos_theta;
+    cos_theta = (cos_theta >= T(1.0)) ? T(0.99999f) : cos_theta;
 
-    // Use cross product to get the sign
-    Eigen::Vector3<T> n_cross = n0_normalized.cross(n1_normalized);
-    T sign = (n_cross.dot(e) >= T(0)) ? T(1.0) : T(-1.0);
-
-    T sin_theta_sq = T(1.0) - cos_theta * cos_theta;
-    // Clamp to avoid sqrt of negative due to numerical errors
-    sin_theta_sq = (sin_theta_sq < T(0)) ? T(0) : sin_theta_sq;
-    T sin_theta = sign * sqrt(sin_theta_sq);
-    T theta = atan2(sin_theta, cos_theta);
+    T theta = acos(cos_theta);
 
     return theta;
 }
@@ -107,10 +99,10 @@ void bending_energy(ProblemT&     problem,
             }
 
             // Check if any vertex is Dirichlet BC
-            if (is_dbc(iter[0]) || is_dbc(iter[1]) || is_dbc(iter[2]) ||
-                is_dbc(iter[3])) {
-                return ActiveT(0.0f);
-            }
+            // if (is_dbc(iter[0]) || is_dbc(iter[1]) || is_dbc(iter[2]) ||
+            //     is_dbc(iter[3])) {
+            //     return ActiveT(0.0f);
+            // }
 
             // Get vertex positions
             // Edge goes from p to r. q and s are opposite to the edge
@@ -124,7 +116,7 @@ void bending_energy(ProblemT&     problem,
             ActiveT theta = compute_dihedral_angle(p, q, r, s, n0_norm, n1_norm);
 
             // Check for degenerate configuration
-            if (n0_norm < ActiveT(1e-10) || n1_norm < ActiveT(1e-10)) {
+            if (n0_norm < ActiveT(1e-7) || n1_norm < ActiveT(1e-7)) {
                 return ActiveT(0.0f);
             }
 
