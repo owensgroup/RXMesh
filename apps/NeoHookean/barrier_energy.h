@@ -2,12 +2,50 @@
 
 #include "rxmesh/diff/candidate_pairs.h"
 #include "rxmesh/rxmesh_static.h"
+#include "rxmesh/util/timer.h"
 
 #define CUBQL_GPU_BUILDER_IMPLEMENTATION 1
 #include "cuBQL/bvh.h"
 #include "cuBQL/traversal/shrinkingRadiusQuery.h"
 
 using namespace rxmesh;
+
+/**
+ * Pre-allocated GPU buffer for BVH bounding boxes.
+ * Allocated once and reused across iterations to avoid repeated malloc/free.
+ */
+template <typename T>
+struct BVHBuffers {
+    using box_t = cuBQL::box_t<T, 3>;
+
+    box_t* d_boxes;
+    size_t capacity;
+    bool initialized;
+
+    BVHBuffers() : d_boxes(nullptr), capacity(0), initialized(false) {}
+
+    BVHBuffers(size_t max_vertices)
+        : capacity(max_vertices), initialized(false) {
+        allocate(max_vertices);
+    }
+
+    void allocate(size_t max_vertices) {
+        if (initialized) {
+            return;  // Already allocated
+        }
+        capacity = max_vertices;
+        CUDA_ERROR(cudaMalloc((void**)&d_boxes, sizeof(box_t) * capacity));
+        initialized = true;
+    }
+
+    ~BVHBuffers() {
+        if (initialized && d_boxes) {
+            GPU_FREE(d_boxes);
+            d_boxes = nullptr;
+            initialized = false;
+        }
+    }
+};
 
 template <typename ProblemT,
           typename VAttrT,
@@ -63,10 +101,12 @@ template <typename ProblemT,
           typename VAttrT,
           typename VAttrB,
           typename PairT,
+          typename BVHBufferT,
           typename T = typename VAttrT::Type>
 void vv_contact(ProblemT&          problem,
                 RXMeshStatic&      rx,
                 PairT&             contact_pairs,
+                BVHBufferT&        bvh_buffers,
                 const VertexHandle dbc_vertex,
                 const VertexHandle dbc_vertex1,
                 const VertexHandle dbc_vertex2,
@@ -78,17 +118,19 @@ void vv_contact(ProblemT&          problem,
                 const T            kappa,
                 const VertexAttribute<int>& region_label)
 {
+    GPUTimer timer_total, timer_build, timer_query;
+    timer_total.start();
+
     contact_pairs.reset();
 
     // Step 1: Get vertex count and context
     uint32_t num_vertices = rx.get_num_elements<VertexHandle>();
     auto     ctx          = rx.get_context();
 
-    // Step 2: Allocate and populate bounding boxes for BVH
+    // Step 2: Use pre-allocated bounding boxes buffer
     // For point data, each box is degenerate (min == max)
-    using box_t = cuBQL::box_t<T, 3>;
-    box_t* d_boxes = nullptr;
-    CUDA_ERROR(cudaMalloc((void**)&d_boxes, sizeof(box_t) * num_vertices));
+    using box_t = typename BVHBufferT::box_t;
+    box_t* d_boxes = bvh_buffers.d_boxes;
 
     // Populate boxes from vertex positions
     const int threads = 256;
@@ -111,9 +153,11 @@ void vv_contact(ProblemT&          problem,
     CUDA_ERROR(cudaDeviceSynchronize());
 
     // Step 3: Build BVH
+    timer_build.start();
     cuBQL::BinaryBVH<T, 3> bvh;
     cuBQL::BuildConfig     build_config;
     cuBQL::gpuBuilder(bvh, d_boxes, num_vertices, build_config);
+    timer_build.stop();
 
     // Calculate and print BVH memory usage
     size_t nodes_memory = bvh.numNodes * sizeof(typename cuBQL::BinaryBVH<T, 3>::Node);
@@ -121,6 +165,7 @@ void vv_contact(ProblemT&          problem,
     size_t total_bvh_memory = nodes_memory + primIDs_memory;
 
     // Step 4: Query BVH for each vertex to find nearby vertices
+    timer_query.start();
     rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) mutable {
         if (is_dbc(vh)) {
             return;  // Skip DBC vertices
@@ -165,14 +210,21 @@ void vv_contact(ProblemT&          problem,
         cuBQL::shrinkingRadiusQuery::forEachPrim<T, 3>(
             query_lambda, bvh, query_point, dhat * dhat);
     });
+    timer_query.stop();
 
-    // printf("Traversed the BVH and executed the contact pair addition.\n");
-    // printf("Contact Pairs Size After Traversal: %d\n", contact_pairs.num_pairs());
+    timer_total.stop();
+
+    // Print timing information
+    RXMESH_INFO("VV Contact Detection:");
+    RXMESH_INFO("  BVH Build time: {:.3f} ms", timer_build.elapsed_millis());
+    RXMESH_INFO("  BVH Query time: {:.3f} ms", timer_query.elapsed_millis());
+    RXMESH_INFO("  Total time: {:.3f} ms", timer_total.elapsed_millis());
+    RXMESH_INFO("  Contact pairs found: {}", contact_pairs.num_pairs());
+    RXMESH_INFO("  BVH memory: {:.2f} MB", total_bvh_memory / (1024.0f * 1024.0f));
 
     // Step 5: Cleanup
-    cuBQL::cuda::free(bvh);  // Free BVH memory (nodes and primIDs)
-    GPU_FREE(d_boxes);  // Free bounding boxes
-    // printf("Released BVH and bounding box memory.\n");
+    cuBQL::cuda::free(bvh);  // Free BVH memory (nodes and primIDs go to pool)
+    // Note: d_boxes is from pre-allocated buffer, NOT freed here
 }
 
 template <typename ProblemT,
@@ -311,10 +363,12 @@ template <typename ProblemT,
           typename VAttrT,
           typename VAttrB,
           typename PairT,
+          typename BVHBufferT,
           typename T = typename VAttrT::Type>
 void add_contact(ProblemT&          problem,
                  RXMeshStatic&      rx,
                  PairT&             contact_pairs,
+                 BVHBufferT&        bvh_buffers,
                  const VertexHandle dbc_vertex,
                  const VertexHandle dbc_vertex1,
                  const VertexHandle dbc_vertex2,
@@ -330,6 +384,7 @@ void add_contact(ProblemT&          problem,
     vv_contact(problem,
                rx,
                contact_pairs,
+               bvh_buffers,
                dbc_vertex,
                dbc_vertex1,
                dbc_vertex2,
@@ -342,7 +397,7 @@ void add_contact(ProblemT&          problem,
                region_label);
 
     // Call VF contact handler
-    vf_contact(problem, rx, is_dbc, x, contact_area, h, dhat, kappa);
+    // vf_contact(problem, rx, is_dbc, x, contact_area, h, dhat, kappa);
 }
 
 template <typename ProblemT,

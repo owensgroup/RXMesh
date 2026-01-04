@@ -134,6 +134,8 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     // Diff problem and solvers
     ProblemT problem(rx, true, max_vv_candidate_pairs);
 
+    // Pre-allocate BVH bounding boxes buffer for contact detection
+    BVHBuffers<T> bvh_buffers(rx.get_num_vertices());
 
     CGSolver<T, ProblemT::DenseMatT::OrderT> solver(*problem.hess, 1, 1000);
 
@@ -314,6 +316,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
         add_contact(problem,
                     rx,
                     problem.vv_pairs,
+                    bvh_buffers,
                     v_dbc[0],
                     v_dbc[1],
                     v_dbc[2],
@@ -398,6 +401,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                     add_contact(problem,
                                 rx,
                                 problem.vv_pairs,
+                                bvh_buffers,
                                 v_dbc[0],
                                 v_dbc[1],
                                 v_dbc[2],
@@ -420,6 +424,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
             add_contact(problem,
                         rx,
                         problem.vv_pairs,
+                        bvh_buffers,
                         v_dbc[0],
                         v_dbc[1],
                         v_dbc[2],
