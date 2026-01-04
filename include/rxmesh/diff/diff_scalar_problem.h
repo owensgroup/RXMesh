@@ -33,6 +33,7 @@ struct DiffScalarProblem
 
     static constexpr bool WithHessian = WithHess;
 
+    bool ev_diamond_interaction_added = false;
 
     RXMeshStatic&                                           rx;
     DenseMatT                                               grad;
@@ -43,6 +44,7 @@ struct DiffScalarProblem
 
     // TODO we might need other types of candidate pairs
     CandidatePairsVV<HessMatT> vv_pairs;
+    CandidatePairsVF<HessMatT> vf_pairs;
 
 
     /**
@@ -52,8 +54,10 @@ struct DiffScalarProblem
      */
     DiffScalarProblem(RXMeshStatic& rx,
                       bool          assmble_hessian,
-                      int           expected_vv_candidate_pairs = 0)
+                      int           expected_vv_candidate_pairs = 0,
+                      int           expected_vf_candidate_pairs = 0)
         : rx(rx),
+          ev_diamond_interaction_added(false),
           grad(DenseMatT(rx,
                          rx.get_num_elements<ObjHandleT>(),
                          VariableDim,
@@ -65,20 +69,31 @@ struct DiffScalarProblem
         if constexpr (WithHessian) {
             if (assmble_hessian) {
 
-                // every contact candidate pairs will add a 2 (because of
+                // every VV interaction pairs will add a 2 (because of
                 // symmetry) blocks of (VariableDim x VariableDim) into the
                 // Hessian
-                expected_vv_candidate_pairs *= VariableDim * VariableDim * 2;
+                // every VF interaction pairs will add 3 (because of three
+                // triangles vertices) x 2 (because of symmetry) blocks of
+                // (VariableDim x VariableDim)
+                int expect_new_entries_in_hess =
+                    expected_vv_candidate_pairs * VariableDim * VariableDim *
+                        2 +
+                    expected_vf_candidate_pairs * VariableDim * VariableDim *
+                        2 * 3;
 
                 hess =
-                    std::make_unique<HessMatT>(rx, expected_vv_candidate_pairs);
+                    std::make_unique<HessMatT>(rx, expect_new_entries_in_hess);
                 hess->reset(0, LOCATION_ALL);
 
                 hess_new =
-                    std::make_unique<HessMatT>(rx, expected_vv_candidate_pairs);
+                    std::make_unique<HessMatT>(rx, expect_new_entries_in_hess);
 
                 vv_pairs = CandidatePairsVV<HessMatT>(
                     expected_vv_candidate_pairs, *hess, rx.get_context());
+
+                vf_pairs = CandidatePairsVF<HessMatT>(
+                    expected_vf_candidate_pairs, *hess, rx.get_context());
+
             } else {
                 hess = std::make_unique<HessMatT>();
             }
@@ -133,6 +148,9 @@ struct DiffScalarProblem
                 rx, t, oreinted, &grad, hess.get());
             terms.push_back(
                 std::dynamic_pointer_cast<ScalarTerm<T, ObjHandleT>>(new_term));
+            if (op == Op::EVDiamond && WithHess && hess) {
+                add_ev_diamond_interaction();
+            }
         }
 
         if constexpr (op == Op::FV || op == Op::FE || op == Op::FF ||
@@ -156,35 +174,67 @@ struct DiffScalarProblem
      * @brief add a (energy) term to the loss function that acts on candidate
      * pairs
      * TODO generalize this to other type of candidate pairs. For now, we assume
-     * only VV pairs
+     * only VV or VF pairs
      */
-    template <bool     ProjectHess  = false,
+    template <Op       op,
+              bool     ProjectHess  = false,
               uint32_t blockThreads = 256,
               typename LambdaT      = void>
-    void add_term(LambdaT t)
+    void add_interaction_term(LambdaT t)
     {
-        constexpr int ElementValence = 2;  // TODO
+        if constexpr (op == Op::VV) {
 
-        constexpr int NElements = VariableDim * ElementValence;
+            // for VV interaction, the element valence is 2 because there are
+            // 2 vertices involved in each interaction
+            constexpr int ElementValence = 2;
 
-        using ScalarT = Scalar<T, NElements, WithHessian>;
+            constexpr int NElements = VariableDim * ElementValence;
 
+            using ScalarT = Scalar<T, NElements, WithHessian>;
 
-        auto new_term =
-            std::make_shared<TemplatedScalarTermPairs<VertexHandle,  // TODO
-                                                      ObjHandleT,
-                                                      blockThreads,
-                                                      VertexHandle,  // TODO
-                                                      VertexHandle,  // TODO
-                                                      HessMatT,
-                                                      ScalarT,
-                                                      ProjectHess,
-                                                      VariableDim,
-                                                      LambdaT>>(
-                rx, t, &grad, hess.get(), vv_pairs);
+            auto new_term =
+                std::make_shared<TemplatedScalarTermPairs<VertexHandle,
+                                                          ObjHandleT,
+                                                          blockThreads,
+                                                          VertexHandle,
+                                                          VertexHandle,
+                                                          HessMatT,
+                                                          ScalarT,
+                                                          ProjectHess,
+                                                          VariableDim,
+                                                          LambdaT>>(
+                    rx, t, &grad, hess.get(), vv_pairs);
 
-        terms.push_back(
-            std::dynamic_pointer_cast<ScalarTerm<T, ObjHandleT>>(new_term));
+            terms.push_back(
+                std::dynamic_pointer_cast<ScalarTerm<T, ObjHandleT>>(new_term));
+        }
+
+        if constexpr (op == Op::VF) {
+            // for VF interaction, the element valence is 4 because there are
+            // 4 vertices involved in each interaction, i.e., face's three
+            // vertices and the other vertex
+            constexpr int ElementValence = 4;
+
+            constexpr int NElements = VariableDim * ElementValence;
+
+            using ScalarT = Scalar<T, NElements, WithHessian>;
+
+            auto new_term =
+                std::make_shared<TemplatedScalarTermPairs<VertexHandle,
+                                                          ObjHandleT,
+                                                          blockThreads,
+                                                          VertexHandle,
+                                                          FaceHandle,
+                                                          HessMatT,
+                                                          ScalarT,
+                                                          ProjectHess,
+                                                          VariableDim,
+                                                          LambdaT>>(
+                    rx, t, &grad, hess.get(), vf_pairs);
+
+            terms.push_back(
+                std::dynamic_pointer_cast<ScalarTerm<T, ObjHandleT>>(new_term));
+        }
     }
 
     /**
@@ -195,6 +245,7 @@ struct DiffScalarProblem
         if (!hess) {
             return;
         }
+        // TODO expand the indices for VF interactions
 
         if (hess_new->insert(rx,
                              *hess,
@@ -204,10 +255,6 @@ struct DiffScalarProblem
             hess_new->swap(*hess);
 
             vv_pairs.m_hess = *hess;
-
-            // for (size_t i = 0; i < terms.size(); ++i) {
-            //     terms[i]->update_hessian(hess.get());
-            // }
         }
     }
 
@@ -295,6 +342,38 @@ struct DiffScalarProblem
         for (size_t i = 0; i < terms.size(); ++i) {
             terms[i]->eval_active_grad_only(*obj, stream);
         }
+    }
+
+    /**
+     * @brief add the interaction between the two opposite vertices of edge
+     * diamond.
+     */
+    void add_ev_diamond_interaction()
+    {
+        if (ev_diamond_interaction_added) {
+            return;
+        }
+        int expected_vv_candidate_pairs = rx.get_num_edges();
+
+        if (vv_pairs.m_pairs_handle.rows() < expected_vv_candidate_pairs) {
+            vv_pairs.release();
+
+            vv_pairs = CandidatePairsVV<HessMatT>(
+                expected_vv_candidate_pairs, *hess, rx.get_context());
+        }
+
+        vv_pairs.reset();
+
+        rx.run_query_kernel<Op::EVDiamond, 256>(
+            [=] __device__(const EdgeHandle& eh, const VertexIterator& iter) {
+                if (iter[1].is_valid() && iter[3].is_valid()) {
+                    bool inserted = vv_pairs.insert(iter[1], iter[3]);
+                    assert(inserted);
+                }
+            });
+        update_hessian();
+
+        ev_diamond_interaction_added = true;
     }
 };
 

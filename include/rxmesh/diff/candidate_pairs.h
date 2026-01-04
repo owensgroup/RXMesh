@@ -42,10 +42,6 @@ struct CandidatePairs
                             const Context& ctx)
         : m_hess(hess),
           m_variable_dim(hess.K_),
-          m_pairs_id(DenseMatrix<IndexT, Eigen::ColMajor>(
-              max_capacity * m_variable_dim * m_variable_dim * 2,
-              2,
-              LOCATION_ALL)),
           m_pairs_handle(DenseMatrix<PairT, Eigen::ColMajor>(max_capacity,
                                                              1,
                                                              LOCATION_ALL)),
@@ -53,6 +49,12 @@ struct CandidatePairs
           m_current_num_index(DenseMatrix<int>(1, 1, LOCATION_ALL)),
           m_context(ctx)
     {
+
+        m_pairs_id = DenseMatrix<IndexT, Eigen::ColMajor>(
+            max_capacity * m_variable_dim * m_variable_dim * 2,
+            2,
+            LOCATION_ALL);
+
         reset();
     }
 
@@ -71,6 +73,8 @@ struct CandidatePairs
      */
     __device__ __host__ bool insert(const HandleT0& c0, const HandleT1& c1)
     {
+        assert(c0.is_valid());
+        assert(c1.is_valid());
 
         // first check if we have a space
         /// if we have a space to insert new pairs
@@ -209,6 +213,25 @@ struct CandidatePairs
         m_current_num_index.release();
     }
 
+    /**
+     * @brief check if the current instance is VV interaction pairs
+     */
+    constexpr bool is_vv()
+    {
+        return std::is_same_v<HandleT0, VertexHandle> &&
+               std::is_same_v<HandleT1, VertexHandle>;
+    }
+
+    /**
+     * @brief check if the current instance is VF interaction pairs
+     */
+    constexpr bool is_vf()
+    {
+        return (std::is_same_v<HandleT0, FaceHandle> &&
+                std::is_same_v<HandleT1, VertexHandle>) ||
+               (std::is_same_v<HandleT1, FaceHandle> &&
+                std::is_same_v<HandleT0, VertexHandle>);
+    }
 
    private:
     DenseMatrix<IndexT, Eigen::ColMajor> m_pairs_id;
@@ -228,5 +251,8 @@ struct CandidatePairs
 
 template <typename HessMatT>
 using CandidatePairsVV = CandidatePairs<VertexHandle, VertexHandle, HessMatT>;
+
+template <typename HessMatT>
+using CandidatePairsVF = CandidatePairs<VertexHandle, FaceHandle, HessMatT>;
 
 }  // namespace rxmesh
