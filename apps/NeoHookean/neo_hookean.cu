@@ -26,17 +26,18 @@ constexpr uint32_t num_dbc_vertices = 3;
 VertexHandle       v_dbc[num_dbc_vertices];  // Dirichlet node index
 
 struct PhysicsParams {
-    T density        = 1000;   // rho
-    T young_mod      = 1e5;    // E
-    T poisson_ratio  = 0.4;    // nu
-    T time_step      = 0.01;   // h
-    T fricition_coef = 0.11;   // mu
-    T stiffness_coef = 4e4;
-    T tol            = 0.01;
-    T dbc_stiff_val  = 1000;
-    T dhat           = 0.1;
-    T kappa          = 1e5;
-    T bending_stiff  = 1e3;    // k_b
+    T   density        = 1000;   // rho
+    T   young_mod      = 1e5;    // E
+    T   poisson_ratio  = 0.4;    // nu
+    T   time_step      = 0.01;   // h
+    T   fricition_coef = 0.11;   // mu
+    T   stiffness_coef = 4e4;
+    T   tol            = 0.01;
+    T   dbc_stiff_val  = 1000;
+    T   dhat           = 0.1;
+    T   kappa          = 1e5;
+    T   bending_stiff  = 1e3;    // k_b
+    int num_steps      = 5;      // Number of simulation steps
 };
 
 void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
@@ -278,9 +279,11 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 
     Timers<GPUTimer> timer;
     timer.add("Step");
-    timer.add("LineSearch");
+    timer.add("ContactDetection");
+    timer.add("EnergyEval");
     timer.add("LinearSolver");
-    timer.add("Diff");
+    timer.add("LineSearch");
+    timer.add("StepSize");
 
     auto step_forward = [&]() {
         printf("neo_hookean: step_forward() - Starting step %d\n", steps);
@@ -313,6 +316,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 
         // evaluate energy
         printf("neo_hookean: step_forward() - Adding contact\n");
+        timer.start("ContactDetection");
         add_contact(problem,
                     rx,
                     problem.vv_pairs,
@@ -327,10 +331,14 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                     dhat,
                     kappa,
                     region_label);
+        timer.stop("ContactDetection");
+
         printf("neo_hookean: step_forward() - Updating hessian\n");
+        timer.start("EnergyEval");
         problem.update_hessian();
         printf("neo_hookean: step_forward() - Evaluating terms\n");
         problem.eval_terms();
+        timer.stop("EnergyEval");
         printf("neo_hookean: step_forward() - Finished evaluating terms\n");
 
         grad.copy_from(problem.grad, DEVICE, DEVICE);
@@ -348,7 +356,9 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 
         // get newton direction
         printf("neo_hookean: step_forward() - Computing newton direction\n");
+        timer.start("LinearSolver");
         newton_solver.compute_direction();
+        timer.stop("LinearSolver");
         printf("neo_hookean: step_forward() - Finished computing newton direction\n");
 
         dir.copy_from(newton_solver.dir, DEVICE, DEVICE);
@@ -366,17 +376,19 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 
         int iter = 0;
         printf("neo_hookean: step_forward() - Entering iteration loop\n");
-        while (residual > tol || num_satisfied != num_dbc_vertices) {
+        // while (residual > tol || num_satisfied != num_dbc_vertices) {
+        while (residual > tol) {
             printf("neo_hookean: step_forward() - Iteration %d, residual: %f, num_satisfied: %d\n", iter, residual, num_satisfied);
 
-            if (residual <= tol && num_satisfied != num_dbc_vertices) {
-                printf("neo_hookean: step_forward() - Increasing DBC stiffness\n");
-                dbc_stiff.multiply(T(2));
-                problem.eval_terms();
-                newton_solver.compute_direction();
-            }
+            // if (residual <= tol && num_satisfied != num_dbc_vertices) {
+            //     printf("neo_hookean: step_forward() - Increasing DBC stiffness\n");
+            //     dbc_stiff.multiply(T(2));
+            //     problem.eval_terms();
+            //     newton_solver.compute_direction();
+            // }
 
             printf("neo_hookean: step_forward() - Computing neo_hookean_step_size\n");
+            timer.start("StepSize");
             T nh_step = neo_hookean_step_size(rx, x, newton_solver.dir, alpha);
             printf("neo_hookean: step_forward() - nh_step: %f\n", nh_step);
 
@@ -392,10 +404,12 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
             printf("neo_hookean: step_forward() - bar_step: %f\n", bar_step);
 
             line_search_init_step = std::min(nh_step, bar_step);
+            timer.stop("StepSize");
             printf("neo_hookean: step_forward() - line_search_init_step: %f\n", line_search_init_step);
 
             // TODO: line search should pass the step to the friction energy
             printf("neo_hookean: step_forward() - Starting line search\n");
+            timer.start("LineSearch");
             bool ls_success = newton_solver.line_search(
                 line_search_init_step, 0.5, 64, 0.0, [&](auto temp_x) {
                     add_contact(problem,
@@ -413,6 +427,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                                 kappa,
                                 region_label);
                 });
+            timer.stop("LineSearch");
             printf("neo_hookean: step_forward() - Finished line search, success: %d\n", ls_success);
 
             if (!ls_success) {
@@ -421,6 +436,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 
             // evaluate energy
             printf("neo_hookean: step_forward() - Re-evaluating energy after line search\n");
+            timer.start("ContactDetection");
             add_contact(problem,
                         rx,
                         problem.vv_pairs,
@@ -435,10 +451,14 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                         dhat,
                         kappa,
                         region_label);
+            timer.stop("ContactDetection");
+
             printf("neo_hookean: step_forward() - Updating hessian after line search\n");
+            timer.start("EnergyEval");
             problem.update_hessian();
             printf("neo_hookean: step_forward() - Evaluating terms after line search\n");
             problem.eval_terms();
+            timer.stop("EnergyEval");
 
             T f = problem.get_current_loss();
             printf("neo_hookean: step_forward() - Current loss: %f\n", f);
@@ -455,7 +475,9 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 
             // get newton direction
             printf("neo_hookean: step_forward() - Computing newton direction (iteration %d)\n", iter);
+            timer.start("LinearSolver");
             newton_solver.compute_direction();
+            timer.stop("LinearSolver");
 
             // residual is abs_max(newton_dir)/ h
             residual = newton_solver.dir.abs_max() / time_step;
@@ -499,28 +521,39 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 #if USE_POLYSCOPE
     draw(rx, x, velocity, step_forward, dir, grad, steps);
 #else
-    while (steps < 5) {
+    while (steps < params.num_steps) {
         step_forward();
     }
 #endif
 
 
-    RXMESH_INFO(
-        "NeoHookean: #step ={}, time= {} (ms), timer/iteration= {} ms/iter",
-        steps,
-        timer.elapsed_millis("Step"),
-        timer.elapsed_millis("Step") / float(steps));
-
-    // RXMESH_INFO("LinearSolver {} (ms), Diff {} (ms), LineSearch {} (ms)",
-    //             timer.elapsed_millis("LinearSolver"),
-    //             timer.elapsed_millis("Diff"),
-    //             timer.elapsed_millis("LineSearch"));
-    //
-    // RXMESH_INFO(
-    //     "LinearSolver/iter {} (ms), Diff/iter {} (ms), LineSearch/iter {}(ms)
-    //     ", timer.elapsed_millis(" LinearSolver ") / float(steps),
-    //     timer.elapsed_millis("Diff") / float(steps),
-    //     timer.elapsed_millis("LineSearch") / float(steps));
+    // Print comprehensive timing summary
+    RXMESH_INFO("=== TIMING SUMMARY ===");
+    RXMESH_INFO("Number of steps: {}", steps);
+    RXMESH_INFO("Total Step Time:        {:.2f} ms ({:.2f} ms/iter)",
+                timer.elapsed_millis("Step"),
+                timer.elapsed_millis("Step") / float(steps));
+    RXMESH_INFO("  Contact Detection:    {:.2f} ms  ({:.1f}%) [{:.2f} ms/iter]",
+                timer.elapsed_millis("ContactDetection"),
+                100.0 * timer.elapsed_millis("ContactDetection") / timer.elapsed_millis("Step"),
+                timer.elapsed_millis("ContactDetection") / float(steps));
+    RXMESH_INFO("  Energy Evaluation:    {:.2f} ms  ({:.1f}%) [{:.2f} ms/iter]",
+                timer.elapsed_millis("EnergyEval"),
+                100.0 * timer.elapsed_millis("EnergyEval") / timer.elapsed_millis("Step"),
+                timer.elapsed_millis("EnergyEval") / float(steps));
+    RXMESH_INFO("  Linear Solver:        {:.2f} ms  ({:.1f}%) [{:.2f} ms/iter]",
+                timer.elapsed_millis("LinearSolver"),
+                100.0 * timer.elapsed_millis("LinearSolver") / timer.elapsed_millis("Step"),
+                timer.elapsed_millis("LinearSolver") / float(steps));
+    RXMESH_INFO("  Line Search:          {:.2f} ms  ({:.1f}%) [{:.2f} ms/iter]",
+                timer.elapsed_millis("LineSearch"),
+                100.0 * timer.elapsed_millis("LineSearch") / timer.elapsed_millis("Step"),
+                timer.elapsed_millis("LineSearch") / float(steps));
+    RXMESH_INFO("  Step Size Compute:    {:.2f} ms  ({:.1f}%) [{:.2f} ms/iter]",
+                timer.elapsed_millis("StepSize"),
+                100.0 * timer.elapsed_millis("StepSize") / timer.elapsed_millis("Step"),
+                timer.elapsed_millis("StepSize") / float(steps));
+    RXMESH_INFO("======================");
 }
 
 int main(int argc, char** argv)
@@ -553,6 +586,8 @@ int main(int argc, char** argv)
             params.kappa = std::atof(argv[++i]);
         } else if (arg == "--bending" && i + 1 < argc) {
             params.bending_stiff = std::atof(argv[++i]);
+        } else if (arg == "--steps" && i + 1 < argc) {
+            params.num_steps = std::atoi(argv[++i]);
         } else if (arg == "--help" || arg == "-h") {
             printf("Usage: %s [options]\n", argv[0]);
             printf("Options:\n");
@@ -567,6 +602,7 @@ int main(int argc, char** argv)
             printf("  --dhat <val>       Contact distance threshold (default: 0.1)\n");
             printf("  --kappa <val>      Contact stiffness (default: 1e5)\n");
             printf("  --bending <val>    Bending stiffness (default: 1e3)\n");
+            printf("  --steps <val>      Number of simulation steps (default: 5)\n");
             printf("  --help, -h         Show this help message\n");
             return 0;
         }
@@ -584,6 +620,7 @@ int main(int argc, char** argv)
     RXMESH_INFO("  dhat: {}", params.dhat);
     RXMESH_INFO("  kappa: {}", params.kappa);
     RXMESH_INFO("  Bending stiffness: {}", params.bending_stiff);
+    RXMESH_INFO("  Number of steps: {}", params.num_steps);
 
     // Load multiple meshes using RXMeshStatic's multiple mesh constructor
     std::vector<std::string> inputs = {"input/el_topo_sphere_1280.obj",
