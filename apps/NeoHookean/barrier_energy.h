@@ -180,35 +180,38 @@ void vv_contact(ProblemT&          problem,
         query_point.y = xi[1];
         query_point.z = xi[2];
 
+        // remains invariant
+        const int region_vh = region_label(vh);
+        const T dhat_sq = dhat * dhat;
+
         // Fixed-radius query using shrinking radius approach
         auto query_lambda = [&](uint32_t prim_id) -> float {
             if (prim_id == vh_id) {
-                return dhat * dhat;  // Return SQUARED radius, skip self
+                return dhat_sq;  // Return SQUARED radius, skip self
             }
 
             VertexHandle other_vh = ctx.template get_handle<VertexHandle>(prim_id);
 
             // Only add contact pairs between vertices from different meshes
-            int region_vh = region_label(vh);
             int region_other = region_label(other_vh);
 
             if (region_vh == region_other) {
-                return dhat * dhat;  // Skip vertices from same mesh
+                return dhat_sq;  // Skip vertices from same mesh
             }
 
             Eigen::Vector3<T> xj = x.template to_eigen<3>(other_vh);
 
-            T dist = (xi - xj).norm();
+            T dist_sq = (xi - xj).squaredNorm();
 
-            if (dist < dhat) {
+            if (dist_sq < dhat_sq) {
                 contact_pairs.insert(vh, other_vh);
             }
 
-            return dhat * dhat;  // Return SQUARED radius for fixed-radius query
+            return dhat_sq;  // Return SQUARED radius for fixed-radius query
         };
 
         cuBQL::shrinkingRadiusQuery::forEachPrim<T, 3>(
-            query_lambda, bvh, query_point, dhat * dhat);
+            query_lambda, bvh, query_point, dhat_sq);
     });
     timer_query.stop();
 
