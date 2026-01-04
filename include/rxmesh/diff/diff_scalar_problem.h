@@ -4,12 +4,14 @@
 
 #include "rxmesh/diff/candidate_pairs.h"
 #include "rxmesh/diff/element_valence.h"
+#include "rxmesh/diff/ev_diamond_interaction.h"
 #include "rxmesh/diff/hessian_sparse_matrix.h"
 #include "rxmesh/diff/scalar_term.h"
 #include "rxmesh/matrix/dense_matrix.h"
 #include "rxmesh/types.h"
 
 namespace rxmesh {
+
 
 /**
  * @brief Definition of differentiation problem
@@ -149,7 +151,10 @@ struct DiffScalarProblem
             terms.push_back(
                 std::dynamic_pointer_cast<ScalarTerm<T, ObjHandleT>>(new_term));
             if (op == Op::EVDiamond && WithHess && hess) {
-                add_ev_diamond_interaction();
+                if (!ev_diamond_interaction_added) {
+                    detail::add_ev_diamond_interaction(rx, *this);
+                    ev_diamond_interaction_added = true;
+                }
             }
         }
 
@@ -348,33 +353,6 @@ struct DiffScalarProblem
      * @brief add the interaction between the two opposite vertices of edge
      * diamond.
      */
-    void add_ev_diamond_interaction()
-    {
-        if (ev_diamond_interaction_added) {
-            return;
-        }
-        int expected_vv_candidate_pairs = rx.get_num_edges();
-
-        if (vv_pairs.m_pairs_handle.rows() < expected_vv_candidate_pairs) {
-            vv_pairs.release();
-
-            vv_pairs = CandidatePairsVV<HessMatT>(
-                expected_vv_candidate_pairs, *hess, rx.get_context());
-        }
-
-        vv_pairs.reset();
-
-        rx.run_query_kernel<Op::EVDiamond, 256>(
-            [=] __device__(const EdgeHandle& eh, const VertexIterator& iter) {
-                if (iter[1].is_valid() && iter[3].is_valid()) {
-                    bool inserted = vv_pairs.insert(iter[1], iter[3]);
-                    assert(inserted);
-                }
-            });
-        update_hessian();
-
-        ev_diamond_interaction_added = true;
-    }
 };
 
 }  // namespace rxmesh
