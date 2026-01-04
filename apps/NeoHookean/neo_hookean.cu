@@ -268,7 +268,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     printf("neo_hookean: Added neo-hookean energy\n");
 
     // add bending energy
-    // bending_energy(problem, is_dbc, rest_angle, edge_area, bending_stiff, time_step);
+    bending_energy(problem, is_dbc, rest_angle, edge_area, bending_stiff, time_step);
     printf("neo_hookean: Added bending energy\n");
 
 

@@ -186,7 +186,7 @@ void vv_contact_energy(ProblemT&     problem,
 {
     const T h_sq = h * h;
 
-    problem.template add_term<true>([=] __device__(const auto& id,
+    problem.template add_interaction_term<Op::VV, true>([=] __device__(const auto& id,
                                                    const auto& iter,
                                                    const auto& obj) mutable {
         using ActiveT = ACTIVE_TYPE(id);
@@ -326,7 +326,6 @@ void add_contact(ProblemT&          problem,
                  const T            kappa,
                  const VertexAttribute<int>& region_label)
 {
-    return;
     // Call VV contact handler
     vv_contact(problem,
                rx,
@@ -360,42 +359,43 @@ void ceiling_barrier_energy(ProblemT&      problem,
     const T h_sq = h * h;
 
     const Eigen::Vector3<T> normal(0.0, -1.0, 0.0);
+    return;
 
-    problem.template add_term<true>([=] __device__(const auto& id,
-                                                   const auto& iter,
-                                                   const auto& obj) mutable {
-        using ActiveT = ACTIVE_TYPE(id);
+    // problem.template add_term<Op::V, true>([=] __device__(const auto& id,
+    //                                                const auto& iter,
+    //                                                const auto& obj) mutable {
+    //     using ActiveT = ACTIVE_TYPE(id);
 
-        const VertexHandle c0 = iter[0];
+    //     const VertexHandle c0 = iter[0];
 
-        const VertexHandle c1 = iter[1];
+    //     const VertexHandle c1 = iter[1];
 
-        const Eigen::Vector3<ActiveT> xi =
-            iter_val<ActiveT, 3>(id, iter, obj, 0);
+    //     const Eigen::Vector3<ActiveT> xi =
+    //         iter_val<ActiveT, 3>(id, iter, obj, 0);
 
-        const Eigen::Vector3<T> x_dbc = obj.template to_eigen<3>(c1);
-
-
-        // ceiling
-        ActiveT d = (xi - x_dbc).dot(normal);
-
-        ActiveT E(T(0));
-
-        if (d < dhat) {
-            ActiveT s = d / dhat;
-
-            if (s <= T(0)) {
-                using PassiveT = PassiveType<ActiveT>;
-                return ActiveT(std::numeric_limits<PassiveT>::max());
-            }
-
-            E = h_sq * contact_area(c0) * dhat * T(0.5) * kappa * (s - 1) *
-                log(s);
-        }
+    //     const Eigen::Vector3<T> x_dbc = obj.template to_eigen<3>(c1);
 
 
-        return E;
-    });
+    //     // ceiling
+    //     ActiveT d = (xi - x_dbc).dot(normal);
+
+    //     ActiveT E(T(0));
+
+    //     if (d < dhat) {
+    //         ActiveT s = d / dhat;
+
+    //         if (s <= T(0)) {
+    //             using PassiveT = PassiveType<ActiveT>;
+    //             return ActiveT(std::numeric_limits<PassiveT>::max());
+    //         }
+
+    //         E = h_sq * contact_area(c0) * dhat * T(0.5) * kappa * (s - 1) *
+    //             log(s);
+    //     }
+
+
+    //     return E;
+    // });
 }
 
 template <typename VAttrT,
