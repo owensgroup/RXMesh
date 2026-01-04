@@ -54,7 +54,16 @@ __device__ __host__ T compute_dihedral_angle(const Eigen::Vector3<T>& p,
     cos_theta = (cos_theta <= T(-1.0)) ? T(-0.99999f) : cos_theta;
     cos_theta = (cos_theta >= T(1.0)) ? T(0.99999f) : cos_theta;
 
-    T theta = acos(cos_theta);
+    // Use cross product to get the sign
+    Eigen::Vector3<T> n_cross = n0_normalized.cross(n1_normalized);
+    T sign = (n_cross.dot(e) >= T(0)) ? T(1.0) : T(-1.0);
+
+    T sin_theta_sq = T(1.0) - cos_theta * cos_theta;
+    // Clamp to avoid sqrt of negative due to numerical errors
+    sin_theta_sq = (sin_theta_sq < T(0)) ? T(0) : sin_theta_sq;
+    T sin_theta = sign * sqrt(sin_theta_sq);
+    T theta = atan2(sin_theta, cos_theta);
+
 
     return theta;
 }
