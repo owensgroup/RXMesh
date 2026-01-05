@@ -188,6 +188,7 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
 
     timer.start("Total");
 
+    int num_cg_iter = 1;
 
     for (iter = 0; iter < Arg.newton_max_iter; ++iter) {
 
@@ -210,6 +211,12 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
         newton_solver.compute_direction();
         timer.stop("DiffCG");
 
+        if constexpr (std::is_base_of_v<
+                          CGSolver<T, ProblemT::DenseMatT::OrderT>,
+                          SolverT>) {
+            num_cg_iter += solver.iter_taken();
+        }
+
         // newton decrement
         if (0.5f * problem.grad.dot(newton_solver.dir) < convergence_eps) {
             break;
@@ -225,15 +232,16 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
 
 
     RXMESH_INFO(
-        "Parametrization: iterations ={}, time= {} (ms), timer/iteration= {} "
-        "ms/iter, diff_cg_time/iter = {}, line_search/iter = {}, solver_time = "
-        "{} (ms)",
+        "Parametrization: iterations ={}, num_cg_iter= {}, time= {} (ms), "
+        "timer/iteration= {} ms/iter, diff_cg_time/iter = {}, line_search/iter "
+        "= {}, diff_cg_time/iter/cg_iter = {}",
         iter,
+        num_cg_iter,
         timer.elapsed_millis("Total"),
         timer.elapsed_millis("Total") / float(iter),
         timer.elapsed_millis("DiffCG") / float(iter),
         timer.elapsed_millis("LineSearch") / float(iter),
-        newton_solver.solve_time);
+        timer.elapsed_millis("DiffCG") / float(iter * num_cg_iter));
 
 
     problem.objective->move(DEVICE, HOST);
