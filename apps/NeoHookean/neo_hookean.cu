@@ -118,7 +118,8 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     // Pre-allocate BVH bounding boxes buffer for contact detection
     BVHBuffers<T> bvh_buffers(rx.get_num_vertices());
 
-    CGSolver<T, ProblemT::DenseMatT::OrderT> solver(*problem.hess, 1, 1000);
+    // CGSolver<T, ProblemT::DenseMatT::OrderT> solver(*problem.hess, 1, 1000);
+    PCGSolver<T, ProblemT::DenseMatT::OrderT> solver(*problem.hess, 1, 1000);
 
     // CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(
     //     problem.hess.get());
