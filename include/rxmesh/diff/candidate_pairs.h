@@ -190,10 +190,10 @@ struct CandidatePairs
     /**
      * @brief reset the number of candidate pairs, i.e., make the size equal 0
      */
-    __device__ __host__ void reset()
+    __device__ __host__ void reset(int sz_pair = 0, int sz_index = 0)
     {
-        m_current_num_pairs(0) = 0;
-        m_current_num_index(0) = 0;
+        m_current_num_pairs(0) = sz_pair;
+        m_current_num_index(0) = sz_index;
 
 #ifndef __CUDA_ARCH__
         m_current_num_pairs.move(HOST, DEVICE);

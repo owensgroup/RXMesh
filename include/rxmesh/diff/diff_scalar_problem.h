@@ -4,8 +4,8 @@
 
 #include "rxmesh/diff/candidate_pairs.h"
 #include "rxmesh/diff/element_valence.h"
-#include "rxmesh/diff/ev_diamond_interaction.h"
 #include "rxmesh/diff/hessian_sparse_matrix.h"
+#include "rxmesh/diff/interaction_impl.h"
 #include "rxmesh/diff/scalar_term.h"
 #include "rxmesh/matrix/dense_matrix.h"
 #include "rxmesh/types.h"
@@ -43,6 +43,7 @@ struct DiffScalarProblem
     std::unique_ptr<HessMatT>                               hess_new;
     std::shared_ptr<Attribute<T, ObjHandleT>>               objective;
     std::vector<std::shared_ptr<ScalarTerm<T, ObjHandleT>>> terms;
+    std::shared_ptr<FaceAttribute<VertexHandle>> face_interact_vertex;
 
     // TODO we might need other types of candidate pairs
     CandidatePairsVV<HessMatT> vv_pairs;
@@ -91,10 +92,21 @@ struct DiffScalarProblem
                     std::make_unique<HessMatT>(rx, expect_new_entries_in_hess);
 
                 vv_pairs = CandidatePairsVV<HessMatT>(
-                    expected_vv_candidate_pairs, *hess, rx.get_context());
+                    expected_vv_candidate_pairs +
+                        3 * expected_vf_candidate_pairs,  // since we use
+                                                          // vv_pairs to stage
+                                                          // VF interaction as
+                                                          // well
+                    *hess,
+                    rx.get_context());
 
                 vf_pairs = CandidatePairsVF<HessMatT>(
                     expected_vf_candidate_pairs, *hess, rx.get_context());
+
+                if (expected_vf_candidate_pairs > 0) {
+                    face_interact_vertex =
+                        rx.add_face_attribute<VertexHandle>("rx:FInteractV", 1);
+                }
 
             } else {
                 hess = std::make_unique<HessMatT>();
@@ -250,7 +262,17 @@ struct DiffScalarProblem
         if (!hess) {
             return;
         }
-        // TODO expand the indices for VF interactions
+        //  record the current vv_pair size and then reset it against to
+        // this size. We do this because add_vf_pairs_to_vv_pairs stages the new
+        // VV pairs (due to FV interaction) in vv_pair which would mess with the
+        // user-defined vv_pairs later when they start using it to add energies
+
+        int vv_prv_num_pairs = vv_pairs.num_index();
+        int vv_prv_num_index = vv_pairs.num_pairs();
+
+        // expand the indices for VF interactions
+        detail::add_vf_pairs_to_vv_pairs(
+            rx, *this, vf_pairs, vv_pairs, *face_interact_vertex);
 
         if (hess_new->insert(rx,
                              *hess,
@@ -261,6 +283,8 @@ struct DiffScalarProblem
 
             vv_pairs.m_hess = *hess;
         }
+
+        vv_pairs.reset(vv_prv_num_pairs, vv_prv_num_index);
     }
 
     /**
