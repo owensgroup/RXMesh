@@ -7,7 +7,9 @@ project(RXMesh
         LANGUAGES C CXX CUDA)
 
 
-set(RX_USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")
+set(CUDA_ARCHS 80)
+set(CMAKE_CUDA_ARCHITECTURES 80)
+set(RX_USE_POLYSCOPE "OFF" CACHE BOOL "Enable Ployscope for visualization")
 set(RX_BUILD_TESTS "ON" CACHE BOOL "Build RXMesh unit test")
 set(RX_BUILD_APPS "ON" CACHE BOOL "Build RXMesh applications")
 set(RX_USE_SUITESPARSE "OFF" CACHE BOOL "Use SuiteSparse for benchmark")
@@ -86,8 +88,15 @@ FetchContent_Declare(cereal
 )
 FetchContent_Populate(cereal)
 
+# cuBQL
+FetchContent_Declare(cubql
+    GIT_REPOSITORY https://github.com/NVIDIA/cuBQL.git
+    GIT_TAG        main
+)
+FetchContent_MakeAvailable(cubql)
+
 # Package Management
-# TODO: Consider using CPM for the various libraries above 
+# TODO: Consider using CPM for the various libraries above
 include(cmake/CPM.cmake) 
 
 # Auto-detect GPU architecture
@@ -131,6 +140,8 @@ target_include_directories(RXMesh
 	INTERFACE "${cereal_SOURCE_DIR}/include"
     INTERFACE ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
 )
+
+target_link_libraries(RXMesh INTERFACE cuBQL cuBQL_queries)
 
 # CUDA and C++ compiler flags
 set(cxx_flags 

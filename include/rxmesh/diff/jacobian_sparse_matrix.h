@@ -275,7 +275,7 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
                                             const IndexT        local_i,
                                             const IndexT        local_j) const
     {
-        assert(is_non_zero(row_v, col_v));
+        assert(this->is_non_zero(row_v, col_v));
 
         const IndexT r_id =
             this->get_row_id(row_v) * this->m_replicate + local_i;
@@ -294,7 +294,7 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
                                       const IndexT        local_i,
                                       const IndexT        local_j)
     {
-        assert(is_non_zero(row_v, col_v));
+        assert(this->is_non_zero(row_v, col_v));
 
         const IndexT r_id =
             this->get_row_id(row_v) * this->m_replicate + local_i;
@@ -314,7 +314,7 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
         const IndexT        local_i,
         const IndexT        local_j) const
     {
-        assert(is_non_zero(row_v, col_v));
+        assert(this->is_non_zero(row_v, col_v));
 
         const IndexT r_id =
             this->get_row_id(row_v) * this->m_replicate + local_i;

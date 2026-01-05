@@ -130,7 +130,7 @@ struct PCGSolver : public CGSolver<T, DenseMatOrder>
             "Residual = {}, Final residual= {}",
             this->m_iter_taken,
             this->m_start_residual,
-            delta_new);
+            this->delta_new);
 
         this->m_final_residual = this->delta_new;
     }
