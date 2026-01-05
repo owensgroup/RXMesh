@@ -271,8 +271,10 @@ struct DiffScalarProblem
         int vv_prv_num_index = vv_pairs.num_pairs();
 
         // expand the indices for VF interactions
-        detail::add_vf_pairs_to_vv_pairs(
-            rx, *this, vf_pairs, vv_pairs, *face_interact_vertex);
+        if (face_interact_vertex) {
+            detail::add_vf_pairs_to_vv_pairs(
+                rx, *this, vf_pairs, vv_pairs, *face_interact_vertex);
+        }
 
         if (hess_new->insert(rx,
                              *hess,
@@ -284,7 +286,9 @@ struct DiffScalarProblem
             vv_pairs.m_hess = *hess;
         }
 
-        vv_pairs.reset(vv_prv_num_pairs, vv_prv_num_index);
+        if (face_interact_vertex) {
+            vv_pairs.reset(vv_prv_num_pairs, vv_prv_num_index);
+        }
     }
 
     /**

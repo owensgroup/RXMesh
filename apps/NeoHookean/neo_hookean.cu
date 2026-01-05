@@ -536,8 +536,9 @@ int main(int argc, char** argv)
     RXMESH_INFO("  Number of steps: {}", params.num_steps);
 
     // Load multiple meshes using RXMeshStatic's multiple mesh constructor
-    std::vector<std::string> inputs = {"input/el_topo_sphere_1280.obj",
-                                       "input/el_topo_sphere_1280.obj"};
+    std::vector<std::string> inputs = {
+        STRINGIFY(INPUT_DIR) "el_topo_sphere_1280.obj",
+        STRINGIFY(INPUT_DIR) "el_topo_sphere_1280.obj"};
 
     RXMeshStatic rx(inputs);
 

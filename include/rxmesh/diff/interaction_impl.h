@@ -35,11 +35,12 @@ void add_ev_diamond_interaction(RXMeshStatic& rx, ProblemT& problem)
 }
 
 template <typename ProblemT>
-void add_vf_pairs_to_vv_pairs(RXMeshStatic&                         rx,
-                              ProblemT&                             problem,
-                              CandidatePairsVF<ProblemT::HessMatT>& vf_pairs,
-                              CandidatePairsVV<ProblemT::HessMatT>& vv_pairs,
-                              FaceAttribute<VertexHandle>& face_interact_vertex)
+void add_vf_pairs_to_vv_pairs(
+    RXMeshStatic&                                  rx,
+    ProblemT&                                      problem,
+    CandidatePairsVF<typename ProblemT::HessMatT>& vf_pairs,
+    CandidatePairsVV<typename ProblemT::HessMatT>& vv_pairs,
+    FaceAttribute<VertexHandle>&                   face_interact_vertex)
 {
     // interaction between F-V pairs leads to adding new blocks in the Hessian
     // where every vertex of the face F (i.e., v0, v1, v2) will be interacting
