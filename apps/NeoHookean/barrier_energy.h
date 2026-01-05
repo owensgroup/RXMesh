@@ -49,12 +49,10 @@ struct BVHBuffers {
 
 template <typename ProblemT,
           typename VAttrT,
-          typename VAttrI,
           typename T = typename VAttrT::Type>
 void floor_barrier_energy(ProblemT&      problem,
                           VAttrT&        contact_area,
                           const T        h,  // time_step
-                          const VAttrI&  is_dbc,
                           const vec3<T>& ground_n,
                           const vec3<T>& ground_o,
                           const T        dhat,
@@ -77,8 +75,6 @@ void floor_barrier_energy(ProblemT&      problem,
             ActiveT E(T(0));
 
 
-            if (!is_dbc(vh)) {
-                // floor
                 ActiveT d = (xi - o).dot(n);
                 if (d < dhat) {
                     ActiveT s = d / dhat;
@@ -91,7 +87,6 @@ void floor_barrier_energy(ProblemT&      problem,
                     E = h_sq * contact_area(vh) * dhat * T(0.5) * kappa *
                         (s - 1) * log(s);
                 }
-            }
 
             return E;
         });
@@ -99,7 +94,6 @@ void floor_barrier_energy(ProblemT&      problem,
 
 template <typename ProblemT,
           typename VAttrT,
-          typename VAttrB,
           typename PairT,
           typename BVHBufferT,
           typename T = typename VAttrT::Type>
@@ -107,10 +101,6 @@ void vv_contact(ProblemT&          problem,
                 RXMeshStatic&      rx,
                 PairT&             contact_pairs,
                 BVHBufferT&        bvh_buffers,
-                const VertexHandle dbc_vertex,
-                const VertexHandle dbc_vertex1,
-                const VertexHandle dbc_vertex2,
-                const VAttrB&      is_dbc,
                 const VAttrT&      x,
                 VAttrT&            contact_area,
                 const T            h,
@@ -167,9 +157,6 @@ void vv_contact(ProblemT&          problem,
     // Step 4: Query BVH for each vertex to find nearby vertices
     timer_query.start();
     rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) mutable {
-        if (is_dbc(vh)) {
-            return;  // Skip DBC vertices
-        }
 
         const Eigen::Vector3<T> xi = x.template to_eigen<3>(vh);
         const uint32_t          vh_id = ctx.template linear_id<VertexHandle>(vh);
@@ -364,7 +351,6 @@ void vf_contact(ProblemT&     problem,
 
 template <typename ProblemT,
           typename VAttrT,
-          typename VAttrB,
           typename PairT,
           typename BVHBufferT,
           typename T = typename VAttrT::Type>
@@ -372,10 +358,6 @@ void add_contact(ProblemT&          problem,
                  RXMeshStatic&      rx,
                  PairT&             contact_pairs,
                  BVHBufferT&        bvh_buffers,
-                 const VertexHandle dbc_vertex,
-                 const VertexHandle dbc_vertex1,
-                 const VertexHandle dbc_vertex2,
-                 const VAttrB&      is_dbc,
                  const VAttrT&      x,
                  VAttrT&            contact_area,
                  const T            h,
@@ -388,10 +370,6 @@ void add_contact(ProblemT&          problem,
                rx,
                contact_pairs,
                bvh_buffers,
-               dbc_vertex,
-               dbc_vertex1,
-               dbc_vertex2,
-               is_dbc,
                x,
                contact_area,
                h,
@@ -403,69 +381,13 @@ void add_contact(ProblemT&          problem,
     // vf_contact(problem, rx, is_dbc, x, contact_area, h, dhat, kappa);
 }
 
-template <typename ProblemT,
-          typename VAttrT,
-          typename T = typename VAttrT::Type>
-void ceiling_barrier_energy(ProblemT&      problem,
-                            VAttrT&        contact_area,
-                            const T        h,  // time_step
-                            const vec3<T>& ground_n,
-                            const vec3<T>& ground_o,
-                            const T        dhat,
-                            const T        kappa)
-{
-    const T h_sq = h * h;
-
-    const Eigen::Vector3<T> normal(0.0, -1.0, 0.0);
-    return;
-
-    // problem.template add_term<Op::V, true>([=] __device__(const auto& id,
-    //                                                const auto& iter,
-    //                                                const auto& obj) mutable {
-    //     using ActiveT = ACTIVE_TYPE(id);
-
-    //     const VertexHandle c0 = iter[0];
-
-    //     const VertexHandle c1 = iter[1];
-
-    //     const Eigen::Vector3<ActiveT> xi =
-    //         iter_val<ActiveT, 3>(id, iter, obj, 0);
-
-    //     const Eigen::Vector3<T> x_dbc = obj.template to_eigen<3>(c1);
-
-
-    //     // ceiling
-    //     ActiveT d = (xi - x_dbc).dot(normal);
-
-    //     ActiveT E(T(0));
-
-    //     if (d < dhat) {
-    //         ActiveT s = d / dhat;
-
-    //         if (s <= T(0)) {
-    //             using PassiveT = PassiveType<ActiveT>;
-    //             return ActiveT(std::numeric_limits<PassiveT>::max());
-    //         }
-
-    //         E = h_sq * contact_area(c0) * dhat * T(0.5) * kappa * (s - 1) *
-    //             log(s);
-    //     }
-
-
-    //     return E;
-    // });
-}
-
 template <typename VAttrT,
-          typename VAttrI,
           typename DenseMatT,
           typename T = typename VAttrT::Type>
 T barrier_step_size(RXMeshStatic&      rx,
                     const DenseMatT&   search_dir,
                     DenseMatT&         alpha,
-                    const VertexHandle dbc_vertex,
                     const VAttrT&      x,
-                    const VAttrI&      is_dbc,
                     const vec3<T>&     ground_n,
                     const vec3<T>&     ground_o)
 {
@@ -474,12 +396,6 @@ T barrier_step_size(RXMeshStatic&      rx,
     const vec3<T> n(0.0, -1.0, 0.0);
 
     rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) mutable {
-        const vec3<T> p_dbc(search_dir(dbc_vertex, 0),
-                            search_dir(dbc_vertex, 1),
-                            search_dir(dbc_vertex, 2));
-
-        const vec3<T> x_dbc = x.to_glm<3>(dbc_vertex);
-
 
         const vec3<T> pi(
             search_dir(vh, 0), search_dir(vh, 1), search_dir(vh, 2));
@@ -493,15 +409,6 @@ T barrier_step_size(RXMeshStatic&      rx,
                 alpha(vh), T(0.9) * glm::dot(ground_n, (xi - ground_o)) / -p_n);
         }
 
-        // ceiling
-        // TODO this should be generalized
-        if (!is_dbc(vh)) {
-            p_n = glm::dot(n, (pi - p_dbc));
-            if (p_n < 0) {
-                alpha(vh) = std::min(alpha(vh),
-                                     T(0.9) * glm::dot(n, (xi - x_dbc)) / -p_n);
-            }
-        }
     });
 
     // we want the min here but since the min value is greater than 1 (y_ground

@@ -80,9 +80,10 @@ __device__ __host__ T compute_dihedral_angle(const Eigen::Vector3<T>& p,
  *   - area_edge is the average area of the two adjacent triangles
  *   - k_b is the bending stiffness
  */
-template <typename ProblemT, typename VAttrI, typename EAttrF, typename T>
+// template <typename ProblemT, typename VAttrI, typename EAttrF, typename T>
+template <typename ProblemT, typename EAttrF, typename T>
 void bending_energy(ProblemT&     problem,
-                    const VAttrI& is_dbc,
+                    // const VAttrI& is_dbc,
                     const EAttrF& rest_angle,
                     const EAttrF& edge_area,
                     const T       bending_stiffness,
