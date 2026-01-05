@@ -38,7 +38,7 @@ struct PhysicsParams {
 
 void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 {
-    printf("neo_hookean: Starting function\n");
+    // printf("neo_hookean: Starting function\n");
 
     constexpr int VariableDim = 3;
 
@@ -84,7 +84,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     T mass = density * total_volume /
              (rx.get_num_vertices());  // m
 
-    printf("neo_hookean: Setting up attributes\n");
+    // printf("neo_hookean: Setting up attributes\n");
 
     // Attributes
     auto velocity = *rx.add_vertex_attribute<T>("Velocity", 3);  // v
@@ -132,14 +132,14 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     auto x_tilde = *rx.add_vertex_attribute_like("x_tilde", x);
 
 
-    printf("neo_hookean: Running initializations\n");
+    // printf("neo_hookean: Running initializations\n");
 
     // Initializations
     init_volume_inverse_b(rx, x, volume, inv_b);
-    printf("neo_hookean: Finished init_volume_inverse_b\n");
+    // printf("neo_hookean: Finished init_volume_inverse_b\n");
 
     init_bending(rx, x, rest_angle, edge_area);
-    printf("neo_hookean: Finished init_bending\n");
+    // printf("neo_hookean: Finished init_bending\n");
 
     // // Debug: print bending initialization stats
     // rest_angle.move(DEVICE, HOST);
@@ -181,15 +181,15 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     rx.get_polyscope_mesh()->addFaceScalarQuantity("Volume", volume);
 #endif
 
-    printf("neo_hookean: Adding energy terms\n");
+    // printf("neo_hookean: Adding energy terms\n");
 
     // add inertial energy term
     inertial_energy(problem, x_tilde, mass);
-    printf("neo_hookean: Added inertial energy\n");
+    // printf("neo_hookean: Added inertial energy\n");
 
     // add gravity energy
     gravity_energy(problem, time_step, mass);
-    printf("neo_hookean: Added gravity energy\n");
+    // printf("neo_hookean: Added gravity energy\n");
 
     // add barrier energy
     floor_barrier_energy(problem,
@@ -200,10 +200,10 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                          dhat,
                          kappa);
 
-    printf("neo_hookean: Added floor barrier energy\n");
+    // printf("neo_hookean: Added floor barrier energy\n");
 
     vv_contact_energy(problem, contact_area, time_step, dhat, kappa);
-    printf("neo_hookean: Added vv contact energy\n");
+    // printf("neo_hookean: Added vv contact energy\n");
 
     DenseMatrix<T, Eigen::RowMajor> dir(
         rx, problem.grad.rows(), problem.grad.cols(), LOCATION_ALL);
@@ -225,11 +225,11 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 
     // add neo hooken energy
     neo_hookean_energy(problem, volume, inv_b, mu_lame, time_step, lam);
-    printf("neo_hookean: Added neo-hookean energy\n");
+    // printf("neo_hookean: Added neo-hookean energy\n");
 
     // add bending energy
     bending_energy(problem, rest_angle, edge_area, bending_stiff, time_step);
-    printf("neo_hookean: Added bending energy\n");
+    // printf("neo_hookean: Added bending energy\n");
 
 
     int steps = 0;
@@ -243,7 +243,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     timer.add("StepSize");
 
     auto step_forward = [&]() {
-        printf("neo_hookean: step_forward() - Starting step %d\n", steps);
+        // printf("neo_hookean: step_forward() - Starting step %d\n", steps);
 
         // x_tilde = x + v*h
         timer.start("Step");
@@ -269,7 +269,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 
 
         // evaluate energy
-        printf("neo_hookean: step_forward() - Adding contact\n");
+        // printf("neo_hookean: step_forward() - Adding contact\n");
         timer.start("ContactDetection");
         add_contact(problem,
                     rx,
@@ -283,27 +283,27 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                     region_label);
         timer.stop("ContactDetection");
 
-        printf("neo_hookean: step_forward() - Updating hessian\n");
+        // printf("neo_hookean: step_forward() - Updating hessian\n");
         timer.start("EnergyEval");
         problem.update_hessian();
-        printf("neo_hookean: step_forward() - Evaluating terms\n");
+        // printf("neo_hookean: step_forward() - Evaluating terms\n");
         problem.eval_terms();
         timer.stop("EnergyEval");
-        printf("neo_hookean: step_forward() - Finished evaluating terms\n");
+        // printf("neo_hookean: step_forward() - Finished evaluating terms\n");
 
         grad.copy_from(problem.grad, DEVICE, DEVICE);
 
         // get newton direction
-        printf("neo_hookean: step_forward() - Computing newton direction\n");
+        // printf("neo_hookean: step_forward() - Computing newton direction\n");
         timer.start("LinearSolver");
         newton_solver.compute_direction();
         timer.stop("LinearSolver");
-        printf("neo_hookean: step_forward() - Finished computing newton direction\n");
+        // printf("neo_hookean: step_forward() - Finished computing newton direction\n");
 
         dir.copy_from(newton_solver.dir, DEVICE, DEVICE);
         // residual is abs_max(newton_dir)/ h
         T residual = newton_solver.dir.abs_max() / time_step;
-        printf("neo_hookean: step_forward() - Initial residual: %f\n", residual);
+        // printf("neo_hookean: step_forward() - Initial residual: %f\n", residual);
 
         T f = problem.get_current_loss();
         RXMESH_INFO(
@@ -313,31 +313,31 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
             residual);
 
         int iter = 0;
-        printf("neo_hookean: step_forward() - Entering iteration loop\n");
+        // printf("neo_hookean: step_forward() - Entering iteration loop\n");
         while (residual > tol) {
             // printf("neo_hookean: step_forward() - Iteration %d, residual: %f, num_satisfied: %d\n", iter, residual, num_satisfied);
-            printf("neo_hookean: step_forward() - Iteration %d, residual: %f \n", iter, residual);
+            // printf("neo_hookean: step_forward() - Iteration %d, residual: %f \n", iter, residual);
 
-            printf("neo_hookean: step_forward() - Computing neo_hookean_step_size\n");
+            // printf("neo_hookean: step_forward() - Computing neo_hookean_step_size\n");
             timer.start("StepSize");
             T nh_step = neo_hookean_step_size(rx, x, newton_solver.dir, alpha);
-            printf("neo_hookean: step_forward() - nh_step: %f\n", nh_step);
+            // printf("neo_hookean: step_forward() - nh_step: %f\n", nh_step);
 
-            printf("neo_hookean: step_forward() - Computing barrier_step_size\n");
+            // printf("neo_hookean: step_forward() - Computing barrier_step_size\n");
             T bar_step = barrier_step_size(rx,
                                            newton_solver.dir,
                                            alpha,
                                            x,
                                            ground_n,
                                            ground_o);
-            printf("neo_hookean: step_forward() - bar_step: %f\n", bar_step);
+            // printf("neo_hookean: step_forward() - bar_step: %f\n", bar_step);
 
             line_search_init_step = std::min(nh_step, bar_step);
             timer.stop("StepSize");
-            printf("neo_hookean: step_forward() - line_search_init_step: %f\n", line_search_init_step);
+            // printf("neo_hookean: step_forward() - line_search_init_step: %f\n", line_search_init_step);
 
             // TODO: line search should pass the step to the friction energy
-            printf("neo_hookean: step_forward() - Starting line search\n");
+            // printf("neo_hookean: step_forward() - Starting line search\n");
             timer.start("LineSearch");
             bool ls_success = newton_solver.line_search(
                 line_search_init_step, 0.5, 64, 0.0, [&](auto temp_x) {
@@ -353,14 +353,14 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                                 region_label);
                 });
             timer.stop("LineSearch");
-            printf("neo_hookean: step_forward() - Finished line search, success: %d\n", ls_success);
+            // printf("neo_hookean: step_forward() - Finished line search, success: %d\n", ls_success);
 
             if (!ls_success) {
                 RXMESH_WARN("Line search failed!");
             }
 
             // evaluate energy
-            printf("neo_hookean: step_forward() - Re-evaluating energy after line search\n");
+            // printf("neo_hookean: step_forward() - Re-evaluating energy after line search\n");
             timer.start("ContactDetection");
             add_contact(problem,
                         rx,
@@ -374,25 +374,25 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                         region_label);
             timer.stop("ContactDetection");
 
-            printf("neo_hookean: step_forward() - Updating hessian after line search\n");
+            // printf("neo_hookean: step_forward() - Updating hessian after line search\n");
             timer.start("EnergyEval");
             problem.update_hessian();
-            printf("neo_hookean: step_forward() - Evaluating terms after line search\n");
+            // printf("neo_hookean: step_forward() - Evaluating terms after line search\n");
             problem.eval_terms();
             timer.stop("EnergyEval");
 
             T f = problem.get_current_loss();
-            printf("neo_hookean: step_forward() - Current loss: %f\n", f);
+            // printf("neo_hookean: step_forward() - Current loss: %f\n", f);
 
             // get newton direction
-            printf("neo_hookean: step_forward() - Computing newton direction (iteration %d)\n", iter);
+            // printf("neo_hookean: step_forward() - Computing newton direction (iteration %d)\n", iter);
             timer.start("LinearSolver");
             newton_solver.compute_direction();
             timer.stop("LinearSolver");
 
             // residual is abs_max(newton_dir)/ h
             residual = newton_solver.dir.abs_max() / time_step;
-            printf("neo_hookean: step_forward() - New residual: %f\n", residual);
+            // printf("neo_hookean: step_forward() - New residual: %f\n", residual);
 
             RXMESH_INFO(
                 "  Subsetp: {}, F: {}, R: {}, line_search_init_step={}, ",
@@ -426,7 +426,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
         timer.stop("Step");
     };
 
-    printf("declared everything. starting simulation.\n");
+    // printf("declared everything. starting simulation.\n");
 #if USE_POLYSCOPE
     draw(rx, x, velocity, step_forward, dir, grad, steps);
 #else

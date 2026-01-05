@@ -205,12 +205,12 @@ void vv_contact(ProblemT&          problem,
     timer_total.stop();
 
     // Print timing information
-    RXMESH_INFO("VV Contact Detection:");
-    RXMESH_INFO("  BVH Build time: {:.3f} ms", timer_build.elapsed_millis());
-    RXMESH_INFO("  BVH Query time: {:.3f} ms", timer_query.elapsed_millis());
-    RXMESH_INFO("  Total time: {:.3f} ms", timer_total.elapsed_millis());
-    RXMESH_INFO("  Contact pairs found: {}", contact_pairs.num_pairs());
-    RXMESH_INFO("  BVH memory: {:.2f} MB", total_bvh_memory / (1024.0f * 1024.0f));
+    // RXMESH_INFO("VV Contact Detection:");
+    // RXMESH_INFO("  BVH Build time: {:.3f} ms", timer_build.elapsed_millis());
+    // RXMESH_INFO("  BVH Query time: {:.3f} ms", timer_query.elapsed_millis());
+    // RXMESH_INFO("  Total time: {:.3f} ms", timer_total.elapsed_millis());
+    // RXMESH_INFO("  Contact pairs found: {}", contact_pairs.num_pairs());
+    // RXMESH_INFO("  BVH memory: {:.2f} MB", total_bvh_memory / (1024.0f * 1024.0f));
 
     // Step 5: Cleanup
     cuBQL::cuda::free(bvh);  // Free BVH memory (nodes and primIDs go to pool)
