@@ -341,6 +341,8 @@ struct ALIGN(32) Scalar
         res.val()  = val;
         res.grad() = grad_ * a.grad();
 
+        assert(is_finite_scalar(res));
+        assert(is_finite_scalar(a));
         if constexpr (WithHessian)
             res.hess() =
                 hess_ * a.grad() * a.grad().transpose() + grad_ * a.hess();

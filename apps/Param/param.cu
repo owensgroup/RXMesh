@@ -13,7 +13,7 @@ struct arg
     std::string obj_file_name   = STRINGIFY(INPUT_DIR) "bunnyhead.obj";
     std::string output_folder   = STRINGIFY(OUTPUT_DIR);
     std::string uv_file_name    = "";
-    std::string solver          = "chol";
+    std::string solver          = "cudss_chol";
     uint32_t    device_id       = 0;
     float       cg_abs_tol      = 1e-6;
     float       cg_rel_tol      = 0.0;
@@ -184,6 +184,7 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
     Timers<GPUTimer> timer;
     timer.add("Total");
     timer.add("DiffCG");
+    timer.add("LineSearch");
 
     timer.start("Total");
 
@@ -202,8 +203,8 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
 
 
         // get the current value of the loss function
-        T f = problem.get_current_loss();
-        RXMESH_INFO("Iteration= {}: Energy = {}", iter, f);
+        // T f = problem.get_current_loss();
+        // RXMESH_INFO("Iteration= {}: Energy = {}", iter, f);
 
         // direction newton
         newton_solver.compute_direction();
@@ -215,20 +216,23 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
         }
 
         // line search
+        timer.start("LineSearch");
         newton_solver.line_search();
+        timer.stop("LineSearch");
     }
 
     timer.stop("Total");
 
 
     RXMESH_INFO(
-        "Parametrization: iterations ={}, time= {} (ms), "
-        "timer/iteration= {} ms/iter, diff_cg_time/iter = {} solver_time = {} "
-        "(ms)",
+        "Parametrization: iterations ={}, time= {} (ms), timer/iteration= {} "
+        "ms/iter, diff_cg_time/iter = {}, line_search/iter = {}, solver_time = "
+        "{} (ms)",
         iter,
         timer.elapsed_millis("Total"),
         timer.elapsed_millis("Total") / float(iter),
         timer.elapsed_millis("DiffCG") / float(iter),
+        timer.elapsed_millis("LineSearch") / float(iter),
         newton_solver.solve_time);
 
 
