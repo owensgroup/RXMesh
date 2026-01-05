@@ -32,7 +32,7 @@ struct PhysicsParams {
     T   tol            = 0.01;
     T   dhat           = 0.1;
     T   kappa          = 1e5;
-    T   bending_stiff  = 1e3;    // k_b
+    T   bending_stiff  = 1e8;    // k_b
     int num_steps      = 5;      // Number of simulation steps
 };
 
