@@ -242,6 +242,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     timer.add("LinearSolver");
     timer.add("LineSearch");
     timer.add("StepSize");
+    timer.add("UpdateHessian");
 
     auto step_forward = [&]() {
         // printf("neo_hookean: step_forward() - Starting step %d\n", steps);
@@ -376,9 +377,11 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
             timer.stop("ContactDetection");
 
             // printf("neo_hookean: step_forward() - Updating hessian after line search\n");
-            timer.start("EnergyEval");
+            timer.start("UpdateHessian");
             problem.update_hessian();
+            timer.stop("UpdateHessian");
             // printf("neo_hookean: step_forward() - Evaluating terms after line search\n");
+            timer.start("EnergyEval");
             problem.eval_terms();
             timer.stop("EnergyEval");
 
@@ -463,6 +466,10 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                 timer.elapsed_millis("StepSize"),
                 100.0 * timer.elapsed_millis("StepSize") / timer.elapsed_millis("Step"),
                 timer.elapsed_millis("StepSize") / float(steps));
+    RXMESH_INFO("  Update Hessian Compute:    {:.2f} ms  ({:.1f}%) [{:.2f} ms/iter]",
+                timer.elapsed_millis("UpdateHessian"),
+                100.0 * timer.elapsed_millis("UpdateHessian") / timer.elapsed_millis("Step"),
+                timer.elapsed_millis("UpdateHessian") / float(steps));
     RXMESH_INFO("======================");
 }
 
