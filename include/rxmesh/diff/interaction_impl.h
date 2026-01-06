@@ -50,6 +50,10 @@ void add_vf_pairs_to_vv_pairs(
     // 1) every face store the vertex it interact with it
     int num_vf_pairs = vf_pairs.num_pairs();
 
+    if (num_vf_pairs == 0) {
+        return;
+    }
+
     face_interact_vertex.reset(VertexHandle(), DEVICE);
 
     constexpr uint32_t blockThreads = 256;
