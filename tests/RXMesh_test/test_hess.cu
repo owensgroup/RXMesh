@@ -288,6 +288,8 @@ TEST(Diff, VFInteraction)
 
     problem.eval_terms();
 
+    problem.eval_terms_passive();
+
     EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
 
     int new_nnz = problem.hess->non_zeros();
