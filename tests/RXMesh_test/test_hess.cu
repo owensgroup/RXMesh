@@ -199,7 +199,7 @@ TEST(Diff, HessUpdate)
 
     new_entries(rx, problem, num_new_pairs, d_pairs);
     problem.update_hessian();
-      
+
     problem.eval_terms();
     T   new_loss = problem.get_current_loss();
     int new_nnz  = problem.hess->non_zeros();
@@ -234,16 +234,23 @@ void add_vf_term(ProblemT& problem, int face_id, int vert_id)
         vf_pairs.insert(vh, fh);
     });
 
-    problem.template add_interaction_term<Op::VF>(
-        [=] __device__(const auto& fh, const auto& vh, auto& iter, auto& obj) {
-            using ActiveT = ACTIVE_TYPE(fh);
+    problem.template add_interaction_term<Op::VF>([=] __device__(const auto& fh,
+                                                                 const auto& vh,
+                                                                 auto& iter,
+                                                                 auto& obj) {
+        using ActiveT = ACTIVE_TYPE(fh);
 
-            assert(fh.local_id() == face_id);
-            assert(vh.local_id() == vert_id);
+        assert(fh.local_id() == face_id);
+        assert(vh.local_id() == vert_id);
 
-            ActiveT E;
-            return E;
-        });
+        Eigen::Vector3<ActiveT> x0 = iter_val<ActiveT, 3>(fh, vh, iter, obj, 0);
+        Eigen::Vector3<ActiveT> x1 = iter_val<ActiveT, 3>(fh, vh, iter, obj, 1);
+        Eigen::Vector3<ActiveT> x2 = iter_val<ActiveT, 3>(fh, vh, iter, obj, 2);
+        Eigen::Vector3<ActiveT> x3 = iter_val<ActiveT, 3>(fh, vh, iter, obj, 3);
+
+        ActiveT E;
+        return E;
+    });
 }
 
 TEST(Diff, VFInteraction)
