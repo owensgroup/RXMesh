@@ -49,11 +49,14 @@ struct CandidatePairs
           m_current_num_index(DenseMatrix<int>(1, 1, LOCATION_ALL)),
           m_context(ctx)
     {
+        if constexpr (std::is_same_v<HandleT0, VertexHandle> &&
+                      std::is_same_v<HandleT1, VertexHandle>) {
 
-        m_pairs_id = DenseMatrix<IndexT, Eigen::ColMajor>(
-            max_capacity * m_variable_dim * m_variable_dim * 2,
-            2,
-            LOCATION_ALL);
+            m_pairs_id = DenseMatrix<IndexT, Eigen::ColMajor>(
+                max_capacity * m_variable_dim * m_variable_dim * 2,
+                2,
+                LOCATION_ALL);
+        }
 
         reset();
     }
@@ -110,11 +113,14 @@ struct CandidatePairs
         int id = ::atomicAdd(m_current_num_pairs.data(DEVICE), 1);
         if (id < m_pairs_handle.rows()) {
             add_candidate(id);
-            if (!m_hess.is_non_zero(c0, c1)) {
-                add_candidate(id);
-                int idd = ::atomicAdd(m_current_num_index.data(DEVICE),
-                                      m_variable_dim * m_variable_dim * 2);
-                add_candidate_with_indices(idd);
+            if constexpr (std::is_same_v<HandleT0, VertexHandle> &&
+                          std::is_same_v<HandleT1, VertexHandle>) {
+                if (!m_hess.is_non_zero(c0, c1)) {
+                    add_candidate(id);
+                    int idd = ::atomicAdd(m_current_num_index.data(DEVICE),
+                                          m_variable_dim * m_variable_dim * 2);
+                    add_candidate_with_indices(idd);
+                }
             }
             return true;
         } else {
@@ -126,10 +132,14 @@ struct CandidatePairs
             int id = m_current_num_pairs(0);
             m_current_num_pairs(0)++;
             add_candidate(id);
-            if (!m_hess.is_non_zero(c0, c1)) {
-                int idd = m_current_num_index(0);
-                m_current_num_index(0) += m_variable_dim * m_variable_dim * 2;
-                add_candidate_with_indices(idd);
+            if constexpr (std::is_same_v<HandleT0, VertexHandle> &&
+                          std::is_same_v<HandleT1, VertexHandle>) {
+                if (!m_hess.is_non_zero(c0, c1)) {
+                    int idd = m_current_num_index(0);
+                    m_current_num_index(0) +=
+                        m_variable_dim * m_variable_dim * 2;
+                    add_candidate_with_indices(idd);
+                }
             }
             return true;
         } else {
@@ -211,26 +221,6 @@ struct CandidatePairs
         m_pairs_handle.release();
         m_current_num_pairs.release();
         m_current_num_index.release();
-    }
-
-    /**
-     * @brief check if the current instance is VV interaction pairs
-     */
-    constexpr bool is_vv()
-    {
-        return std::is_same_v<HandleT0, VertexHandle> &&
-               std::is_same_v<HandleT1, VertexHandle>;
-    }
-
-    /**
-     * @brief check if the current instance is VF interaction pairs
-     */
-    constexpr bool is_vf()
-    {
-        return (std::is_same_v<HandleT0, FaceHandle> &&
-                std::is_same_v<HandleT1, VertexHandle>) ||
-               (std::is_same_v<HandleT1, FaceHandle> &&
-                std::is_same_v<HandleT0, VertexHandle>);
     }
 
    private:

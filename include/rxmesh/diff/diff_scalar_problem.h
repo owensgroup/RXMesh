@@ -303,7 +303,8 @@ struct DiffScalarProblem
         }
 
         for (size_t i = 0; i < terms.size(); ++i) {
-            terms[i]->eval_active(*objective, stream);
+            terms[i]->eval_active(
+                *objective, face_interact_vertex.get(), stream);
         }
     }
 
@@ -316,7 +317,8 @@ struct DiffScalarProblem
         grad.reset(0, DEVICE, stream);
 
         for (size_t i = 0; i < terms.size(); ++i) {
-            terms[i]->eval_active_grad_only(*objective, stream);
+            terms[i]->eval_active_grad_only(
+                *objective, face_interact_vertex.get(), stream);
         }
     }
 
@@ -357,9 +359,11 @@ struct DiffScalarProblem
     {
         for (size_t i = 0; i < terms.size(); ++i) {
             if (obj) {
-                terms[i]->eval_passive(*obj, stream);
+                terms[i]->eval_passive(
+                    *obj, face_interact_vertex.get(), stream);
             } else {
-                terms[i]->eval_passive(*objective, stream);
+                terms[i]->eval_passive(
+                    *objective, face_interact_vertex.get(), stream);
             }
         }
     }
@@ -373,7 +377,8 @@ struct DiffScalarProblem
         grad.reset(0, DEVICE, stream);
 
         for (size_t i = 0; i < terms.size(); ++i) {
-            terms[i]->eval_active_grad_only(*obj, stream);
+            terms[i]->eval_active_grad_only(
+                *obj, face_interact_vertex.get(), stream);
         }
     }
 

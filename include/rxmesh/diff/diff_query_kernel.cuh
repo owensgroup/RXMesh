@@ -322,7 +322,7 @@ __global__ static void diff_scalar_kernel_active(
     }
 }
 
-// ============= Scalar Passive Pairs
+// ============= Scalar Passive Pairs (generic)
 template <uint32_t blockThreads,
           typename LossHandleT,
           typename ObjHandleT,
@@ -363,7 +363,39 @@ __global__ static void diff_scalar_kernel_passive_pair(
     }
 }
 
-// ============= Scalar Active Pairs
+// ============= Scalar Passive Pairs (VF pairs)
+template <uint32_t blockThreads, typename ScalarT, typename LambdaT>
+__global__ static void diff_scalar_kernel_passive_vf_pair(
+    const Context                                  context,
+    VertexAttribute<typename ScalarT::PassiveType> loss,
+    VertexAttribute<typename ScalarT::PassiveType> objective,
+    FaceAttribute<VertexHandle>                    face_interact_vertex,
+    LambdaT                                        user_func)
+{
+    using PassiveT = typename ScalarT::PassiveType;
+
+    auto block = cooperative_groups::this_thread_block();
+
+    auto eval = [&](const FaceHandle& fh, const VertexIterator& iter) {
+        VertexHandle vh = face_interact_vertex(fh);
+        if (vh.is_valid()) {
+            DiffHandle<PassiveT, FaceHandle> diff_handle(fh);
+
+            PassiveT res = user_func(diff_handle, vh, iter, objective);
+
+            loss(vh) = res;
+        }
+    };
+
+    Query<blockThreads> query(context);
+
+    ShmemAllocator shrd_alloc;
+
+    query.dispatch<Op::FV>(block, shrd_alloc, eval);
+}
+
+
+// ============= Scalar Active Pairs (generic)
 template <uint32_t blockThreads,
           typename LossHandleT,
           typename ObjHandleT,
@@ -453,6 +485,93 @@ __global__ static void diff_scalar_kernel_active_pair(
     }
 }
 
+
+// ============= Scalar Active Pairs (VF pairs)
+template <uint32_t blockThreads,
+          typename ScalarT,
+          int VariableDim,
+          bool ProjectHess,
+          typename LambdaT>
+__global__ static void diff_scalar_kernel_active_vf_pair(
+    const Context                                                   context,
+    DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor>     grad,
+    HessianSparseMatrix<typename ScalarT::PassiveType, VariableDim> hess,
+    VertexAttribute<typename ScalarT::PassiveType>                  loss,
+    VertexAttribute<typename ScalarT::PassiveType>                  objective,
+    FaceAttribute<VertexHandle> face_interact_vertex,
+    LambdaT                     user_func)
+{
+    using PassiveT = typename ScalarT::PassiveType;
+
+    constexpr bool WithHessian = ScalarT::WithHessian_;
+
+    auto block = cooperative_groups::this_thread_block();
+
+    auto eval = [&](const FaceHandle& fh, const VertexIterator& iter) {
+        VertexHandle vh = face_interact_vertex(fh);
+        if (vh.is_valid()) {
+            DiffHandle<ScalarT, FaceHandle> diff_handle(fh);
+
+            ScalarT res = user_func(diff_handle, vh, iter, objective);
+
+            // function
+            loss(vh) = res.val();
+
+            VertexHandle it[4];
+            it[0] = vh;
+            it[1] = iter[0];
+            it[2] = iter[1];
+            it[3] = iter[2];
+
+            // gradient
+            for (int i = 0; i < 4; ++i) {
+                for (int local = 0; local < VariableDim; ++local) {
+                    ::atomicAdd(
+                        &grad(it[i], local),
+                        res.grad()[index_mapping(VariableDim, i, local)]);
+                }
+            }
+
+
+            if constexpr (WithHessian) {
+                // project Hessian to PD matrix
+                if constexpr (ProjectHess) {
+                    project_positive_definite(res.hess());
+                }
+
+                // Hessian
+                for (int i = 0; i < 4; ++i) {
+                    const VertexHandle vi = it[i];
+
+                    for (int j = 0; j < 4; ++j) {
+                        const VertexHandle vj = it[j];
+
+                        for (int local_i = 0; local_i < VariableDim;
+                             ++local_i) {
+
+                            for (int local_j = 0; local_j < VariableDim;
+                                 ++local_j) {
+
+                                ::atomicAdd(
+                                    &hess(vi, vj, local_i, local_j),
+                                    res.hess()(
+                                        index_mapping(VariableDim, i, local_i),
+                                        index_mapping(
+                                            VariableDim, j, local_j)));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    Query<blockThreads> query(context);
+
+    ShmemAllocator shrd_alloc;
+
+    query.dispatch<Op::FV>(block, shrd_alloc, eval);
+}
 
 // ============================== Vector Kernels ==============================
 // ============= Vector Passive

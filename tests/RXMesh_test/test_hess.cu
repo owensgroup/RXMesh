@@ -220,3 +220,76 @@ TEST(Diff, HessUpdate)
 
     GPU_FREE(d_pairs);
 }
+
+template <typename ProblemT>
+void add_vf_term(ProblemT& problem, int face_id, int vert_id)
+{
+    auto vf_pairs = problem.vf_pairs;
+    vf_pairs.reset();
+
+    for_each_item<<<1, 1>>>(1, [=] __device__(int i) mutable {
+        FaceHandle   fh(0, face_id);
+        VertexHandle vh(0, vert_id);
+
+        vf_pairs.insert(vh, fh);
+    });
+
+    problem.template add_interaction_term<Op::VF>(
+        [=] __device__(const auto& fh, const auto& vh, auto& iter, auto& obj) {
+            using ActiveT = ACTIVE_TYPE(fh);
+
+            assert(fh.local_id() == face_id);
+            assert(vh.local_id() == vert_id);
+
+            ActiveT E;
+            return E;
+        });
+}
+
+TEST(Diff, VFInteraction)
+{
+    using T = float;
+
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "cube.obj");
+
+    constexpr int VariableDim = 3;
+
+    using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle, true>;
+
+    int expected_vv_candidate_pairs = 0;
+    int expected_vf_candidate_pairs = 1;
+
+    ProblemT problem(
+        rx, true, expected_vv_candidate_pairs, expected_vf_candidate_pairs);
+
+
+    int prev_nnz = problem.hess->non_zeros();
+
+    // problem.hess->reset(0, HOST);
+    // problem.hess->move(DEVICE, HOST);
+    problem.hess->to_file("old_hess");
+
+    int face_id(7), vert_id(4);
+
+    add_vf_term(problem, face_id, vert_id);
+
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    problem.update_hessian();
+
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    problem.eval_terms();
+
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    int new_nnz = problem.hess->non_zeros();
+
+    EXPECT_GT(new_nnz, prev_nnz);
+
+    problem.hess->reset(1, DEVICE);
+    problem.hess->move(DEVICE, HOST);
+    problem.hess->to_file("nnnew_hess");
+
+    // polyscope::show();
+}

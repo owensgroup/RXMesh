@@ -22,14 +22,18 @@ namespace rxmesh {
 template <typename T, typename ObjHandleT>
 struct ScalarTerm
 {
-    virtual void eval_active(Attribute<T, ObjHandleT>& obj,
-                             cudaStream_t              stream) = 0;
+    virtual void eval_active(Attribute<T, ObjHandleT>&    obj,
+                             FaceAttribute<VertexHandle>* face_interact_vertex,
+                             cudaStream_t                 stream) = 0;
 
-    virtual void eval_active_grad_only(Attribute<T, ObjHandleT>& obj,
-                                       cudaStream_t              stream) = 0;
+    virtual void eval_active_grad_only(
+        Attribute<T, ObjHandleT>&    obj,
+        FaceAttribute<VertexHandle>* face_interact_vertex,
+        cudaStream_t                 stream) = 0;
 
-    virtual void eval_passive(Attribute<T, ObjHandleT>& obj,
-                              cudaStream_t              stream) = 0;
+    virtual void eval_passive(Attribute<T, ObjHandleT>&    obj,
+                              FaceAttribute<VertexHandle>* face_interact_vertex,
+                              cudaStream_t                 stream) = 0;
 
     virtual void eval_active_matvec(
         Attribute<T, ObjHandleT>&              obj,
@@ -77,7 +81,6 @@ struct TemplatedScalarTerm
         address << (void const*)this;
         std::string name = address.str();
 
-        // TODO is it always 1
         loss = rx.add_attribute<T, LossHandleT>("Loss" + name, 1);
 
         reducer = std::make_shared<ReduceHandle<T, LossHandleT>>(*loss);
@@ -137,7 +140,9 @@ struct TemplatedScalarTerm
     /**
      * @brief Evaluate the energy term using active/differentiable type
      */
-    void eval_active(Attribute<T, ObjHandleT>& obj, cudaStream_t stream)
+    void eval_active(Attribute<T, ObjHandleT>&    obj,
+                     FaceAttribute<VertexHandle>* face_interact_vertex,
+                     cudaStream_t                 stream)
     {
         if (ScalarT::k_ == -1) {
             RXMESH_ERROR(
@@ -169,8 +174,10 @@ struct TemplatedScalarTerm
      * @brief Evaluate the energy term using active/differentiable type for the
      * 1st derivative only
      */
-    void eval_active_grad_only(Attribute<T, ObjHandleT>& obj,
-                               cudaStream_t              stream)
+    void eval_active_grad_only(
+        Attribute<T, ObjHandleT>&    obj,
+        FaceAttribute<VertexHandle>* face_interact_vertex,
+        cudaStream_t                 stream)
     {
         rx.run_kernel(lb_active_grad_only,
                       detail::diff_scalar_kernel_active<blockThreads,
@@ -235,7 +242,9 @@ struct TemplatedScalarTerm
     /**
      * @brief Evaluate the energy term using non-active/non-differentiable type
      */
-    void eval_passive(Attribute<T, ObjHandleT>& obj, cudaStream_t stream)
+    void eval_passive(Attribute<T, ObjHandleT>&    obj,
+                      FaceAttribute<VertexHandle>* face_interact_vertex,
+                      cudaStream_t                 stream)
     {
         rx.run_kernel(lb_passive,
                       detail::diff_scalar_kernel_passive<blockThreads,
@@ -316,23 +325,57 @@ struct TemplatedScalarTermPairs
         DenseMatrix<T, Eigen::RowMajor>*              grad,
         HessianSparseMatrix<T, VariableDim>*          hess,
         CandidatePairs<HandleT0, HandleT1, HessMatT>& pairs)
-        : term(t), grad(grad), hess(hess), pairs(pairs)
+        : term(t), rx(rx), grad(grad), hess(hess), pairs(pairs)
     {
         // To avoid the clash that happens from adding many losses.
         std::ostringstream address;
         address << (void const*)this;
         std::string name = address.str();
 
-        // TODO is it always 1
         loss = rx.add_attribute<T, LossHandleT>("Loss" + name, 1);
 
         reducer = std::make_shared<ReduceHandle<T, LossHandleT>>(*loss);
+
+        if constexpr ((std::is_same_v<HandleT0, FaceHandle> &&
+                       std::is_same_v<HandleT1, VertexHandle>) ||
+                      (std::is_same_v<HandleT1, FaceHandle> &&
+                       std::is_same_v<HandleT0, VertexHandle>)) {
+
+            rx.prepare_launch_box(
+                {Op::FV},
+                lb_vf_active,
+                (void*)detail::diff_scalar_kernel_active_vf_pair<blockThreads,
+                                                                 ScalarT,
+                                                                 VariableDim,
+                                                                 ProjectHess,
+                                                                 LambdaT>);
+
+            rx.prepare_launch_box(
+                {Op::FV},
+                lb_vf_passive,
+                (void*)detail::diff_scalar_kernel_passive_vf_pair<blockThreads,
+                                                                  ScalarT,
+                                                                  LambdaT>);
+
+
+            rx.prepare_launch_box(
+                {Op::FV},
+                lb_vf_active_grad_only,
+                (void*)
+                    detail::diff_scalar_kernel_active_vf_pair<blockThreads,
+                                                              ScalarGradOnlyT,
+                                                              VariableDim,
+                                                              ProjectHess,
+                                                              LambdaT>);
+        }
     }
 
     /**
      * @brief Evaluate the energy term using active/differentiable type
      */
-    void eval_active(Attribute<T, ObjHandleT>& obj, cudaStream_t stream)
+    void eval_active(Attribute<T, ObjHandleT>&    obj,
+                     FaceAttribute<VertexHandle>* face_interact_vertex,
+                     cudaStream_t                 stream)
     {
         if (ScalarT::k_ == -1) {
             RXMESH_ERROR(
@@ -346,20 +389,42 @@ struct TemplatedScalarTermPairs
             return;
         }
 
-        const int blocks = DIVIDE_UP(size, blockThreads);
+        if constexpr ((std::is_same_v<HandleT0, FaceHandle> &&
+                       std::is_same_v<HandleT1, VertexHandle>) ||
+                      (std::is_same_v<HandleT1, FaceHandle> &&
+                       std::is_same_v<HandleT0, VertexHandle>)) {
 
-        detail::diff_scalar_kernel_active_pair<blockThreads,
-                                               LossHandleT,
-                                               ObjHandleT,
-                                               HandleT0,
-                                               HandleT1,
-                                               HessMatT,
-                                               ScalarT,
-                                               ProjectHess,
-                                               VariableDim,
-                                               LambdaT>
-            <<<blocks, blockThreads, 0, stream>>>(
-                pairs, *grad, *hess, *loss, obj, term);
+            rx.run_kernel(
+                lb_vf_active,
+                detail::diff_scalar_kernel_active_vf_pair<blockThreads,
+                                                          ScalarT,
+                                                          VariableDim,
+                                                          ProjectHess,
+                                                          LambdaT>,
+                stream,
+                *grad,
+                *hess,
+                *loss,
+                obj,
+                *face_interact_vertex,
+                term);
+        } else {
+
+            const int blocks = DIVIDE_UP(size, blockThreads);
+
+            detail::diff_scalar_kernel_active_pair<blockThreads,
+                                                   LossHandleT,
+                                                   ObjHandleT,
+                                                   HandleT0,
+                                                   HandleT1,
+                                                   HessMatT,
+                                                   ScalarT,
+                                                   ProjectHess,
+                                                   VariableDim,
+                                                   LambdaT>
+                <<<blocks, blockThreads, 0, stream>>>(
+                    pairs, *grad, *hess, *loss, obj, term);
+        }
     }
 
 
@@ -367,8 +432,10 @@ struct TemplatedScalarTermPairs
      * @brief Evaluate the energy term using active/differentiable type for the
      * 1st derivative only
      */
-    void eval_active_grad_only(Attribute<T, ObjHandleT>& obj,
-                               cudaStream_t              stream)
+    void eval_active_grad_only(
+        Attribute<T, ObjHandleT>&    obj,
+        FaceAttribute<VertexHandle>* face_interact_vertex,
+        cudaStream_t                 stream)
     {
         int size = pairs.num_pairs();
 
@@ -376,20 +443,42 @@ struct TemplatedScalarTermPairs
             return;
         }
 
-        const int blocks = DIVIDE_UP(size, blockThreads);
+        if constexpr ((std::is_same_v<HandleT0, FaceHandle> &&
+                       std::is_same_v<HandleT1, VertexHandle>) ||
+                      (std::is_same_v<HandleT1, FaceHandle> &&
+                       std::is_same_v<HandleT0, VertexHandle>)) {
 
-        detail::diff_scalar_kernel_active_pair<blockThreads,
-                                               LossHandleT,
-                                               ObjHandleT,
-                                               HandleT0,
-                                               HandleT1,
-                                               HessMatT,
-                                               ScalarGradOnlyT,
-                                               ProjectHess,
-                                               VariableDim,
-                                               LambdaT>
-            <<<blocks, blockThreads, 0, stream>>>(
-                pairs, *grad, *hess, *loss, obj, term);
+            rx.run_kernel(
+                lb_vf_active_grad_only,
+                detail::diff_scalar_kernel_active_vf_pair<blockThreads,
+                                                          ScalarGradOnlyT,
+                                                          VariableDim,
+                                                          ProjectHess,
+                                                          LambdaT>,
+                stream,
+                *grad,
+                *hess,
+                *loss,
+                obj,
+                *face_interact_vertex,
+                term);
+        } else {
+
+            const int blocks = DIVIDE_UP(size, blockThreads);
+
+            detail::diff_scalar_kernel_active_pair<blockThreads,
+                                                   LossHandleT,
+                                                   ObjHandleT,
+                                                   HandleT0,
+                                                   HandleT1,
+                                                   HessMatT,
+                                                   ScalarGradOnlyT,
+                                                   ProjectHess,
+                                                   VariableDim,
+                                                   LambdaT>
+                <<<blocks, blockThreads, 0, stream>>>(
+                    pairs, *grad, *hess, *loss, obj, term);
+        }
     }
 
 
@@ -430,25 +519,46 @@ struct TemplatedScalarTermPairs
     /**
      * @brief Evaluate the energy term using non-active/non-differentiable type
      */
-    void eval_passive(Attribute<T, ObjHandleT>& obj, cudaStream_t stream)
+    void eval_passive(Attribute<T, ObjHandleT>&    obj,
+                      FaceAttribute<VertexHandle>* face_interact_vertex,
+                      cudaStream_t                 stream)
     {
-        int size = pairs.num_pairs();
+        if constexpr ((std::is_same_v<HandleT0, FaceHandle> &&
+                       std::is_same_v<HandleT1, VertexHandle>) ||
+                      (std::is_same_v<HandleT1, FaceHandle> &&
+                       std::is_same_v<HandleT0, VertexHandle>)) {
 
-        if (size == 0) {
-            return;
+            rx.run_kernel(
+                lb_vf_passive,
+                detail::diff_scalar_kernel_passive_vf_pair<blockThreads,
+                                                           ScalarT,
+                                                           LambdaT>,
+                stream,
+                *loss,
+                obj,
+                *face_interact_vertex,
+                term);
+
+
+        } else {
+            int size = pairs.num_pairs();
+
+            if (size == 0) {
+                return;
+            }
+
+            const int blocks = DIVIDE_UP(size, blockThreads);
+
+            detail::diff_scalar_kernel_passive_pair<blockThreads,
+                                                    LossHandleT,
+                                                    ObjHandleT,
+                                                    HandleT0,
+                                                    HandleT1,
+                                                    HessMatT,
+                                                    ScalarT,
+                                                    LambdaT>
+                <<<blocks, blockThreads, 0, stream>>>(pairs, *loss, obj, term);
         }
-
-        const int blocks = DIVIDE_UP(size, blockThreads);
-
-        detail::diff_scalar_kernel_passive_pair<blockThreads,
-                                                LossHandleT,
-                                                ObjHandleT,
-                                                HandleT0,
-                                                HandleT1,
-                                                HessMatT,
-                                                ScalarT,
-                                                LambdaT>
-            <<<blocks, blockThreads, 0, stream>>>(pairs, *loss, obj, term);
     }
 
     /**
@@ -470,11 +580,16 @@ struct TemplatedScalarTermPairs
 
     LambdaT term;
 
+    RXMeshStatic&                                 rx;
     std::shared_ptr<Attribute<T, LossHandleT>>    loss;
     std::shared_ptr<ReduceHandle<T, LossHandleT>> reducer;
 
     DenseMatrix<T, Eigen::RowMajor>*              grad;
     HessianSparseMatrix<T, VariableDim>*          hess;
     CandidatePairs<HandleT0, HandleT1, HessMatT>& pairs;
+
+    LaunchBox<blockThreads> lb_vf_passive;
+    LaunchBox<blockThreads> lb_vf_active;
+    LaunchBox<blockThreads> lb_vf_active_grad_only;
 };
 }  // namespace rxmesh
