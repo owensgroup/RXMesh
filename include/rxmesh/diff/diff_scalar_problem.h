@@ -267,8 +267,8 @@ struct DiffScalarProblem
         // VV pairs (due to FV interaction) in vv_pair which would mess with the
         // user-defined vv_pairs later when they start using it to add energies
 
-        int vv_prv_num_pairs = vv_pairs.num_index();
-        int vv_prv_num_index = vv_pairs.num_pairs();
+        int vv_prv_num_index = vv_pairs.num_index();
+        int vv_prv_num_pairs = vv_pairs.num_pairs();
 
         // expand the indices for VF interactions
         if (face_interact_vertex) {
