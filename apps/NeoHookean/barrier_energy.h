@@ -47,85 +47,6 @@ struct BVHBuffers {
     }
 };
 
-/**
- * Compute the squared distance from a point to a triangle.
- * Uses barycentric coordinates to find the closest point on the triangle.
- *
- * @param p Query point
- * @param a First vertex of triangle
- * @param b Second vertex of triangle
- * @param c Third vertex of triangle
- * @return Squared distance from point to triangle
- */
-template <typename T>
-__device__ __host__ T point_triangle_distance_squared(
-    const Eigen::Vector3<T>& p,
-    const Eigen::Vector3<T>& a,
-    const Eigen::Vector3<T>& b,
-    const Eigen::Vector3<T>& c)
-{
-    // Compute edge vectors
-    Eigen::Vector3<T> ab = b - a;
-    Eigen::Vector3<T> ac = c - a;
-    Eigen::Vector3<T> ap = p - a;
-
-    // Compute dot products
-    T d1 = ab.dot(ap);
-    T d2 = ac.dot(ap);
-
-    // Check if P is in vertex region outside A
-    if (d1 <= T(0) && d2 <= T(0)) {
-        return (p - a).squaredNorm();
-    }
-
-    // Check if P is in vertex region outside B
-    Eigen::Vector3<T> bp = p - b;
-    T d3 = ab.dot(bp);
-    T d4 = ac.dot(bp);
-    if (d3 >= T(0) && d4 <= d3) {
-        return (p - b).squaredNorm();
-    }
-
-    // Check if P is in edge region of AB
-    T vc = d1 * d4 - d3 * d2;
-    if (vc <= T(0) && d1 >= T(0) && d3 <= T(0)) {
-        T v = d1 / (d1 - d3);
-        Eigen::Vector3<T> closest = a + v * ab;
-        return (p - closest).squaredNorm();
-    }
-
-    // Check if P is in vertex region outside C
-    Eigen::Vector3<T> cp = p - c;
-    T d5 = ab.dot(cp);
-    T d6 = ac.dot(cp);
-    if (d6 >= T(0) && d5 <= d6) {
-        return (p - c).squaredNorm();
-    }
-
-    // Check if P is in edge region of AC
-    T vb = d5 * d2 - d1 * d6;
-    if (vb <= T(0) && d2 >= T(0) && d6 <= T(0)) {
-        T w = d2 / (d2 - d6);
-        Eigen::Vector3<T> closest = a + w * ac;
-        return (p - closest).squaredNorm();
-    }
-
-    // Check if P is in edge region of BC
-    T va = d3 * d6 - d5 * d4;
-    if (va <= T(0) && (d4 - d3) >= T(0) && (d5 - d6) >= T(0)) {
-        T w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
-        Eigen::Vector3<T> closest = b + w * (c - b);
-        return (p - closest).squaredNorm();
-    }
-
-    // P is inside the triangle face region
-    T denom = T(1) / (va + vb + vc);
-    T v = vb * denom;
-    T w = vc * denom;
-    Eigen::Vector3<T> closest = a + v * ab + w * ac;
-    return (p - closest).squaredNorm();
-}
-
 template <typename ProblemT,
           typename VAttrT,
           typename T = typename VAttrT::Type>
@@ -341,6 +262,128 @@ void vv_contact_energy(ProblemT&     problem,
 
         return E;
     });
+}
+
+// Point-to-triangle distance computation
+template <typename T>
+__device__ __host__ inline T point_triangle_distance_squared(
+    const Eigen::Vector3<T>& p,
+    const Eigen::Vector3<T>& a,
+    const Eigen::Vector3<T>& b,
+    const Eigen::Vector3<T>& c)
+{
+    // Compute triangle edges
+    Eigen::Vector3<T> ab = b - a;
+    Eigen::Vector3<T> ac = c - a;
+    Eigen::Vector3<T> ap = p - a;
+
+    // Barycentric coordinates
+    T d1 = ab.dot(ap);
+    T d2 = ac.dot(ap);
+
+    // Check if p projects outside triangle near vertex a
+    if (d1 <= T(0) && d2 <= T(0)) {
+        return ap.squaredNorm();
+    }
+
+    // Check if p projects outside triangle near vertex b
+    Eigen::Vector3<T> bp = p - b;
+    T d3 = ab.dot(bp);
+    T d4 = ac.dot(bp);
+    if (d3 >= T(0) && d4 <= d3) {
+        return bp.squaredNorm();
+    }
+
+    // Check if p projects on edge ab
+    T vc = d1 * d4 - d3 * d2;
+    if (vc <= T(0) && d1 >= T(0) && d3 <= T(0)) {
+        T v = d1 / (d1 - d3);
+        Eigen::Vector3<T> closest = a + v * ab;
+        return (p - closest).squaredNorm();
+    }
+
+    // Check if p projects outside triangle near vertex c
+    Eigen::Vector3<T> cp = p - c;
+    T d5 = ab.dot(cp);
+    T d6 = ac.dot(cp);
+    if (d6 >= T(0) && d5 <= d6) {
+        return cp.squaredNorm();
+    }
+
+    // Check if p projects on edge ac
+    T vb = d5 * d2 - d1 * d6;
+    if (vb <= T(0) && d2 >= T(0) && d6 <= T(0)) {
+        T w = d2 / (d2 - d6);
+        Eigen::Vector3<T> closest = a + w * ac;
+        return (p - closest).squaredNorm();
+    }
+
+    // Check if p projects on edge bc
+    T va = d3 * d6 - d5 * d4;
+    if (va <= T(0) && (d4 - d3) >= T(0) && (d5 - d6) >= T(0)) {
+        T w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+        Eigen::Vector3<T> closest = b + w * (c - b);
+        return (p - closest).squaredNorm();
+    }
+
+    // p projects inside triangle
+    T denom = T(1) / (va + vb + vc);
+    T v = vb * denom;
+    T w = vc * denom;
+    Eigen::Vector3<T> closest = a + ab * v + ac * w;
+    return (p - closest).squaredNorm();
+}
+
+template <typename ProblemT,
+          typename VAttrT,
+          typename T = typename VAttrT::Type>
+void vf_contact_energy(ProblemT&     problem,
+                       const VAttrT& contact_area,
+                       const T       h,
+                       const T       dhat,
+                       const T       kappa)
+{
+    const T h_sq = h * h;
+
+    problem.template add_interaction_term<Op::VF, true>(
+        [=] __device__(const auto& fh,
+                       const auto& vh,
+                       const auto& iter,
+                       const auto& obj) mutable {
+
+            using ActiveT = ACTIVE_TYPE(fh);
+
+            // Get vertex and face vertices positions
+            const Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(fh, vh, iter, obj, 0);
+            const Eigen::Vector3<ActiveT> p0 = iter_val<ActiveT, 3>(fh, vh, iter, obj, 1);
+            const Eigen::Vector3<ActiveT> p1 = iter_val<ActiveT, 3>(fh, vh, iter, obj, 2);
+            const Eigen::Vector3<ActiveT> p2 = iter_val<ActiveT, 3>(fh, vh, iter, obj, 3);
+
+            // Compute point-to-triangle distance
+            ActiveT d_sq = point_triangle_distance_squared(xi, p0, p1, p2);
+            ActiveT d = sqrt(d_sq);
+
+            ActiveT E(T(0));
+
+            if (d < dhat) {
+                ActiveT s = d / dhat;
+
+                if (s <= T(0)) {
+                    using PassiveT = PassiveType<ActiveT>;
+                    return ActiveT(std::numeric_limits<PassiveT>::max());
+                }
+
+                // Compute triangle area using cross product: Area = 0.5 * ||(p1-p0) × (p2-p0)||
+                Eigen::Vector3<ActiveT> edge1 = p1 - p0;
+                Eigen::Vector3<ActiveT> edge2 = p2 - p0;
+                ActiveT triangle_area = T(0.5) * edge1.cross(edge2).norm();
+
+                // Barrier energy: E = h^2 * A * dhat * 0.5 * kappa * (s - 1) * log(s)
+                E = h_sq * triangle_area * dhat * T(0.5) * kappa * (s - 1) * log(s);
+            }
+
+            return E;
+        });
 }
 
 template <uint32_t blockThreads, typename T>

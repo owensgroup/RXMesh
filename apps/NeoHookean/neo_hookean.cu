@@ -209,6 +209,9 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     vv_contact_energy(problem, contact_area, time_step, dhat, kappa);
     // printf("neo_hookean: Added vv contact energy\n");
 
+    vf_contact_energy(problem, contact_area, time_step, dhat, kappa);
+    // printf("neo_hookean: Added vf contact energy\n");
+
     DenseMatrix<T, Eigen::RowMajor> dir(
         rx, problem.grad.rows(), problem.grad.cols(), LOCATION_ALL);
 
