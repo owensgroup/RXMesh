@@ -50,6 +50,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 
     // Problem parameters
     const int max_vv_candidate_pairs = 500;
+    const int max_vf_candidate_pairs = 2000;
 
     const T        density        = params.density;
     const T        young_mod      = params.young_mod;
@@ -110,13 +111,15 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     edge_area.reset(0, DEVICE);
 
     // Get region labels for multiple meshes
-    auto region_label = *rx.get_vertex_region_label();
+    auto vertex_region_label = *rx.get_vertex_region_label();
+    auto face_region_label = *rx.get_face_region_label();
 
     // Diff problem and solvers
-    ProblemT problem(rx, true, max_vv_candidate_pairs);
+    ProblemT problem(rx, true, max_vv_candidate_pairs, max_vf_candidate_pairs);
 
     // Pre-allocate BVH bounding boxes buffer for contact detection
-    BVHBuffers<T> bvh_buffers(rx.get_num_vertices());
+    BVHBuffers<T> vertex_bvh_buffers(rx.get_num_vertices());
+    BVHBuffers<T> face_bvh_buffers(rx.get_num_faces());
 
     // CGSolver<T, ProblemT::DenseMatT::OrderT> solver(*problem.hess, 1, 1000);
     PCGSolver<T, ProblemT::DenseMatT::OrderT> solver(*problem.hess, 1, 1000);
@@ -276,13 +279,16 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
         add_contact(problem,
                     rx,
                     problem.vv_pairs,
-                    bvh_buffers,
+                    problem.vf_pairs,
+                    vertex_bvh_buffers,
+                    face_bvh_buffers,
                     x,
                     contact_area,
                     time_step,
                     dhat,
                     kappa,
-                    region_label);
+                    vertex_region_label,
+                    face_region_label);
         timer.stop("ContactDetection");
 
         // printf("neo_hookean: step_forward() - Updating hessian\n");
@@ -346,13 +352,16 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                     add_contact(problem,
                                 rx,
                                 problem.vv_pairs,
-                                bvh_buffers,
+                                problem.vf_pairs,
+                                vertex_bvh_buffers,
+                                face_bvh_buffers,
                                 temp_x,
                                 contact_area,
                                 time_step,
                                 dhat,
                                 kappa,
-                                region_label);
+                                vertex_region_label,
+                                face_region_label);
                 });
             timer.stop("LineSearch");
             // printf("neo_hookean: step_forward() - Finished line search, success: %d\n", ls_success);
@@ -367,13 +376,16 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
             add_contact(problem,
                         rx,
                         problem.vv_pairs,
-                        bvh_buffers,
+                        problem.vf_pairs,
+                        vertex_bvh_buffers,
+                        face_bvh_buffers,
                         x,
                         contact_area,
                         time_step,
                         dhat,
                         kappa,
-                        region_label);
+                        vertex_region_label,
+                        face_region_label);
             timer.stop("ContactDetection");
 
             // printf("neo_hookean: step_forward() - Updating hessian after line search\n");
@@ -547,13 +559,13 @@ int main(int argc, char** argv)
 
     T dx = 0.1f;  // mesh spacing for contact area
     auto x = *rx.get_input_vertex_coordinates();
-    auto region_label = *rx.get_vertex_region_label();
+    auto vertex_region_label = *rx.get_vertex_region_label();
 
     T translate_y = 2.5f;
     rx.for_each_vertex(
         DEVICE,
         [=] __device__ (VertexHandle vh) mutable {
-          if (region_label(vh) == 1) {
+          if (vertex_region_label(vh) == 1) {
             x(vh, 1) += translate_y;
           }
         },

@@ -47,6 +47,85 @@ struct BVHBuffers {
     }
 };
 
+/**
+ * Compute the squared distance from a point to a triangle.
+ * Uses barycentric coordinates to find the closest point on the triangle.
+ *
+ * @param p Query point
+ * @param a First vertex of triangle
+ * @param b Second vertex of triangle
+ * @param c Third vertex of triangle
+ * @return Squared distance from point to triangle
+ */
+template <typename T>
+__device__ __host__ T point_triangle_distance_squared(
+    const Eigen::Vector3<T>& p,
+    const Eigen::Vector3<T>& a,
+    const Eigen::Vector3<T>& b,
+    const Eigen::Vector3<T>& c)
+{
+    // Compute edge vectors
+    Eigen::Vector3<T> ab = b - a;
+    Eigen::Vector3<T> ac = c - a;
+    Eigen::Vector3<T> ap = p - a;
+
+    // Compute dot products
+    T d1 = ab.dot(ap);
+    T d2 = ac.dot(ap);
+
+    // Check if P is in vertex region outside A
+    if (d1 <= T(0) && d2 <= T(0)) {
+        return (p - a).squaredNorm();
+    }
+
+    // Check if P is in vertex region outside B
+    Eigen::Vector3<T> bp = p - b;
+    T d3 = ab.dot(bp);
+    T d4 = ac.dot(bp);
+    if (d3 >= T(0) && d4 <= d3) {
+        return (p - b).squaredNorm();
+    }
+
+    // Check if P is in edge region of AB
+    T vc = d1 * d4 - d3 * d2;
+    if (vc <= T(0) && d1 >= T(0) && d3 <= T(0)) {
+        T v = d1 / (d1 - d3);
+        Eigen::Vector3<T> closest = a + v * ab;
+        return (p - closest).squaredNorm();
+    }
+
+    // Check if P is in vertex region outside C
+    Eigen::Vector3<T> cp = p - c;
+    T d5 = ab.dot(cp);
+    T d6 = ac.dot(cp);
+    if (d6 >= T(0) && d5 <= d6) {
+        return (p - c).squaredNorm();
+    }
+
+    // Check if P is in edge region of AC
+    T vb = d5 * d2 - d1 * d6;
+    if (vb <= T(0) && d2 >= T(0) && d6 <= T(0)) {
+        T w = d2 / (d2 - d6);
+        Eigen::Vector3<T> closest = a + w * ac;
+        return (p - closest).squaredNorm();
+    }
+
+    // Check if P is in edge region of BC
+    T va = d3 * d6 - d5 * d4;
+    if (va <= T(0) && (d4 - d3) >= T(0) && (d5 - d6) >= T(0)) {
+        T w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+        Eigen::Vector3<T> closest = b + w * (c - b);
+        return (p - closest).squaredNorm();
+    }
+
+    // P is inside the triangle face region
+    T denom = T(1) / (va + vb + vc);
+    T v = vb * denom;
+    T w = vc * denom;
+    Eigen::Vector3<T> closest = a + v * ab + w * ac;
+    return (p - closest).squaredNorm();
+}
+
 template <typename ProblemT,
           typename VAttrT,
           typename T = typename VAttrT::Type>
@@ -295,24 +374,33 @@ __global__ static void build_triangle_boxes_kernel(
 
 template <typename ProblemT,
           typename VAttrT,
-          typename VAttrB,
+          typename PairT,
+          typename BVHBufferT,
           typename T = typename VAttrT::Type>
 void vf_contact(ProblemT&     problem,
                 RXMeshStatic& rx,
-                const VAttrB& is_dbc,
+                PairT&        vf_contact_pairs,
+                BVHBufferT&   face_bvh_buffers,
                 const VAttrT& x,
                 VAttrT&       contact_area,
                 const T       h,
                 const T       dhat,
-                const T       kappa)
+                const T       kappa,
+                const VertexAttribute<int>& vertex_region_label,
+                const FaceAttribute<int>& face_region_label)
 {
-    // Step 1: Get face count
-    uint32_t num_faces = rx.get_num_elements<FaceHandle>();
+    GPUTimer timer_total, timer_build, timer_query;
+    timer_total.start();
 
-    // Step 2: Allocate bounding boxes for BVH
-    using box_t = cuBQL::box_t<T, 3>;
-    box_t* d_boxes = nullptr;
-    CUDA_ERROR(cudaMalloc((void**)&d_boxes, sizeof(box_t) * num_faces));
+    vf_contact_pairs.reset();
+
+    // Step 1: Get face count and context
+    uint32_t num_faces = rx.get_num_elements<FaceHandle>();
+    auto     ctx       = rx.get_context();
+
+    // Step 2: Use pre-allocated bounding boxes buffer
+    using box_t = typename BVHBufferT::box_t;
+    box_t* d_boxes = face_bvh_buffers.d_boxes;
 
     // Step 3: Populate boxes using Query::dispatch with FV
     constexpr uint32_t blockThreads = 256;
@@ -327,58 +415,110 @@ void vf_contact(ProblemT&     problem,
     CUDA_ERROR(cudaDeviceSynchronize());
 
     // Step 4: Build BVH over triangles
+    timer_build.start();
     cuBQL::BinaryBVH<T, 3> bvh;
     cuBQL::BuildConfig     build_config;
     cuBQL::gpuBuilder(bvh, d_boxes, num_faces, build_config);
+    timer_build.stop();
 
     // Calculate and print BVH memory usage
     size_t nodes_memory     = bvh.numNodes * sizeof(typename cuBQL::BinaryBVH<T, 3>::Node);
     size_t primIDs_memory   = bvh.numPrims * sizeof(uint32_t);
     size_t total_bvh_memory = nodes_memory + primIDs_memory;
 
-    // printf("Built triangle BVH.\n");
-    // printf("  Number of nodes: %u\n", bvh.numNodes);
-    // printf("  Number of primitives: %u\n", bvh.numPrims);
-    // printf("  Total BVH memory: %zu bytes (%.2f MB)\n",
-    //        total_bvh_memory,
-    //        total_bvh_memory / (1024.0f * 1024.0f));
+    // Step 5: Query BVH for VF contact detection
+    // Note: this is a more broader/lenient query as we're not testing for exact closeness here
+    // This is because right now there isn't a way to obtain the vertex positions from the face handle
+    timer_query.start();
+    rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) mutable {
 
-    // Step 5: Cleanup
-    cuBQL::cuda::free(bvh);
-    GPU_FREE(d_boxes);
-    // printf("Released triangle BVH and bounding box memory.\n");
+        const Eigen::Vector3<T> xi = x.template to_eigen<3>(vh);
+
+        // Query point for BVH traversal
+        cuBQL::vec_t<T, 3> query_point;
+        query_point.x = xi[0];
+        query_point.y = xi[1];
+        query_point.z = xi[2];
+
+        // remains invariant
+        const int region_vh = vertex_region_label(vh);
+        const T dhat_sq = dhat * dhat;
+
+        // Fixed-radius query to find nearby triangles
+        auto query_lambda = [&](uint32_t prim_id) -> float {
+            FaceHandle fh = ctx.template get_handle<FaceHandle>(prim_id);
+
+            const int region_fh = face_region_label(fh);
+            if (region_fh != region_vh) {
+                vf_contact_pairs.insert(vh, fh);
+            }
+            return dhat_sq;  // Return SQUARED radius for fixed-radius query
+        };
+
+        cuBQL::shrinkingRadiusQuery::forEachPrim<T, 3>(
+            query_lambda, bvh, query_point, dhat_sq);
+    });
+    timer_query.stop();
+
+    timer_total.stop();
+
+    // Print timing information
+    RXMESH_INFO("VF Contact Detection:");
+    RXMESH_INFO("  BVH Build time: {:.3f} ms", timer_build.elapsed_millis());
+    RXMESH_INFO("  BVH Query time: {:.3f} ms", timer_query.elapsed_millis());
+    RXMESH_INFO("  Total time: {:.3f} ms", timer_total.elapsed_millis());
+    RXMESH_INFO("  Contact pairs found: {}", vf_contact_pairs.num_pairs());
+    RXMESH_INFO("  BVH memory: {:.2f} MB", total_bvh_memory / (1024.0f * 1024.0f));
+
+    // Step 6: Cleanup
+    cuBQL::cuda::free(bvh);  // Free BVH memory (nodes and primIDs go to pool)
+    // Note: d_boxes is from pre-allocated buffer, NOT freed here
 }
 
 template <typename ProblemT,
           typename VAttrT,
-          typename PairT,
+          typename VVPairT,
+          typename VFPairT,
           typename BVHBufferT,
           typename T = typename VAttrT::Type>
 void add_contact(ProblemT&          problem,
                  RXMeshStatic&      rx,
-                 PairT&             contact_pairs,
-                 BVHBufferT&        bvh_buffers,
+                 VVPairT&           vv_contact_pairs,
+                 VFPairT&           vf_contact_pairs,
+                 BVHBufferT&        vertex_bvh_buffers,
+                 BVHBufferT&        face_bvh_buffers,
                  const VAttrT&      x,
                  VAttrT&            contact_area,
                  const T            h,
                  const T            dhat,
                  const T            kappa,
-                 const VertexAttribute<int>& region_label)
+                 const VertexAttribute<int>& vertex_region_label,
+                 const FaceAttribute<int>& face_region_label)
 {
     // Call VV contact handler
     vv_contact(problem,
                rx,
-               contact_pairs,
-               bvh_buffers,
+               vv_contact_pairs,
+               vertex_bvh_buffers,
                x,
                contact_area,
                h,
                dhat,
                kappa,
-               region_label);
+               vertex_region_label);
 
     // Call VF contact handler
-    // vf_contact(problem, rx, is_dbc, x, contact_area, h, dhat, kappa);
+    vf_contact(problem,
+               rx,
+               vf_contact_pairs,
+               face_bvh_buffers,
+               x,
+               contact_area,
+               h,
+               dhat,
+               kappa,
+               vertex_region_label,
+               face_region_label);
 }
 
 template <typename VAttrT,
