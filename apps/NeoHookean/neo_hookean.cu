@@ -14,6 +14,7 @@
 #include "inertial_energy.h"
 #include "init.h"
 #include "neo_hookean_energy.h"
+#include "scene_config.h"
 #include "spring_energy.h"
 
 #include <Eigen/Core>
@@ -488,15 +489,84 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     RXMESH_INFO("======================");
 }
 
+/**
+ * Struct to store per-instance transformation data
+ */
+template <typename T>
+struct InstanceTransform {
+    T tx, ty, tz;  // Translation
+    T scale;        // Scale
+    T vx, vy, vz;  // Initial velocity
+};
+
+/**
+ * Generate mesh instances from scene configuration
+ * Returns: vector of mesh filepaths (with duplicates for instances)
+ *          vector of transforms (one per instance)
+ */
+template <typename T>
+void generate_instances(const SceneConfig<T>& config,
+                        std::vector<std::string>& mesh_paths,
+                        std::vector<InstanceTransform<T>>& transforms)
+{
+    mesh_paths.clear();
+    transforms.clear();
+
+    for (const auto& mesh_cfg : config.meshes) {
+        int total_instances = mesh_cfg.num_instances_x *
+                              mesh_cfg.num_instances_y *
+                              mesh_cfg.num_instances_z;
+
+        RXMESH_INFO("Generating {} instances of {}", total_instances, mesh_cfg.filepath);
+
+        // Generate instances in 3D grid
+        for (int iz = 0; iz < mesh_cfg.num_instances_z; ++iz) {
+            for (int iy = 0; iy < mesh_cfg.num_instances_y; ++iy) {
+                for (int ix = 0; ix < mesh_cfg.num_instances_x; ++ix) {
+                    // Add mesh filepath
+                    mesh_paths.push_back(mesh_cfg.filepath);
+
+                    // Compute instance transform
+                    InstanceTransform<T> transform;
+                    transform.tx = mesh_cfg.offset_x + ix * mesh_cfg.spacing_x;
+                    transform.ty = mesh_cfg.offset_y + iy * mesh_cfg.spacing_y;
+                    transform.tz = mesh_cfg.offset_z + iz * mesh_cfg.spacing_z;
+                    transform.scale = mesh_cfg.scale;
+                    transform.vx = mesh_cfg.velocity_x;
+                    transform.vy = mesh_cfg.velocity_y;
+                    transform.vz = mesh_cfg.velocity_z;
+
+                    transforms.push_back(transform);
+                }
+            }
+        }
+    }
+
+    RXMESH_INFO("Total instances generated: {}", mesh_paths.size());
+}
+
 int main(int argc, char** argv)
 {
     rx_init(0, spdlog::level::info);
+
+    // Check for config file argument
+    std::string config_file;
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+        if (arg == "--config" && i + 1 < argc) {
+            config_file = argv[++i];
+            break;
+        }
+    }
 
     // Parse command line arguments for physics parameters
     PhysicsParams params;
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
-        if (arg == "--density" && i + 1 < argc) {
+        if (arg == "--config") {
+            i++;  // Skip the config file path
+            continue;
+        } else if (arg == "--density" && i + 1 < argc) {
             params.density = std::atof(argv[++i]);
         } else if (arg == "--young" && i + 1 < argc) {
             params.young_mod = std::atof(argv[++i]);
@@ -521,6 +591,7 @@ int main(int argc, char** argv)
         } else if (arg == "--help" || arg == "-h") {
             printf("Usage: %s [options]\n", argv[0]);
             printf("Options:\n");
+            printf("  --config <file>    Load scene from configuration file\n");
             printf("  --density <val>    Density (default: 1000)\n");
             printf("  --young <val>      Young's modulus (default: 1e5)\n");
             printf("  --poisson <val>    Poisson ratio (default: 0.4)\n");
@@ -537,6 +608,43 @@ int main(int argc, char** argv)
         }
     }
 
+    // Load meshes and apply transforms
+    std::vector<std::string> inputs;
+    std::vector<InstanceTransform<T>> transforms;
+
+    if (!config_file.empty()) {
+        // Parse config file
+        RXMESH_INFO("Loading scene from config file: {}", config_file);
+        SceneConfig<T> scene_config;
+        if (!SceneConfigParser<T>::parse(config_file, scene_config)) {
+            RXMESH_ERROR("Failed to parse config file");
+            return 1;
+        }
+
+        // Override params with simulation config
+        params.time_step = scene_config.simulation.time_step;
+        params.fricition_coef = scene_config.simulation.fricition_coef;
+        params.stiffness_coef = scene_config.simulation.stiffness_coef;
+        params.tol = scene_config.simulation.tol;
+        params.dhat = scene_config.simulation.dhat;
+        params.kappa = scene_config.simulation.kappa;
+        params.num_steps = scene_config.simulation.num_steps;
+
+        // Generate instances
+        generate_instances(scene_config, inputs, transforms);
+    } else {
+        // Default: load two spheres (backward compatible)
+        inputs = {
+            STRINGIFY(INPUT_DIR) "el_topo_sphere_1280.obj",
+            STRINGIFY(INPUT_DIR) "el_topo_sphere_1280.obj"
+        };
+
+        // Create default transforms
+        InstanceTransform<T> t1{0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0};
+        InstanceTransform<T> t2{0.0, 2.5, 0.0, 1.0, 0.0, 0.0, 0.0};
+        transforms = {t1, t2};
+    }
+
     RXMESH_INFO("Physics Parameters:");
     RXMESH_INFO("  Density: {}", params.density);
     RXMESH_INFO("  Young's modulus: {}", params.young_mod);
@@ -550,32 +658,48 @@ int main(int argc, char** argv)
     RXMESH_INFO("  Bending stiffness: {}", params.bending_stiff);
     RXMESH_INFO("  Number of steps: {}", params.num_steps);
 
-    // Load multiple meshes using RXMeshStatic's multiple mesh constructor
-    std::vector<std::string> inputs = {
-        STRINGIFY(INPUT_DIR) "el_topo_sphere_1280.obj",
-        STRINGIFY(INPUT_DIR) "el_topo_sphere_1280.obj"};
-
+    // Load meshes
     RXMeshStatic rx(inputs);
-
-    RXMESH_INFO(
-        "#Faces: {}, #Vertices: {}", rx.get_num_faces(), rx.get_num_vertices());
+    RXMESH_INFO("#Faces: {}, #Vertices: {}", rx.get_num_faces(), rx.get_num_vertices());
 
     T dx = 0.1f;  // mesh spacing for contact area
     auto x = *rx.get_input_vertex_coordinates();
-    auto vertex_region_label = *rx.get_vertex_region_label();
+    auto velocity = *rx.add_vertex_attribute<T>("Velocity", 3);
+    velocity.reset(0, DEVICE);
 
-    T translate_y = 2.5f;
+    // Apply transformations per instance
+    auto vertex_region_label = *rx.get_vertex_region_label();
+    x.move(DEVICE, HOST);
     rx.for_each_vertex(
-        DEVICE,
-        [=] __device__ (VertexHandle vh) mutable {
-          if (vertex_region_label(vh) == 1) {
-            x(vh, 1) += translate_y;
-          }
+        HOST,
+        [=] __host__ (VertexHandle vh) mutable {
+            int region = vertex_region_label(vh);
+            if (region >= 0 && region < static_cast<int>(transforms.size())) {
+                const auto& t = transforms[region];
+
+                // Apply scale
+                if (t.scale != T(1.0)) {
+                    x(vh, 0) *= t.scale;
+                    x(vh, 1) *= t.scale;
+                    x(vh, 2) *= t.scale;
+                }
+
+                // Apply translation
+                x(vh, 0) += t.tx;
+                x(vh, 1) += t.ty;
+                x(vh, 2) += t.tz;
+
+                // Set initial velocity
+                velocity(vh, 0) = t.vx;
+                velocity(vh, 1) = t.vy;
+                velocity(vh, 2) = t.vz;
+            }
         },
         NULL,
         false
     );
-    x.move(DEVICE, HOST);
+
+    x.move(HOST, DEVICE);
 #if USE_POLYSCOPE
     rx.get_polyscope_mesh()->updateVertexPositions(x);
 #endif
