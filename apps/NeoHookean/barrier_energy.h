@@ -108,8 +108,8 @@ void vv_contact(ProblemT&          problem,
                 const T            kappa,
                 const VertexAttribute<int>& region_label)
 {
-    GPUTimer timer_total, timer_build, timer_query;
-    timer_total.start();
+    // GPUTimer timer_total, timer_build, timer_query;
+    // timer_total.start();
 
     contact_pairs.reset();
 
@@ -143,11 +143,11 @@ void vv_contact(ProblemT&          problem,
     CUDA_ERROR(cudaDeviceSynchronize());
 
     // Step 3: Build BVH
-    timer_build.start();
+    // timer_build.start();
     cuBQL::BinaryBVH<T, 3> bvh;
     cuBQL::BuildConfig     build_config;
     cuBQL::gpuBuilder(bvh, d_boxes, num_vertices, build_config);
-    timer_build.stop();
+    // timer_build.stop();
 
     // Calculate and print BVH memory usage
     size_t nodes_memory = bvh.numNodes * sizeof(typename cuBQL::BinaryBVH<T, 3>::Node);
@@ -155,7 +155,7 @@ void vv_contact(ProblemT&          problem,
     size_t total_bvh_memory = nodes_memory + primIDs_memory;
 
     // Step 4: Query BVH for each vertex to find nearby vertices
-    timer_query.start();
+    // timer_query.start();
     rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) mutable {
 
         const Eigen::Vector3<T> xi = x.template to_eigen<3>(vh);
@@ -200,9 +200,9 @@ void vv_contact(ProblemT&          problem,
         cuBQL::shrinkingRadiusQuery::forEachPrim<T, 3>(
             query_lambda, bvh, query_point, dhat_sq);
     });
-    timer_query.stop();
+    // timer_query.stop();
 
-    timer_total.stop();
+    // timer_total.stop();
 
     // Print timing information
     // RXMESH_INFO("VV Contact Detection:");
@@ -432,8 +432,8 @@ void vf_contact(ProblemT&     problem,
                 const VertexAttribute<int>& vertex_region_label,
                 const FaceAttribute<int>& face_region_label)
 {
-    GPUTimer timer_total, timer_build, timer_query;
-    timer_total.start();
+    // GPUTimer timer_total, timer_build, timer_query;
+    // timer_total.start();
 
     vf_contact_pairs.reset();
 
@@ -458,11 +458,11 @@ void vf_contact(ProblemT&     problem,
     CUDA_ERROR(cudaDeviceSynchronize());
 
     // Step 4: Build BVH over triangles
-    timer_build.start();
+    // timer_build.start();
     cuBQL::BinaryBVH<T, 3> bvh;
     cuBQL::BuildConfig     build_config;
     cuBQL::gpuBuilder(bvh, d_boxes, num_faces, build_config);
-    timer_build.stop();
+    // timer_build.stop();
 
     // Calculate and print BVH memory usage
     size_t nodes_memory     = bvh.numNodes * sizeof(typename cuBQL::BinaryBVH<T, 3>::Node);
@@ -472,7 +472,7 @@ void vf_contact(ProblemT&     problem,
     // Step 5: Query BVH for VF contact detection
     // Note: this is a more broader/lenient query as we're not testing for exact closeness here
     // This is because right now there isn't a way to obtain the vertex positions from the face handle
-    timer_query.start();
+    // timer_query.start();
     rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) mutable {
 
         const Eigen::Vector3<T> xi = x.template to_eigen<3>(vh);
@@ -501,17 +501,17 @@ void vf_contact(ProblemT&     problem,
         cuBQL::shrinkingRadiusQuery::forEachPrim<T, 3>(
             query_lambda, bvh, query_point, dhat_sq);
     });
-    timer_query.stop();
+    // timer_query.stop();
 
-    timer_total.stop();
+    // timer_total.stop();
 
     // Print timing information
-    RXMESH_INFO("VF Contact Detection:");
-    RXMESH_INFO("  BVH Build time: {:.3f} ms", timer_build.elapsed_millis());
-    RXMESH_INFO("  BVH Query time: {:.3f} ms", timer_query.elapsed_millis());
-    RXMESH_INFO("  Total time: {:.3f} ms", timer_total.elapsed_millis());
-    RXMESH_INFO("  Contact pairs found: {}", vf_contact_pairs.num_pairs());
-    RXMESH_INFO("  BVH memory: {:.2f} MB", total_bvh_memory / (1024.0f * 1024.0f));
+    // RXMESH_INFO("VF Contact Detection:");
+    // RXMESH_INFO("  BVH Build time: {:.3f} ms", timer_build.elapsed_millis());
+    // RXMESH_INFO("  BVH Query time: {:.3f} ms", timer_query.elapsed_millis());
+    // RXMESH_INFO("  Total time: {:.3f} ms", timer_total.elapsed_millis());
+    // RXMESH_INFO("  Contact pairs found: {}", vf_contact_pairs.num_pairs());
+    // RXMESH_INFO("  BVH memory: {:.2f} MB", total_bvh_memory / (1024.0f * 1024.0f));
 
     // Step 6: Cleanup
     cuBQL::cuda::free(bvh);  // Free BVH memory (nodes and primIDs go to pool)

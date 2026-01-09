@@ -50,8 +50,8 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     using HessMatT = typename ProblemT::HessMatT;
 
     // Problem parameters
-    const int max_vv_candidate_pairs = 500;
-    const int max_vf_candidate_pairs = 2000;
+    const int max_vv_candidate_pairs = 5000;
+    const int max_vf_candidate_pairs = 5000;
 
     const T        density        = params.density;
     const T        young_mod      = params.young_mod;
@@ -244,6 +244,9 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 
     Timers<GPUTimer> timer;
     timer.add("Step");
+    timer.add("ContactDetection_Explicit");
+    timer.add("ContactDetection_LineSearch");
+    timer.add("ContactDetection_PostLineSearch");
     timer.add("ContactDetection");
     timer.add("EnergyEval");
     timer.add("LinearSolver");
@@ -279,7 +282,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 
         // evaluate energy
         // printf("neo_hookean: step_forward() - Adding contact\n");
-        timer.start("ContactDetection");
+        timer.start("ContactDetection_Explicit");
         add_contact(problem,
                     rx,
                     problem.vv_pairs,
@@ -293,7 +296,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                     kappa,
                     vertex_region_label,
                     face_region_label);
-        timer.stop("ContactDetection");
+        timer.stop("ContactDetection_Explicit");
 
         // printf("neo_hookean: step_forward() - Updating hessian\n");
         timer.start("EnergyEval");
@@ -353,6 +356,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
             timer.start("LineSearch");
             bool ls_success = newton_solver.line_search(
                 line_search_init_step, 0.5, 64, 0.0, [&](auto temp_x) {
+                    timer.start("ContactDetection_LineSearch");
                     add_contact(problem,
                                 rx,
                                 problem.vv_pairs,
@@ -366,6 +370,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                                 kappa,
                                 vertex_region_label,
                                 face_region_label);
+                    timer.stop("ContactDetection_LineSearch");
                 });
             timer.stop("LineSearch");
             // printf("neo_hookean: step_forward() - Finished line search, success: %d\n", ls_success);
@@ -376,7 +381,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 
             // evaluate energy
             // printf("neo_hookean: step_forward() - Re-evaluating energy after line search\n");
-            timer.start("ContactDetection");
+            timer.start("ContactDetection_PostLineSearch");
             add_contact(problem,
                         rx,
                         problem.vv_pairs,
@@ -390,7 +395,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                         kappa,
                         vertex_region_label,
                         face_region_label);
-            timer.stop("ContactDetection");
+            timer.stop("ContactDetection_PostLineSearch");
 
             // printf("neo_hookean: step_forward() - Updating hessian after line search\n");
             timer.start("UpdateHessian");
@@ -462,10 +467,27 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     RXMESH_INFO("Total Step Time:        {:.2f} ms ({:.2f} ms/iter)",
                 timer.elapsed_millis("Step"),
                 timer.elapsed_millis("Step") / float(steps));
-    RXMESH_INFO("  Contact Detection:    {:.2f} ms  ({:.1f}%) [{:.2f} ms/iter]",
-                timer.elapsed_millis("ContactDetection"),
-                100.0 * timer.elapsed_millis("ContactDetection") / timer.elapsed_millis("Step"),
-                timer.elapsed_millis("ContactDetection") / float(steps));
+
+    // Contact Detection broken down by context
+    T total_contact = timer.elapsed_millis("ContactDetection_Explicit") +
+                      timer.elapsed_millis("ContactDetection_LineSearch") +
+                      timer.elapsed_millis("ContactDetection_PostLineSearch");
+    RXMESH_INFO("  Contact Detection (Total): {:.2f} ms  ({:.1f}%) [{:.2f} ms/iter]",
+                total_contact,
+                100.0 * total_contact / timer.elapsed_millis("Step"),
+                total_contact / float(steps));
+    RXMESH_INFO("    - Explicit:          {:.2f} ms  ({:.1f}%) [{:.2f} ms/iter]",
+                timer.elapsed_millis("ContactDetection_Explicit"),
+                100.0 * timer.elapsed_millis("ContactDetection_Explicit") / timer.elapsed_millis("Step"),
+                timer.elapsed_millis("ContactDetection_Explicit") / float(steps));
+    RXMESH_INFO("    - LineSearch:        {:.2f} ms  ({:.1f}%)",
+                timer.elapsed_millis("ContactDetection_LineSearch"),
+                100.0 * timer.elapsed_millis("ContactDetection_LineSearch") / timer.elapsed_millis("Step"));
+    RXMESH_INFO("    - PostLineSearch:    {:.2f} ms  ({:.1f}%) [{:.2f} ms/iter]",
+                timer.elapsed_millis("ContactDetection_PostLineSearch"),
+                100.0 * timer.elapsed_millis("ContactDetection_PostLineSearch") / timer.elapsed_millis("Step"),
+                timer.elapsed_millis("ContactDetection_PostLineSearch") / float(steps));
+
     RXMESH_INFO("  Energy Evaluation:    {:.2f} ms  ({:.1f}%) [{:.2f} ms/iter]",
                 timer.elapsed_millis("EnergyEval"),
                 100.0 * timer.elapsed_millis("EnergyEval") / timer.elapsed_millis("Step"),
