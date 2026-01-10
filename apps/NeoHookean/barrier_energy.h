@@ -430,7 +430,8 @@ void vf_contact(ProblemT&     problem,
                 const T       dhat,
                 const T       kappa,
                 const VertexAttribute<int>& vertex_region_label,
-                const FaceAttribute<int>& face_region_label)
+                const FaceAttribute<int>& face_region_label,
+                const FaceAttribute<uint64_t>& face_vertices)
 {
     // GPUTimer timer_total, timer_build, timer_query;
     // timer_total.start();
@@ -493,7 +494,27 @@ void vf_contact(ProblemT&     problem,
 
             const int region_fh = face_region_label(fh);
             if (region_fh != region_vh) {
-                vf_contact_pairs.insert(vh, fh);
+                // Get the face vertices using face_vertices attribute
+                uint64_t v0_id = face_vertices(fh, 0);
+                uint64_t v1_id = face_vertices(fh, 1);
+                uint64_t v2_id = face_vertices(fh, 2);
+
+                VertexHandle v0(v0_id);
+                VertexHandle v1(v1_id);
+                VertexHandle v2(v2_id);
+
+                // Get vertex positions
+                Eigen::Vector3<T> p0 = x.template to_eigen<3>(v0);
+                Eigen::Vector3<T> p1 = x.template to_eigen<3>(v1);
+                Eigen::Vector3<T> p2 = x.template to_eigen<3>(v2);
+
+                // Compute point-to-triangle distance
+                T d_sq = point_triangle_distance_squared(xi, p0, p1, p2);
+
+                // Only add contact if within dhat
+                if (d_sq < dhat_sq) {
+                    vf_contact_pairs.insert(vh, fh);
+                }
             }
             return dhat_sq;  // Return SQUARED radius for fixed-radius query
         };
@@ -536,7 +557,8 @@ void add_contact(ProblemT&          problem,
                  const T            dhat,
                  const T            kappa,
                  const VertexAttribute<int>& vertex_region_label,
-                 const FaceAttribute<int>& face_region_label)
+                 const FaceAttribute<int>& face_region_label,
+                 const FaceAttribute<uint64_t>& face_vertices)
 {
     // Call VV contact handler
     vv_contact(problem,
@@ -561,7 +583,8 @@ void add_contact(ProblemT&          problem,
                dhat,
                kappa,
                vertex_region_label,
-               face_region_label);
+               face_region_label,
+               face_vertices);
 }
 
 template <typename VAttrT,

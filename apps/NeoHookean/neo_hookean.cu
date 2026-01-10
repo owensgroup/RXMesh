@@ -115,6 +115,9 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     auto vertex_region_label = *rx.get_vertex_region_label();
     auto face_region_label = *rx.get_face_region_label();
 
+    // Store vertex handles for each face (3 vertices per face)
+    auto face_vertices = *rx.add_face_attribute<uint64_t>("FaceVertices", 3);
+
     // Diff problem and solvers
     ProblemT problem(rx, true, max_vv_candidate_pairs, max_vf_candidate_pairs);
 
@@ -145,6 +148,9 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 
     init_bending(rx, x, rest_angle, edge_area);
     // printf("neo_hookean: Finished init_bending\n");
+
+    // Initialize face_vertices: store the 3 vertex handles for each face
+    init_face_vertices(rx, face_vertices);
 
     // // Debug: print bending initialization stats
     // rest_angle.move(DEVICE, HOST);
@@ -295,7 +301,8 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                     dhat,
                     kappa,
                     vertex_region_label,
-                    face_region_label);
+                    face_region_label,
+                    face_vertices);
         timer.stop("ContactDetection_Explicit");
 
         // printf("neo_hookean: step_forward() - Updating hessian\n");
@@ -369,7 +376,8 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                                 dhat,
                                 kappa,
                                 vertex_region_label,
-                                face_region_label);
+                                face_region_label,
+                                face_vertices);
                     timer.stop("ContactDetection_LineSearch");
                 });
             timer.stop("LineSearch");
@@ -394,7 +402,8 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                         dhat,
                         kappa,
                         vertex_region_label,
-                        face_region_label);
+                        face_region_label,
+                        face_vertices);
             timer.stop("ContactDetection_PostLineSearch");
 
             // printf("neo_hookean: step_forward() - Updating hessian after line search\n");

@@ -37,6 +37,19 @@ void init_volume_inverse_b(RXMeshStatic& rx,
 
             inv_b(f) = tb.inverse();
 
-            
+
+        });
+}
+
+template <typename FAttrT>
+void init_face_vertices(RXMeshStatic& rx, FAttrT& face_vertices)
+{
+    rx.run_query_kernel<Op::FV, 256>(
+        [face_vertices] __device__(const FaceHandle      fh,
+                                   const VertexIterator& fv) mutable {
+            // Store the 3 vertex handles for this face
+            face_vertices(fh, 0) = fv[0].unique_id();
+            face_vertices(fh, 1) = fv[1].unique_id();
+            face_vertices(fh, 2) = fv[2].unique_id();
         });
 }
