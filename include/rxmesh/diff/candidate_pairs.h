@@ -223,7 +223,7 @@ struct CandidatePairs
         m_current_num_index.release();
     }
 
-   private:
+   public:
     DenseMatrix<IndexT, Eigen::ColMajor> m_pairs_id;
     DenseMatrix<PairT, Eigen::ColMajor>  m_pairs_handle;
 
