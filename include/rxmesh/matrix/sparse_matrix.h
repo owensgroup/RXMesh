@@ -215,8 +215,7 @@ struct SparseMatrix
         update_max_nnz();
 
         // column index allocation and init
-        CUDA_ERROR(
-            cudaMalloc((void**)&m_d_col_idx, m_max_nnz * sizeof(IndexT)));
+        CUDA_ERROR(cudaMalloc((void**)&m_d_col_idx, max_nnz_bytes_index()));
 
         // fill in col_idx
         mat_col_fill(
@@ -224,8 +223,8 @@ struct SparseMatrix
 
 
         // allocate value ptr
-        CUDA_ERROR(cudaMalloc((void**)&m_d_val, m_max_nnz * sizeof(T)));
-        CUDA_ERROR(cudaMemset(m_d_val, 0, m_nnz * sizeof(T)));
+        CUDA_ERROR(cudaMalloc((void**)&m_d_val, max_nnz_bytes_data()));
+        CUDA_ERROR(cudaMemset(m_d_val, 0, max_nnz_bytes_data()));
         m_allocated = m_allocated | DEVICE;
 
 
@@ -240,6 +239,7 @@ struct SparseMatrix
 #endif
         init_cudss(*this);
     }
+
 
    public:
     /**
@@ -289,7 +289,7 @@ struct SparseMatrix
             std::fill_n(m_h_val, m_nnz, val);
             CUDA_ERROR(cudaMemcpyAsync(m_d_val,
                                        m_h_val,
-                                       m_nnz * sizeof(T),
+                                       nnz_bytes_data(),
                                        cudaMemcpyHostToDevice,
                                        stream));
         } else if (do_device) {
@@ -695,18 +695,17 @@ struct SparseMatrix
             }
 
             // allocate col idx and values
-            CUDA_ERROR(cudaMalloc((void**)&m_d_val, m_max_nnz * sizeof(T)));
-            CUDA_ERROR(
-                cudaMalloc((void**)&m_d_col_idx, m_max_nnz * sizeof(IndexT)));
+            CUDA_ERROR(cudaMalloc((void**)&m_d_val, max_nnz_bytes_data()));
+            CUDA_ERROR(cudaMalloc((void**)&m_d_col_idx, max_nnz_bytes_index()));
 
-            m_h_val = static_cast<T*>(malloc(m_max_nnz * sizeof(T)));
-            m_h_col_idx =
-                static_cast<IndexT*>(malloc(m_max_nnz * sizeof(IndexT)));
+            m_h_val     = static_cast<T*>(malloc(max_nnz_bytes_data()));
+            m_h_col_idx = static_cast<IndexT*>(malloc(max_nnz_bytes_index()));
         }
 
         // reset row accumulator so that we can keep track of the col_idx
         // of the new items
-        CUDA_ERROR(cudaMemset(m_d_row_acc, 0, m_num_rows * sizeof(IndexT)));
+        const size_t num_rows_bytes = size_t(m_num_rows) * sizeof(IndexT);
+        CUDA_ERROR(cudaMemset(m_d_row_acc, 0, num_rows_bytes));
 
         // fill in the col_idx with the col_idx data from in_mat
         for_each_item<<<DIVIDE_UP(rows(), blockThreads), blockThreads>>>(
@@ -760,11 +759,13 @@ struct SparseMatrix
         // finally update the host (could be optional)
         CUDA_ERROR(cudaMemcpy(m_h_col_idx,
                               m_d_col_idx,
-                              m_nnz * sizeof(IndexT),
+                              nnz_bytes_index(),
                               cudaMemcpyDeviceToHost));
+
+        size_t num_rows_one_bytes = size_t(m_num_rows + 1) * sizeof(IndexT);
         CUDA_ERROR(cudaMemcpy(m_h_row_ptr,
                               m_d_row_ptr,
-                              (m_num_rows + 1) * sizeof(IndexT),
+                              num_rows_one_bytes,
                               cudaMemcpyDeviceToHost));
 
         init_cusparse(*this);
@@ -846,14 +847,13 @@ struct SparseMatrix
 
         CUDA_ERROR(cudaMalloc((void**)&ret.m_d_row_ptr,
                               (m_num_cols + 1) * sizeof(IndexT)));
-        CUDA_ERROR(
-            cudaMalloc((void**)&ret.m_d_col_idx, m_nnz * sizeof(IndexT)));
-        CUDA_ERROR(cudaMalloc((void**)&ret.m_d_val, m_nnz * sizeof(T)));
+        CUDA_ERROR(cudaMalloc((void**)&ret.m_d_col_idx, nnz_bytes_index()));
+        CUDA_ERROR(cudaMalloc((void**)&ret.m_d_val, nnz_bytes_data()));
 
-        ret.m_h_val = static_cast<T*>(malloc(m_nnz * sizeof(T)));
+        ret.m_h_val = static_cast<T*>(malloc(nnz_bytes_data()));
         ret.m_h_row_ptr =
             static_cast<IndexT*>(malloc((m_num_cols + 1) * sizeof(IndexT)));
-        ret.m_h_col_idx = static_cast<IndexT*>(malloc(m_nnz * sizeof(IndexT)));
+        ret.m_h_col_idx = static_cast<IndexT*>(malloc(nnz_bytes_index()));
 
         init_cusparse(ret);
         init_cudss(ret);
@@ -1001,13 +1001,13 @@ struct SparseMatrix
         if (source == HOST && target == DEVICE) {
             CUDA_ERROR(cudaMemcpyAsync(m_d_val,
                                        m_h_val,
-                                       m_nnz * sizeof(T),
+                                       nnz_bytes_data(),
                                        cudaMemcpyHostToDevice,
                                        stream));
         } else if (source == DEVICE && target == HOST) {
             CUDA_ERROR(cudaMemcpyAsync(m_h_val,
                                        m_d_val,
-                                       m_nnz * sizeof(T),
+                                       nnz_bytes_data(),
                                        cudaMemcpyDeviceToHost,
                                        stream));
         }
@@ -1357,10 +1357,10 @@ struct SparseMatrix
         if ((location & HOST) == HOST) {
             release(HOST);
 
-            m_h_val = static_cast<T*>(malloc(m_nnz * sizeof(T)));
+            m_h_val = static_cast<T*>(malloc(nnz_bytes_data()));
             m_h_row_ptr =
                 static_cast<IndexT*>(malloc((m_num_rows + 1) * sizeof(IndexT)));
-            m_h_col_idx = static_cast<IndexT*>(malloc(m_nnz * sizeof(IndexT)));
+            m_h_col_idx = static_cast<IndexT*>(malloc(nnz_bytes_index()));
 
             m_allocated = m_allocated | HOST;
         }
@@ -1368,11 +1368,10 @@ struct SparseMatrix
         if ((location & DEVICE) == DEVICE) {
             release(DEVICE);
 
-            CUDA_ERROR(cudaMalloc((void**)&m_d_val, m_nnz * sizeof(T)));
+            CUDA_ERROR(cudaMalloc((void**)&m_d_val, nnz_bytes_data()));
             CUDA_ERROR(cudaMalloc((void**)&m_d_row_ptr,
                                   (m_num_rows + 1) * sizeof(IndexT)));
-            CUDA_ERROR(
-                cudaMalloc((void**)&m_d_col_idx, m_nnz * sizeof(IndexT)));
+            CUDA_ERROR(cudaMalloc((void**)&m_d_col_idx, nnz_bytes_index()));
 
             m_allocated = m_allocated | DEVICE;
         }
@@ -1721,16 +1720,16 @@ struct SparseMatrix
      */
     void alloce_and_move_to_host()
     {  // allocate the host
-        m_h_val = static_cast<T*>(malloc(m_max_nnz * sizeof(T)));
+        m_h_val = static_cast<T*>(malloc(max_nnz_bytes_data()));
         m_h_row_ptr =
             static_cast<IndexT*>(malloc((m_num_rows + 1) * sizeof(IndexT)));
-        m_h_col_idx = static_cast<IndexT*>(malloc(m_max_nnz * sizeof(IndexT)));
+        m_h_col_idx = static_cast<IndexT*>(malloc(max_nnz_bytes_index()));
 
         CUDA_ERROR(cudaMemcpy(
-            m_h_val, m_d_val, m_nnz * sizeof(T), cudaMemcpyDeviceToHost));
+            m_h_val, m_d_val, nnz_bytes_data(), cudaMemcpyDeviceToHost));
         CUDA_ERROR(cudaMemcpy(m_h_col_idx,
                               m_d_col_idx,
-                              m_nnz * sizeof(IndexT),
+                              nnz_bytes_index(),
                               cudaMemcpyDeviceToHost));
         CUDA_ERROR(cudaMemcpy(m_h_row_ptr,
                               m_d_row_ptr,
@@ -1740,7 +1739,27 @@ struct SparseMatrix
         m_allocated = m_allocated | HOST;
     }
 
-   
+    size_t max_nnz_bytes_data() const
+    {
+        return size_t(m_max_nnz) * sizeof(T);
+    }
+
+    size_t max_nnz_bytes_index() const
+    {
+        return size_t(m_max_nnz) * sizeof(IndexT);
+    }
+
+    size_t nnz_bytes_data() const
+    {
+        return size_t(m_max_nnz) * sizeof(T);
+    }
+
+    size_t nnz_bytes_index() const
+    {
+        return size_t(m_max_nnz) * sizeof(IndexT);
+    }
+
+
     Context              m_context;
     cusparseHandle_t     m_cusparse_handle;
     cusparseSpMatDescr_t m_spdescr;
