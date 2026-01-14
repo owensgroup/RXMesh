@@ -99,7 +99,7 @@ def setup_scene():
     bpy.ops.object.delete()
 
     # Add camera
-    bpy.ops.object.camera_add(location=(10, -10, 8))
+    bpy.ops.object.camera_add(location=(15, -15, 12))
     camera = bpy.context.object
     camera.rotation_euler = (1.1, 0, 0.785)  # Look at center
     bpy.context.scene.camera = camera
@@ -140,7 +140,7 @@ def setup_scene():
     floor_principled = floor_nodes.new(type='ShaderNodeBsdfPrincipled')
 
     # Set floor properties - light gray, slightly rough
-    floor_principled.inputs['Base Color'].default_value = (0.4, 0.4, 0.4, 1.0)
+    floor_principled.inputs['Base Color'].default_value = (0.7, 0.7, 0.7, 1.0)
     floor_principled.inputs['Metallic'].default_value = 0.0
     floor_principled.inputs['Roughness'].default_value = 0.6
 
@@ -215,6 +215,14 @@ def render_obj_file(input_path, output_path, width=1920, height=1080, samples=12
     scene.render.resolution_x = width
     scene.render.resolution_y = height
     scene.render.filepath = str(output_path)
+
+    # Use GPU for rendering
+    scene.cycles.device = 'GPU'
+    prefs = bpy.context.preferences.addons['cycles'].preferences
+    prefs.compute_device_type = 'CUDA'
+    prefs.get_devices()
+    for device in prefs.devices:
+        device.use = True
 
     # Frame all objects in camera view
     bpy.ops.object.select_all(action='DESELECT')

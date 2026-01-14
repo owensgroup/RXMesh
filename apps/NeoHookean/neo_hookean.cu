@@ -951,11 +951,21 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
             x.move(DEVICE, HOST);
 
             // Create filename with step number
-            std::string filename = STRINGIFY(OUTPUT_DIR) + std::string("scene_step_") +
+            std::string mesh_filename = STRINGIFY(OUTPUT_DIR) + std::string("scene_step_") +
                                    std::to_string(steps - 1) + ".obj";
 
-            RXMESH_INFO("Exporting mesh at step {} to {}", steps - 1, filename);
-            rx.export_obj(filename, x);
+            RXMESH_INFO("Exporting mesh at step {} to {}", steps - 1, mesh_filename);
+            rx.export_obj(mesh_filename, x);
+
+            // Export Hessian matrix
+            problem.hess->move(DEVICE, HOST);
+            std::string hess_filename = STRINGIFY(OUTPUT_DIR) + std::string("hessian_step_") +
+                                   std::to_string(steps - 1) + ".txt";
+            problem.hess->to_file(hess_filename);
+            RXMESH_INFO("Exported Hessian at step {} to {} (dim: {}x{}, nnz: {})",
+                        steps - 1, hess_filename,
+                        problem.hess->rows(), problem.hess->cols(),
+                        problem.hess->non_zeros());
 
             // Move back to DEVICE for next iteration
             x.move(HOST, DEVICE);
