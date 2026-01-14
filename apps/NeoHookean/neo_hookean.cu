@@ -18,6 +18,7 @@
 #include "spring_energy.h"
 
 #include <Eigen/Core>
+#include <unordered_set>
 
 using namespace rxmesh;
 
@@ -34,6 +35,7 @@ struct PhysicsParams {
     T   dhat           = 0.1;
     T   kappa          = 1e5;
     T   bending_stiff  = 1e8;    // k_b
+    std::vector<int> export_steps;  // List of step IDs to export as OBJ
     int num_steps      = 5;      // Number of simulation steps
 };
 
@@ -464,8 +466,27 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 #if USE_POLYSCOPE
     draw(rx, x, velocity, step_forward, dir, grad, steps);
 #else
+    // Convert export_steps vector to set for O(1) lookup
+    std::unordered_set<int> export_set(params.export_steps.begin(), params.export_steps.end());
+
     while (steps < params.num_steps) {
         step_forward();
+
+        // Check if we should export at this step
+        if (export_set.count(steps - 1) > 0) {  // steps is already incremented in step_forward()
+            // Move vertex positions to HOST
+            x.move(DEVICE, HOST);
+
+            // Create filename with step number
+            std::string filename = STRINGIFY(OUTPUT_DIR) + std::string("scene_step_") +
+                                   std::to_string(steps - 1) + ".obj";
+
+            RXMESH_INFO("Exporting mesh at step {} to {}", steps - 1, filename);
+            rx.export_obj(filename, x);
+
+            // Move back to DEVICE for next iteration
+            x.move(HOST, DEVICE);
+        }
     }
 #endif
 
@@ -660,6 +681,7 @@ int main(int argc, char** argv)
         params.dhat = scene_config.simulation.dhat;
         params.kappa = scene_config.simulation.kappa;
         params.num_steps = scene_config.simulation.num_steps;
+        params.export_steps = scene_config.simulation.export_steps;
 
         // Generate instances
         generate_instances(scene_config, inputs, transforms);

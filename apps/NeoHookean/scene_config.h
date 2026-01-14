@@ -56,6 +56,9 @@ struct SimulationConfig {
     T kappa          = 1e5;       // Contact barrier stiffness
     int num_steps    = 5;         // Number of simulation steps
 
+    // Export configuration
+    std::vector<int> export_steps;  // List of step IDs to export as OBJ
+
     // Ground plane
     T ground_x = 0.0;
     T ground_y = -1.0;
@@ -168,6 +171,13 @@ private:
         else if (key == "dhat") iss >> sim.dhat;
         else if (key == "kappa") iss >> sim.kappa;
         else if (key == "num_steps") iss >> sim.num_steps;
+        else if (key == "export_steps") {
+            // Parse space-separated list of integers
+            int step_id;
+            while (iss >> step_id) {
+                sim.export_steps.push_back(step_id);
+            }
+        }
         else if (key == "ground_x") iss >> sim.ground_x;
         else if (key == "ground_y") iss >> sim.ground_y;
         else if (key == "ground_z") iss >> sim.ground_z;
