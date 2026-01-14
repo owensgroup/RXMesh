@@ -2,7 +2,7 @@ add_executable(PolyVector)
 
 set(SOURCE_LIST
     polyvector.cu	
-	read_raw_field.h
+	raw_field_io.h
 )
 
 target_sources(PolyVector 

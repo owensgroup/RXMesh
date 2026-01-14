@@ -1378,7 +1378,6 @@ struct SparseMatrix
     }
 
 
-   protected:
     void update_max_nnz()
     {
         m_max_nnz = static_cast<IndexT>(
@@ -1412,6 +1411,7 @@ struct SparseMatrix
                                               CUSPARSE_POINTER_MODE_HOST));
     }
 
+   public:
     void check_repeated_indices()
     {
         // sanity check: no repeated indices in the col_id for a specific row
@@ -1419,10 +1419,10 @@ struct SparseMatrix
             IndexT start = m_h_row_ptr[r];
             IndexT stop  = m_h_row_ptr[r + 1];
 
-            std::set<IndexT> cols;
+            std::set<IndexT> rcols;
             for (IndexT i = start; i < stop; ++i) {
                 IndexT c = m_h_col_idx[i];
-                if (cols.find(c) != cols.end()) {
+                if (rcols.find(c) != rcols.end()) {
                     RXMESH_ERROR(
                         "SparseMatrix::check_repeated_indices() Error in "
                         "constructing the sparse matrix. Row {} contains "
@@ -1430,11 +1430,12 @@ struct SparseMatrix
                         r,
                         c);
                 }
-                cols.insert(c);
+                rcols.insert(c);
             }
         }
     }
 
+   protected:
     /**
      * @brief initialize cuDSS
      */

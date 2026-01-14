@@ -1,9 +1,13 @@
 #pragma once
 #include <cuda_runtime.h>
 #include <algorithm>
+#include <fstream>
 #include <numeric>
 #include <random>
+#include <string>
 #include "rxmesh/util/macros.h"
+
+#include <Eigen/Dense>
 
 namespace rxmesh {
 
@@ -477,3 +481,51 @@ __host__ __inline__ cudaDataType_t cuda_type()
     }
 }
 }  // namespace rxmesh
+
+
+// Source - https://stackoverflow.com/a
+// Posted by andrea, modified by community. See post 'Timeline' for change
+// history Retrieved 2026-01-09, License - CC BY-SA 4.0
+namespace Eigen {
+template <class Derived>
+void write_text(std::string filename, const Eigen::MatrixBase<Derived>& m)
+{
+    std::ofstream out(filename);  // text mode
+    if (!out)
+        throw std::runtime_error("Failed to open file");
+
+    out << m.rows() << " " << m.cols() << "\n";
+    for (Eigen::Index i = 0; i < m.rows(); ++i) {
+        for (Eigen::Index j = 0; j < m.cols(); ++j) {
+            out << m(i, j);
+            if (j + 1 < m.cols())
+                out << " ";
+        }
+        out << "\n";
+    }
+    if (!out)
+        throw std::runtime_error("Write failed");
+}
+
+template <class Matrix>
+void read_text(std::string filename, Matrix& m)
+{
+    std::ifstream in(filename);
+    if (!in)
+        throw std::runtime_error("Failed to open file");
+
+    Eigen::Index rows = 0, cols = 0;
+    in >> rows >> cols;
+    if (!in)
+        throw std::runtime_error("Failed to read header");
+
+    m.resize(rows, cols);  // requires dynamic-size Matrix
+    for (Eigen::Index i = 0; i < rows; ++i)
+        for (Eigen::Index j = 0; j < cols; ++j)
+            in >> m(i, j);
+
+    if (!in)
+        throw std::runtime_error("Failed to read matrix values");
+}
+
+}  // namespace Eigen
