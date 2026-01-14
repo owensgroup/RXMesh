@@ -468,6 +468,14 @@ struct PhysicsParams {
     T   kappa          = 1e5;
     T   bending_stiff  = 1e8;    // k_b
     int num_steps      = 5;      // Number of simulation steps
+
+    // Box boundary (5 walls - no ceiling)
+    bool use_box    = false;
+    T    box_min_x  = -5.0;
+    T    box_max_x  = 5.0;
+    T    box_min_y  = -1.0;
+    T    box_min_z  = -5.0;
+    T    box_max_z  = 5.0;
 };
 
 void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
@@ -475,8 +483,8 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     // printf("neo_hookean: Starting function\n");
 
     // Toggle to enable CuSPARSE benchmark comparison
-    constexpr bool BENCHMARK_CUSPARSE = true;
-    constexpr bool VERIFY_SPARSITY = true;
+    constexpr bool BENCHMARK_CUSPARSE = false;
+    constexpr bool VERIFY_SPARSITY = false;
 
     constexpr int VariableDim = 3;
 
@@ -508,6 +516,13 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     const vec3<T> ground_n =
         glm::normalize(vec3<T>(0.0f, 1.0f, 0.0f));  // normal of the slope
 
+    // Box boundary (if enabled) - 5 walls, no ceiling
+    const T box_min_x = params.box_min_x;
+    const T box_max_x = params.box_max_x;
+    const T box_min_y = params.box_min_y;
+    const T box_min_z = params.box_min_z;
+    const T box_max_z = params.box_max_z;
+    const bool use_box = params.use_box;
 
     // Derived parameters
     const T mu_lame = 0.5 * young_mod / (1 + poisson_ratio);
@@ -640,15 +655,16 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     // printf("neo_hookean: Added gravity energy\n");
 
     // add barrier energy
-    floor_barrier_energy(problem,
-                         contact_area,
-                         time_step,
-                         ground_n,
-                         ground_o,
-                         dhat,
-                         kappa);
+    box_barrier_energy(problem,
+                        contact_area,
+                        time_step,
+                        box_min_x, box_max_x,
+                        box_min_y,
+                        box_min_z, box_max_z,
+                        dhat,
+                        kappa);
 
-    // printf("neo_hookean: Added floor barrier energy\n");
+    // printf("neo_hookean: Added barrier energy\n");
 
     vv_contact_energy(problem, contact_area, time_step, dhat, kappa);
     // printf("neo_hookean: Added vv contact energy\n");
@@ -784,12 +800,13 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
             // printf("neo_hookean: step_forward() - nh_step: %f\n", nh_step);
 
             // printf("neo_hookean: step_forward() - Computing barrier_step_size\n");
-            T bar_step = barrier_step_size(rx,
-                                           newton_solver.dir,
-                                           alpha,
-                                           x,
-                                           ground_n,
-                                           ground_o);
+            T bar_step = box_barrier_step_size(rx,
+                                     newton_solver.dir,
+                                     alpha,
+                                     x,
+                                     box_min_x, box_max_x,
+                                     box_min_y,
+                                     box_min_z, box_max_z);
             // printf("neo_hookean: step_forward() - bar_step: %f\n", bar_step);
 
             line_search_init_step = std::min(nh_step, bar_step);
@@ -1133,6 +1150,14 @@ int main(int argc, char** argv)
         params.kappa = scene_config.simulation.kappa;
         params.num_steps = scene_config.simulation.num_steps;
 
+        // Box parameters
+        params.use_box = scene_config.simulation.use_box;
+        params.box_min_x = scene_config.simulation.box_min_x;
+        params.box_max_x = scene_config.simulation.box_max_x;
+        params.box_min_y = scene_config.simulation.box_min_y;
+        params.box_min_z = scene_config.simulation.box_min_z;
+        params.box_max_z = scene_config.simulation.box_max_z;
+
         // Generate instances
         generate_instances(scene_config, inputs, transforms);
     } else {
@@ -1160,6 +1185,12 @@ int main(int argc, char** argv)
     RXMESH_INFO("  kappa: {}", params.kappa);
     RXMESH_INFO("  Bending stiffness: {}", params.bending_stiff);
     RXMESH_INFO("  Number of steps: {}", params.num_steps);
+    if (params.use_box) {
+        RXMESH_INFO("  Box enabled: [{}, {}] x [{}, open] x [{}, {}]",
+                    params.box_min_x, params.box_max_x,
+                    params.box_min_y,
+                    params.box_min_z, params.box_max_z);
+    }
 
     // Load meshes
     RXMeshStatic rx(inputs);

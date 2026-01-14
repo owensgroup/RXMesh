@@ -47,49 +47,69 @@ struct BVHBuffers {
     }
 };
 
-template <typename ProblemT,
-          typename VAttrT,
-          typename T = typename VAttrT::Type>
-void floor_barrier_energy(ProblemT&      problem,
-                          VAttrT&        contact_area,
-                          const T        h,  // time_step
-                          const vec3<T>& ground_n,
-                          const vec3<T>& ground_o,
-                          const T        dhat,
-                          const T        kappa)
-{
 
+template <typename ProblemT, typename VAttrT, typename T = typename VAttrT::Type>
+void box_barrier_energy(ProblemT& problem,
+                        VAttrT& contact_area,
+                        const T h,
+                        const T box_min_x, const T box_max_x,
+                        const T box_min_y,
+                        const T box_min_z, const T box_max_z,
+                        const T dhat,
+                        const T kappa)
+{
     const T h_sq = h * h;
 
-    const Eigen::Vector3<T> o(ground_o[0], ground_o[1], ground_o[2]);
-    const Eigen::Vector3<T> n(ground_n[0], ground_n[1], ground_n[2]);
+    // Define 5 planes (inward-pointing normals) - no ceiling
+    vec3<T> planes[5] = {
+        vec3<T>(0, 1, 0),   // bottom: normal up
+        vec3<T>(1, 0, 0),   // left (min_x): normal right
+        vec3<T>(-1, 0, 0),  // right (max_x): normal left
+        vec3<T>(0, 0, 1),   // front (min_z): normal back
+        vec3<T>(0, 0, -1)   // back (max_z): normal forward
+    };
 
-    const Eigen::Vector3<T> normal(0.0, -1.0, 0.0);
+    vec3<T> offsets[5] = {
+        vec3<T>(0, box_min_y, 0),
+        vec3<T>(box_min_x, 0, 0),
+        vec3<T>(box_max_x, 0, 0),
+        vec3<T>(0, 0, box_min_z),
+        vec3<T>(0, 0, box_max_z)
+    };
 
-    problem.template add_term<Op::V, true>(
-        [=] __device__(const auto& vh, auto& obj) mutable {
-            using ActiveT = ACTIVE_TYPE(vh);
+    // Apply barrier energy for each of the 5 faces
+    for (int face_idx = 0; face_idx < 5; face_idx++) {
+        vec3<T> n = planes[face_idx];
+        vec3<T> o = offsets[face_idx];
 
-            const Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(vh, obj);
+        // Precompute Eigen vectors outside the device lambda
+        const Eigen::Vector3<T> o_eigen(o[0], o[1], o[2]);
+        const Eigen::Vector3<T> n_eigen(n[0], n[1], n[2]);
 
-            ActiveT E(T(0));
+        printf("adding box energy term %d \n", face_idx);
+        problem.template add_term<Op::V, true>(
+            [=] __device__(const auto& vh, auto& obj) mutable {
+                using ActiveT = ACTIVE_TYPE(vh);
 
+                const Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(vh, obj);
 
-                ActiveT d = (xi - o).dot(n);
+                ActiveT d = (xi - o_eigen).dot(n_eigen);
+
+                ActiveT E(T(0));
+
                 if (d < dhat) {
                     ActiveT s = d / dhat;
-
                     if (s <= T(0)) {
                         using PassiveT = PassiveType<ActiveT>;
                         return ActiveT(std::numeric_limits<PassiveT>::max());
                     }
-
                     E = h_sq * contact_area(vh) * dhat * T(0.5) * kappa *
-                        (s - 1) * log(s);
+                        (s - T(1)) * log(s);
                 }
 
-            return E;
-        });
+                return E;
+            });
+    }
 }
 
 template <typename ProblemT,
@@ -590,34 +610,43 @@ void add_contact(ProblemT&          problem,
 template <typename VAttrT,
           typename DenseMatT,
           typename T = typename VAttrT::Type>
-T barrier_step_size(RXMeshStatic&      rx,
-                    const DenseMatT&   search_dir,
-                    DenseMatT&         alpha,
-                    const VAttrT&      x,
-                    const vec3<T>&     ground_n,
-                    const vec3<T>&     ground_o)
+T box_barrier_step_size(RXMeshStatic& rx,
+                        const DenseMatT& search_dir,
+                        DenseMatT& alpha,
+                        const VAttrT& x,
+                        const T box_min_x, const T box_max_x,
+                        const T box_min_y,
+                        const T box_min_z, const T box_max_z)
 {
     alpha.reset(T(1), DEVICE);
 
-    const vec3<T> n(0.0, -1.0, 0.0);
+    // Define 5 planes (same as in box_barrier_energy) - no ceiling
+    vec3<T> planes[5] = {
+        vec3<T>(0, 1, 0),   vec3<T>(1, 0, 0),   vec3<T>(-1, 0, 0),
+        vec3<T>(0, 0, 1),   vec3<T>(0, 0, -1)
+    };
+
+    vec3<T> offsets[5] = {
+        vec3<T>(0, box_min_y, 0), vec3<T>(box_min_x, 0, 0), vec3<T>(box_max_x, 0, 0),
+        vec3<T>(0, 0, box_min_z), vec3<T>(0, 0, box_max_z)
+    };
 
     rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) mutable {
-
-        const vec3<T> pi(
-            search_dir(vh, 0), search_dir(vh, 1), search_dir(vh, 2));
-
+        const vec3<T> pi(search_dir(vh, 0), search_dir(vh, 1), search_dir(vh, 2));
         const vec3<T> xi = x.to_glm<3>(vh);
 
-        // floor
-        T p_n = glm::dot(pi, ground_n);
-        if (p_n < 0) {
-            alpha(vh) = std::min(
-                alpha(vh), T(0.9) * glm::dot(ground_n, (xi - ground_o)) / -p_n);
-        }
+        // Check all 5 faces
+        for (int face = 0; face < 5; face++) {
+            vec3<T> n = planes[face];
+            vec3<T> o = offsets[face];
 
+            T p_n = glm::dot(pi, n);
+            if (p_n < 0) {  // moving toward this wall
+                alpha(vh) = std::min(alpha(vh),
+                                     T(0.9) * glm::dot(n, (xi - o)) / -p_n);
+            }
+        }
     });
 
-    // we want the min here but since the min value is greater than 1 (y_ground
-    // is less than 0, and search_dir is also less than zero)
     return alpha.abs_min();
 }
