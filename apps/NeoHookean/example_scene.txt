@@ -10,6 +10,9 @@ simulation {
     kappa 1e8
     num_steps 100
 
+    # Export mesh at these step IDs (space-separated)
+    export_steps 10
+
     # Ground plane (point and normal)
     ground_x 0.0
     ground_y -1.0

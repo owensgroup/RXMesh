@@ -463,9 +463,9 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     };
 
     // printf("declared everything. starting simulation.\n");
-#if USE_POLYSCOPE
-    draw(rx, x, velocity, step_forward, dir, grad, steps);
-#else
+// #if USE_POLYSCOPE
+//     draw(rx, x, velocity, step_forward, dir, grad, steps);
+// #else
     // Convert export_steps vector to set for O(1) lookup
     std::unordered_set<int> export_set(params.export_steps.begin(), params.export_steps.end());
 
@@ -488,7 +488,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
             x.move(HOST, DEVICE);
         }
     }
-#endif
+// #endif
 
 
     // Print comprehensive timing summary
