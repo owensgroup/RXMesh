@@ -5,13 +5,10 @@ simulation {
     time_step 0.01
     friction_coef 0.11
     stiffness_coef 4e4
-    tol 0.01
-    dhat 0.5
+    tol 0.05
+    dhat 0.05
     kappa 1e8
     num_steps 100
-
-    # Export mesh at these step IDs (space-separated)
-    export_steps 10
 
     # Ground plane (point and normal)
     ground_x 0.0
@@ -24,11 +21,11 @@ simulation {
     # Box boundary (5 walls - no ceiling)
     # Set use_box to true to enable box walls instead of just floor
     use_box 1
-    box_min_x -6
-    box_max_x 6
+    box_min_x -0.5
+    box_max_x 0.5
     box_min_y 0.0
-    box_min_z -6
-    box_max_z 6
+    box_min_z -0.5
+    box_max_z 0.5
 }
 
 # Generate a 3x3x2 = 18 instances of spheres in a 3D grid
@@ -42,9 +39,9 @@ mesh {
     bending_stiff 1e8
 
     # 3D grid layout: 3 in X, 3 in Y, 2 in Z = 18 total instances
-    num_instances_x 5
+    num_instances_x 1
     num_instances_y 2
-    num_instances_z 5
+    num_instances_z 1
 
     # Spacing between instances
     spacing_x 2.5
@@ -52,9 +49,9 @@ mesh {
     spacing_z 2.5
 
     # Grid starting position (lower-left-front corner)
-    offset_x -5.0
+    offset_x 0.0
     offset_y 2.0
-    offset_z -5.0
+    offset_z 0.0
 
     # Scale applied to each instance
     scale 0.5

@@ -66,6 +66,14 @@ struct SimulationConfig {
     T ground_nx = 0.0;
     T ground_ny = 1.0;
     T ground_nz = 0.0;
+
+    // Box boundary (5 walls - no ceiling)
+    bool use_box = false;  // Whether to use box instead of just floor
+    T box_min_x = -5.0;
+    T box_max_x = 5.0;
+    T box_min_y = -1.0;  // Floor level
+    T box_min_z = -5.0;
+    T box_max_z = 5.0;
 };
 
 /**
@@ -184,6 +192,12 @@ private:
         else if (key == "ground_nx") iss >> sim.ground_nx;
         else if (key == "ground_ny") iss >> sim.ground_ny;
         else if (key == "ground_nz") iss >> sim.ground_nz;
+        else if (key == "use_box") iss >> sim.use_box;
+        else if (key == "box_min_x") iss >> sim.box_min_x;
+        else if (key == "box_max_x") iss >> sim.box_max_x;
+        else if (key == "box_min_y") iss >> sim.box_min_y;
+        else if (key == "box_min_z") iss >> sim.box_min_z;
+        else if (key == "box_max_z") iss >> sim.box_max_z;
     }
 
     static void parse_mesh_param(const std::string& key, std::istringstream& iss, MeshConfig<T>& mesh) {
