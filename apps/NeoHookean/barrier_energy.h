@@ -47,49 +47,69 @@ struct BVHBuffers {
     }
 };
 
-template <typename ProblemT,
-          typename VAttrT,
-          typename T = typename VAttrT::Type>
-void floor_barrier_energy(ProblemT&      problem,
-                          VAttrT&        contact_area,
-                          const T        h,  // time_step
-                          const vec3<T>& ground_n,
-                          const vec3<T>& ground_o,
-                          const T        dhat,
-                          const T        kappa)
-{
 
+template <typename ProblemT, typename VAttrT, typename T = typename VAttrT::Type>
+void box_barrier_energy(ProblemT& problem,
+                        VAttrT& contact_area,
+                        const T h,
+                        const T box_min_x, const T box_max_x,
+                        const T box_min_y,
+                        const T box_min_z, const T box_max_z,
+                        const T dhat,
+                        const T kappa)
+{
     const T h_sq = h * h;
 
-    const Eigen::Vector3<T> o(ground_o[0], ground_o[1], ground_o[2]);
-    const Eigen::Vector3<T> n(ground_n[0], ground_n[1], ground_n[2]);
+    // Define 5 planes (inward-pointing normals) - no ceiling
+    vec3<T> planes[5] = {
+        vec3<T>(0, 1, 0),   // bottom: normal up
+        vec3<T>(1, 0, 0),   // left (min_x): normal right
+        vec3<T>(-1, 0, 0),  // right (max_x): normal left
+        vec3<T>(0, 0, 1),   // front (min_z): normal back
+        vec3<T>(0, 0, -1)   // back (max_z): normal forward
+    };
 
-    const Eigen::Vector3<T> normal(0.0, -1.0, 0.0);
+    vec3<T> offsets[5] = {
+        vec3<T>(0, box_min_y, 0),
+        vec3<T>(box_min_x, 0, 0),
+        vec3<T>(box_max_x, 0, 0),
+        vec3<T>(0, 0, box_min_z),
+        vec3<T>(0, 0, box_max_z)
+    };
 
-    problem.template add_term<Op::V, true>(
-        [=] __device__(const auto& vh, auto& obj) mutable {
-            using ActiveT = ACTIVE_TYPE(vh);
+    // Apply barrier energy for each of the 5 faces
+    for (int face_idx = 0; face_idx < 5; face_idx++) {
+        vec3<T> n = planes[face_idx];
+        vec3<T> o = offsets[face_idx];
 
-            const Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(vh, obj);
+        // Precompute Eigen vectors outside the device lambda
+        const Eigen::Vector3<T> o_eigen(o[0], o[1], o[2]);
+        const Eigen::Vector3<T> n_eigen(n[0], n[1], n[2]);
 
-            ActiveT E(T(0));
+        printf("adding box energy term %d \n", face_idx);
+        problem.template add_term<Op::V, true>(
+            [=] __device__(const auto& vh, auto& obj) mutable {
+                using ActiveT = ACTIVE_TYPE(vh);
 
+                const Eigen::Vector3<ActiveT> xi = iter_val<ActiveT, 3>(vh, obj);
 
-                ActiveT d = (xi - o).dot(n);
+                ActiveT d = (xi - o_eigen).dot(n_eigen);
+
+                ActiveT E(T(0));
+
                 if (d < dhat) {
                     ActiveT s = d / dhat;
-
                     if (s <= T(0)) {
                         using PassiveT = PassiveType<ActiveT>;
                         return ActiveT(std::numeric_limits<PassiveT>::max());
                     }
-
                     E = h_sq * contact_area(vh) * dhat * T(0.5) * kappa *
-                        (s - 1) * log(s);
+                        (s - T(1)) * log(s);
                 }
 
-            return E;
-        });
+                return E;
+            });
+    }
 }
 
 template <typename ProblemT,
@@ -108,8 +128,8 @@ void vv_contact(ProblemT&          problem,
                 const T            kappa,
                 const VertexAttribute<int>& region_label)
 {
-    GPUTimer timer_total, timer_build, timer_query;
-    timer_total.start();
+    // GPUTimer timer_total, timer_build, timer_query;
+    // timer_total.start();
 
     contact_pairs.reset();
 
@@ -143,11 +163,11 @@ void vv_contact(ProblemT&          problem,
     CUDA_ERROR(cudaDeviceSynchronize());
 
     // Step 3: Build BVH
-    timer_build.start();
+    // timer_build.start();
     cuBQL::BinaryBVH<T, 3> bvh;
     cuBQL::BuildConfig     build_config;
     cuBQL::gpuBuilder(bvh, d_boxes, num_vertices, build_config);
-    timer_build.stop();
+    // timer_build.stop();
 
     // Calculate and print BVH memory usage
     size_t nodes_memory = bvh.numNodes * sizeof(typename cuBQL::BinaryBVH<T, 3>::Node);
@@ -155,7 +175,7 @@ void vv_contact(ProblemT&          problem,
     size_t total_bvh_memory = nodes_memory + primIDs_memory;
 
     // Step 4: Query BVH for each vertex to find nearby vertices
-    timer_query.start();
+    // timer_query.start();
     rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) mutable {
 
         const Eigen::Vector3<T> xi = x.template to_eigen<3>(vh);
@@ -200,9 +220,9 @@ void vv_contact(ProblemT&          problem,
         cuBQL::shrinkingRadiusQuery::forEachPrim<T, 3>(
             query_lambda, bvh, query_point, dhat_sq);
     });
-    timer_query.stop();
+    // timer_query.stop();
 
-    timer_total.stop();
+    // timer_total.stop();
 
     // Print timing information
     // RXMESH_INFO("VV Contact Detection:");
@@ -430,10 +450,11 @@ void vf_contact(ProblemT&     problem,
                 const T       dhat,
                 const T       kappa,
                 const VertexAttribute<int>& vertex_region_label,
-                const FaceAttribute<int>& face_region_label)
+                const FaceAttribute<int>& face_region_label,
+                const FaceAttribute<uint64_t>& face_vertices)
 {
-    GPUTimer timer_total, timer_build, timer_query;
-    timer_total.start();
+    // GPUTimer timer_total, timer_build, timer_query;
+    // timer_total.start();
 
     vf_contact_pairs.reset();
 
@@ -458,11 +479,11 @@ void vf_contact(ProblemT&     problem,
     CUDA_ERROR(cudaDeviceSynchronize());
 
     // Step 4: Build BVH over triangles
-    timer_build.start();
+    // timer_build.start();
     cuBQL::BinaryBVH<T, 3> bvh;
     cuBQL::BuildConfig     build_config;
     cuBQL::gpuBuilder(bvh, d_boxes, num_faces, build_config);
-    timer_build.stop();
+    // timer_build.stop();
 
     // Calculate and print BVH memory usage
     size_t nodes_memory     = bvh.numNodes * sizeof(typename cuBQL::BinaryBVH<T, 3>::Node);
@@ -472,7 +493,7 @@ void vf_contact(ProblemT&     problem,
     // Step 5: Query BVH for VF contact detection
     // Note: this is a more broader/lenient query as we're not testing for exact closeness here
     // This is because right now there isn't a way to obtain the vertex positions from the face handle
-    timer_query.start();
+    // timer_query.start();
     rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) mutable {
 
         const Eigen::Vector3<T> xi = x.template to_eigen<3>(vh);
@@ -493,7 +514,27 @@ void vf_contact(ProblemT&     problem,
 
             const int region_fh = face_region_label(fh);
             if (region_fh != region_vh) {
-                vf_contact_pairs.insert(vh, fh);
+                // Get the face vertices using face_vertices attribute
+                uint64_t v0_id = face_vertices(fh, 0);
+                uint64_t v1_id = face_vertices(fh, 1);
+                uint64_t v2_id = face_vertices(fh, 2);
+
+                VertexHandle v0(v0_id);
+                VertexHandle v1(v1_id);
+                VertexHandle v2(v2_id);
+
+                // Get vertex positions
+                Eigen::Vector3<T> p0 = x.template to_eigen<3>(v0);
+                Eigen::Vector3<T> p1 = x.template to_eigen<3>(v1);
+                Eigen::Vector3<T> p2 = x.template to_eigen<3>(v2);
+
+                // Compute point-to-triangle distance
+                T d_sq = point_triangle_distance_squared(xi, p0, p1, p2);
+
+                // Only add contact if within dhat
+                if (d_sq < dhat_sq) {
+                    vf_contact_pairs.insert(vh, fh);
+                }
             }
             return dhat_sq;  // Return SQUARED radius for fixed-radius query
         };
@@ -501,17 +542,17 @@ void vf_contact(ProblemT&     problem,
         cuBQL::shrinkingRadiusQuery::forEachPrim<T, 3>(
             query_lambda, bvh, query_point, dhat_sq);
     });
-    timer_query.stop();
+    // timer_query.stop();
 
-    timer_total.stop();
+    // timer_total.stop();
 
     // Print timing information
-    RXMESH_INFO("VF Contact Detection:");
-    RXMESH_INFO("  BVH Build time: {:.3f} ms", timer_build.elapsed_millis());
-    RXMESH_INFO("  BVH Query time: {:.3f} ms", timer_query.elapsed_millis());
-    RXMESH_INFO("  Total time: {:.3f} ms", timer_total.elapsed_millis());
-    RXMESH_INFO("  Contact pairs found: {}", vf_contact_pairs.num_pairs());
-    RXMESH_INFO("  BVH memory: {:.2f} MB", total_bvh_memory / (1024.0f * 1024.0f));
+    // RXMESH_INFO("VF Contact Detection:");
+    // RXMESH_INFO("  BVH Build time: {:.3f} ms", timer_build.elapsed_millis());
+    // RXMESH_INFO("  BVH Query time: {:.3f} ms", timer_query.elapsed_millis());
+    // RXMESH_INFO("  Total time: {:.3f} ms", timer_total.elapsed_millis());
+    // RXMESH_INFO("  Contact pairs found: {}", vf_contact_pairs.num_pairs());
+    // RXMESH_INFO("  BVH memory: {:.2f} MB", total_bvh_memory / (1024.0f * 1024.0f));
 
     // Step 6: Cleanup
     cuBQL::cuda::free(bvh);  // Free BVH memory (nodes and primIDs go to pool)
@@ -536,7 +577,8 @@ void add_contact(ProblemT&          problem,
                  const T            dhat,
                  const T            kappa,
                  const VertexAttribute<int>& vertex_region_label,
-                 const FaceAttribute<int>& face_region_label)
+                 const FaceAttribute<int>& face_region_label,
+                 const FaceAttribute<uint64_t>& face_vertices)
 {
     // Call VV contact handler
     vv_contact(problem,
@@ -561,40 +603,50 @@ void add_contact(ProblemT&          problem,
                dhat,
                kappa,
                vertex_region_label,
-               face_region_label);
+               face_region_label,
+               face_vertices);
 }
 
 template <typename VAttrT,
           typename DenseMatT,
           typename T = typename VAttrT::Type>
-T barrier_step_size(RXMeshStatic&      rx,
-                    const DenseMatT&   search_dir,
-                    DenseMatT&         alpha,
-                    const VAttrT&      x,
-                    const vec3<T>&     ground_n,
-                    const vec3<T>&     ground_o)
+T box_barrier_step_size(RXMeshStatic& rx,
+                        const DenseMatT& search_dir,
+                        DenseMatT& alpha,
+                        const VAttrT& x,
+                        const T box_min_x, const T box_max_x,
+                        const T box_min_y,
+                        const T box_min_z, const T box_max_z)
 {
     alpha.reset(T(1), DEVICE);
 
-    const vec3<T> n(0.0, -1.0, 0.0);
+    // Define 5 planes (same as in box_barrier_energy) - no ceiling
+    vec3<T> planes[5] = {
+        vec3<T>(0, 1, 0),   vec3<T>(1, 0, 0),   vec3<T>(-1, 0, 0),
+        vec3<T>(0, 0, 1),   vec3<T>(0, 0, -1)
+    };
+
+    vec3<T> offsets[5] = {
+        vec3<T>(0, box_min_y, 0), vec3<T>(box_min_x, 0, 0), vec3<T>(box_max_x, 0, 0),
+        vec3<T>(0, 0, box_min_z), vec3<T>(0, 0, box_max_z)
+    };
 
     rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) mutable {
-
-        const vec3<T> pi(
-            search_dir(vh, 0), search_dir(vh, 1), search_dir(vh, 2));
-
+        const vec3<T> pi(search_dir(vh, 0), search_dir(vh, 1), search_dir(vh, 2));
         const vec3<T> xi = x.to_glm<3>(vh);
 
-        // floor
-        T p_n = glm::dot(pi, ground_n);
-        if (p_n < 0) {
-            alpha(vh) = std::min(
-                alpha(vh), T(0.9) * glm::dot(ground_n, (xi - ground_o)) / -p_n);
-        }
+        // Check all 5 faces
+        for (int face = 0; face < 5; face++) {
+            vec3<T> n = planes[face];
+            vec3<T> o = offsets[face];
 
+            T p_n = glm::dot(pi, n);
+            if (p_n < 0) {  // moving toward this wall
+                alpha(vh) = std::min(alpha(vh),
+                                     T(0.9) * glm::dot(n, (xi - o)) / -p_n);
+            }
+        }
     });
 
-    // we want the min here but since the min value is greater than 1 (y_ground
-    // is less than 0, and search_dir is also less than zero)
     return alpha.abs_min();
 }
