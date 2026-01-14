@@ -6,6 +6,8 @@
 #include "rxmesh/diff/lbfgs_solver.h"
 #include "rxmesh/diff/newton_solver.h"
 
+#include "mean_curv.h"
+
 struct arg
 {
     std::string obj_file_name   = STRINGIFY(INPUT_DIR) "giraffe.obj";
@@ -50,11 +52,14 @@ std::string direction_name(Direction dir)
 template <typename T>
 void add_mesh_to_polyscope(RXMeshStatic&       rx,
                            VertexAttribute<T>& v,
+                           VertexAttribute<T>& curv,
                            std::string         name)
 {
 #ifdef USE_POLYSCOPE
     if (v.get_num_attributes() == 3) {
-        polyscope::registerSurfaceMesh(name, v, rx.get_polyscope_mesh()->faces);
+        auto ps_mesh = polyscope::registerSurfaceMesh(
+            name, v, rx.get_polyscope_mesh()->faces);
+        ps_mesh->addVertexScalarQuantity("MeanCurv", curv);
     } else {
         auto v3 = *rx.add_vertex_attribute<T>(name, 3);
 
@@ -64,8 +69,10 @@ void add_mesh_to_polyscope(RXMeshStatic&       rx,
             v3(h, 2) = 0;
         });
 
-        polyscope::registerSurfaceMesh(
+        auto ps_mesh = polyscope::registerSurfaceMesh(
             name, v3, rx.get_polyscope_mesh()->faces);
+
+        ps_mesh->addVertexScalarQuantity("MeanCurv", curv);
 
         rx.remove_attribute(name);
     }
@@ -156,6 +163,13 @@ void manifold_optimization(RXMeshStatic&                          rx,
     auto B1 = *rx.add_vertex_attribute<T>("B1", 3);
     auto B2 = *rx.add_vertex_attribute<T>("B2", 3);
 
+    auto curv = *rx.add_vertex_attribute<T>("MeanCurv", 1);
+
+    compute_mean_curv(rx, curv);
+    curv.move(DEVICE, HOST);
+
+    add_mesh_to_polyscope(rx, S, curv, "input");
+
     // auto fcolor = *rx.add_face_attribute<T>("fColor", 1);
 
     compute_local_bases(rx, S, B1, B2);
@@ -244,8 +258,8 @@ void manifold_optimization(RXMeshStatic&                          rx,
         }
 
 
-        /*T f = problem.get_current_loss();
-        RXMESH_INFO("Iteration= {}: Energy = {}", iter, f);*/
+        T f = problem.get_current_loss();
+        RXMESH_INFO("Iteration= {}: Energy = {}", iter, f);
 
 
         solver.compute_direction();
@@ -299,7 +313,9 @@ void manifold_optimization(RXMeshStatic&                          rx,
 #ifdef USE_POLYSCOPE
     S.move(DEVICE, HOST);
 
-    add_mesh_to_polyscope(rx, S, direction_name(dir));
+    rx.get_polyscope_mesh()->addVertexScalarQuantity("MeanCurv", curv);
+
+    add_mesh_to_polyscope(rx, S, curv, "output");
 
     // auto ps = polyscope::registerSurfaceMesh(
     //     direction_name(dir) + std::to_string(iter),
@@ -386,6 +402,9 @@ int main(int argc, char** argv)
 
 
     RXMeshStatic rx(Arg.obj_file_name);
+
+    //rx.scale({0, 0, 0}, {1, 1, 1});
+    //rx.export_obj("brain_refined.obj", *rx.get_input_vertex_coordinates());
 
     std::vector<std::vector<uint32_t>> fv;
     std::vector<std::vector<float>>    init_s;
