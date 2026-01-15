@@ -18,7 +18,7 @@
 #include "spring_energy.h"
 
 #include <Eigen/Core>
-#include <thrust/sequence.h>
+#include <unordered_set>
 
 using namespace rxmesh;
 
@@ -467,6 +467,7 @@ struct PhysicsParams {
     T   dhat           = 0.1;
     T   kappa          = 1e5;
     T   bending_stiff  = 1e8;    // k_b
+    std::vector<int> export_steps;  // List of step IDs to export as OBJ
     int num_steps      = 5;      // Number of simulation steps
 
     // Box boundary (5 walls - no ceiling)
@@ -866,23 +867,6 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
             problem.update_hessian();
             timer.stop("UpdateHessian");
 
-            // CuSPARSE baseline comparison (for benchmarking)
-            if constexpr (BENCHMARK_CUSPARSE) {
-                timer.start("UpdateHessian_CuSPARSE");
-                COOMatrix cusparse_hess_coo = update_hessian_cusparse(problem, rx, VERIFY_SPARSITY);
-                timer.stop("UpdateHessian_CuSPARSE");
-
-                // Verify sparsity patterns match
-                if (VERIFY_SPARSITY) {
-                    bool patterns_match = verify_sparsity_patterns(*problem.hess, cusparse_hess_coo);
-                    if (patterns_match) {
-                        printf("[VERIFY] Sparsity patterns MATCH ✓\n");
-                    } else {
-                        printf("[VERIFY] Sparsity patterns MISMATCH ✗\n");
-                    }
-                }
-            }
-
             // printf("neo_hookean: step_forward() - Evaluating terms after line search\n");
             timer.start("EnergyEval");
             problem.eval_terms();
@@ -934,13 +918,42 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     };
 
     // printf("declared everything. starting simulation.\n");
-#if USE_POLYSCOPE
-    draw(rx, x, velocity, step_forward, dir, grad, steps);
-#else
+// #if USE_POLYSCOPE
+//     draw(rx, x, velocity, step_forward, dir, grad, steps);
+// #else
+    // Convert export_steps vector to set for O(1) lookup
+    std::unordered_set<int> export_set(params.export_steps.begin(), params.export_steps.end());
+
     while (steps < params.num_steps) {
         step_forward();
+
+        // Check if we should export at this step
+        if (export_set.count(steps - 1) > 0) {  // steps is already incremented in step_forward()
+            // Move vertex positions to HOST
+            x.move(DEVICE, HOST);
+
+            // Create filename with step number
+            std::string mesh_filename = STRINGIFY(OUTPUT_DIR) + std::string("scene_step_") +
+                                   std::to_string(steps - 1) + ".obj";
+
+            RXMESH_INFO("Exporting mesh at step {} to {}", steps - 1, mesh_filename);
+            rx.export_obj(mesh_filename, x);
+
+            // Export Hessian matrix
+            problem.hess->move(DEVICE, HOST);
+            std::string hess_filename = STRINGIFY(OUTPUT_DIR) + std::string("hessian_step_") +
+                                   std::to_string(steps - 1) + ".txt";
+            problem.hess->to_file(hess_filename);
+            RXMESH_INFO("Exported Hessian at step {} to {} (dim: {}x{}, nnz: {})",
+                        steps - 1, hess_filename,
+                        problem.hess->rows(), problem.hess->cols(),
+                        problem.hess->non_zeros());
+
+            // Move back to DEVICE for next iteration
+            x.move(HOST, DEVICE);
+        }
     }
-#endif
+// #endif
 
 
     // Print comprehensive timing summary
@@ -990,21 +1003,6 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                 timer.elapsed_millis("UpdateHessian"),
                 100.0 * timer.elapsed_millis("UpdateHessian") / timer.elapsed_millis("Step"),
                 timer.elapsed_millis("UpdateHessian") / float(steps));
-
-    // Print CuSPARSE comparison if enabled
-    if constexpr (BENCHMARK_CUSPARSE) {
-        T cusparse_time = timer.elapsed_millis("UpdateHessian_CuSPARSE");
-        T custom_time = timer.elapsed_millis("UpdateHessian");
-        T speedup = cusparse_time / custom_time;
-        RXMESH_INFO("");
-        RXMESH_INFO("=== Hessian Update Benchmark ===");
-        RXMESH_INFO("Custom implementation:  {:.2f} ms ({:.2f} ms/iter)",
-                    custom_time, custom_time / float(steps));
-        RXMESH_INFO("CuSPARSE baseline:     {:.2f} ms ({:.2f} ms/iter)",
-                    cusparse_time, cusparse_time / float(steps));
-        RXMESH_INFO("Speedup: {:.2f}x", speedup);
-        RXMESH_INFO("================================");
-    }
 
     RXMESH_INFO("======================");
 }
@@ -1149,6 +1147,15 @@ int main(int argc, char** argv)
         params.dhat = scene_config.simulation.dhat;
         params.kappa = scene_config.simulation.kappa;
         params.num_steps = scene_config.simulation.num_steps;
+        params.export_steps = scene_config.simulation.export_steps;
+
+        // Box parameters
+        params.use_box = scene_config.simulation.use_box;
+        params.box_min_x = scene_config.simulation.box_min_x;
+        params.box_max_x = scene_config.simulation.box_max_x;
+        params.box_min_y = scene_config.simulation.box_min_y;
+        params.box_min_z = scene_config.simulation.box_min_z;
+        params.box_max_z = scene_config.simulation.box_max_z;
 
         // Box parameters
         params.use_box = scene_config.simulation.use_box;

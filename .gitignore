@@ -16,6 +16,7 @@ input/*
 !input/el_topo_sphere_1280.obj
 !input/giraffe_embedding.obj
 !input/giraffe.obj
+!input/spot.obj
 build/
 build_debug/
 include/rxmesh/util/git_sha1.cpp
