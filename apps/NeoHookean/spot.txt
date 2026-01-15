@@ -1,0 +1,71 @@
+# Example scene configuration for NeoHookean simulation
+# Lines starting with # are comments
+
+simulation {
+    time_step 0.01
+    friction_coef 0.11
+    stiffness_coef 4e4
+    tol 0.01
+    dhat 0.05
+    kappa 1e8
+    num_steps 1001
+
+    # Export mesh at these step IDs (space-separated)
+    export_steps 10 200 1000
+
+    # Ground plane (point and normal)
+    ground_x 0.0
+    ground_y -1.0
+    ground_z 0.0
+    ground_nx 0.0
+    ground_ny 1.0
+    ground_nz 0.0
+
+    # Box boundary (5 walls - no ceiling)
+    # Set use_box to true to enable box walls instead of just floor
+    use_box 1
+    box_min_x -4
+    box_max_x 4
+    box_min_y 0.0
+    box_min_z -4
+    box_max_z 4
+}
+
+# Generate a 3x3x2 = 18 instances of spheres in a 3D grid
+mesh {
+    filepath "input/spot.obj"
+
+    # Material properties (shared by all instances)
+    density 1000.0
+    young_mod 1e5
+    poisson_ratio 0.4
+    bending_stiff 1e8
+
+    # 3D grid layout: 3 in X, 3 in Y, 2 in Z = 18 total instances
+    num_instances_x 5
+    num_instances_y 3
+    num_instances_z 5
+
+    # Spacing between instances
+    spacing_x 1.5
+    spacing_y 1.5
+    spacing_z 1.5
+
+    # Grid starting position (lower-left-front corner)
+    offset_x -3.0
+    offset_y 2.0
+    offset_z -3.0
+
+    # Scale applied to each instance
+    scale 0.5
+
+    # Initial velocity (shared by all instances)
+    velocity_x 0.0
+    velocity_y 0.0
+    velocity_z 0.0
+
+    # Constraints
+    fixed_x false
+    fixed_y false
+    fixed_z false
+}
