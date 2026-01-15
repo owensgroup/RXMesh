@@ -60,6 +60,7 @@ void add_mesh_to_polyscope(RXMeshStatic&       rx,
         auto ps_mesh = polyscope::registerSurfaceMesh(
             name, v, rx.get_polyscope_mesh()->faces);
         ps_mesh->addVertexScalarQuantity("MeanCurv", curv);
+        ps_mesh->setEnabled(false);
     } else {
         auto v3 = *rx.add_vertex_attribute<T>(name, 3);
 
@@ -73,7 +74,7 @@ void add_mesh_to_polyscope(RXMeshStatic&       rx,
             name, v3, rx.get_polyscope_mesh()->faces);
 
         ps_mesh->addVertexScalarQuantity("MeanCurv", curv);
-
+        ps_mesh->setEnabled(false);
         rx.remove_attribute(name);
     }
 #endif
@@ -299,6 +300,10 @@ void manifold_optimization(RXMeshStatic&                          rx,
                            });
 
         compute_local_bases(rx, S, B1, B2);
+
+        // S.move(DEVICE, HOST);
+        // add_mesh_to_polyscope(
+        //     rx, S, curv, std::string("iter_") + std::to_string(iter));
     }
     timer.stop("Total");
 
@@ -403,8 +408,9 @@ int main(int argc, char** argv)
 
     RXMeshStatic rx(Arg.obj_file_name);
 
-    //rx.scale({0, 0, 0}, {1, 1, 1});
-    //rx.export_obj("brain_refined.obj", *rx.get_input_vertex_coordinates());
+    // rx.scale({0, 0, 0}, {1, 1, 1});
+    // rx.export_obj("reefcrab.obj", *rx.get_input_vertex_coordinates());
+
 
     std::vector<std::vector<uint32_t>> fv;
     std::vector<std::vector<float>>    init_s;
