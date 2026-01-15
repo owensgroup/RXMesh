@@ -119,9 +119,7 @@ void arap(RXMeshStatic& rx)
 
 
     T   convergence_eps = 1e-2;
-    int newton_max_iter = 10;
-
-    int iterations = 1;
+    int newton_max_iter = 150;
 
     float       t    = 0;
     bool        flag = false;
@@ -129,25 +127,54 @@ void arap(RXMeshStatic& rx)
     vec3<float> end(0.0f, -0.2f, 0.0f);
     vec3<float> displacement(0.0f, 0.0f, 0.0f);
 
+
+    int  num_steps         = 0;
+    int  totla_newton_iter = 0;
+    bool is_running        = false;
+
+    Timers<GPUTimer> timer;
+    timer.add("Step");
+    timer.add("LineSearch");
+    timer.add("LinearSolver");
+    timer.add("Diff");
+    timer.add("NetwonSolve");
+
     auto polyscope_callback = [&]() mutable {
-        t += flag ? -0.5f : 0.5f;
+        bool step_once = false;
 
-        flag = (t < 0 || t > 1.0f) ? !flag : flag;
+        if (ImGui::Button("Start")) {
+            is_running = true;
+        }
 
-        displacement = (1 - t) * start + (t)*end;
+        ImGui::SameLine();
+        if (ImGui::Button("Step")) {
+            step_once = true;
+        }
 
-        // apply user deformation
-        rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) {
-            if (constraints(vh) == 1) {
-                P_prime(vh, 0) += displacement[0];
-                P_prime(vh, 1) += displacement[1];
-                P_prime(vh, 2) += displacement[2];
-            }
-        });
+        if (step_once || is_running) {
+
+            t += flag ? -0.5f : 0.5f;
+
+            flag = (t < 0 || t > 1.0f) ? !flag : flag;
+
+            displacement = (1 - t) * start + (t)*end;
+
+            // apply user deformation
+            rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) {
+                if (constraints(vh) == 1) {
+                    P_prime(vh, 0) += displacement[0];
+                    P_prime(vh, 1) += displacement[1];
+                    P_prime(vh, 2) += displacement[2];
+                }
+            });
 
 
-        // process step
-        for (int i = 0; i < iterations; i++) {
+            // process step
+            num_steps++;
+
+            RXMESH_INFO("Step {}", num_steps);
+
+            timer.start("Step");
             // solver for rotation
             rx.run_kernel<blockThreads>(
                 {Op::VV},
@@ -158,20 +185,28 @@ void arap(RXMeshStatic& rx)
                 weight_matrix);
 
             // solve for position via Newton
+            timer.start("NetwonSolve");
             for (int iter = 0; iter < newton_max_iter; ++iter) {
+                totla_newton_iter++;
                 // evaluate energy terms
+                timer.start("Diff");
                 problem.eval_terms();
+                timer.stop("Diff");
 
                 // get the current value of the loss function
-                T f = problem.get_current_loss();
-                RXMESH_INFO(
-                    "Iter {} =, Newton Iter= {}: Energy = {}", i, iter, f);
+                // T f = problem.get_current_loss();
+                // RXMESH_INFO("Iter {} =, Newton Iter= {}: Energy = {}",
+                //            num_steps,
+                //            iter,
+                //            f);
 
                 // apply bc
                 newton_solver.apply_bc(bc);
 
                 // direction newton
+                timer.start("LinearSolver");
                 newton_solver.compute_direction();
+                timer.stop("LinearSolver");
 
 
                 // newton decrement
@@ -181,13 +216,25 @@ void arap(RXMeshStatic& rx)
                 }
 
                 // line search
+                timer.start("LineSearch");
                 newton_solver.line_search();
+                timer.stop("LineSearch");
             }
+            timer.stop("Step");
+            timer.stop("NetwonSolve");
         }
-
 
         // move mat to the host
         P_prime.move(DEVICE, HOST);
+
+        if (ImGui::Button("Export")) {
+            rx.export_obj(std::to_string(num_steps) + ".obj", P_prime);
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Pause")) {
+            is_running = false;
+        }
 
 #if USE_POLYSCOPE
         rx.get_polyscope_mesh()->updateVertexPositions(P_prime);
@@ -195,13 +242,44 @@ void arap(RXMeshStatic& rx)
     };
 
 #ifdef USE_POLYSCOPE
+    polyscope::options::groundPlaneMode =
+        polyscope::GroundPlaneMode::ShadowOnly;
     polyscope::view::upDir         = polyscope::UpDir::ZUp;
     polyscope::state::userCallback = polyscope_callback;
+    rx.get_polyscope_mesh()->setSurfaceColor(glm::vec3(0.941, 0.901, 0.549));
     polyscope::show();
 
 #endif
 
     weight_matrix.release();
+
+    RXMESH_INFO(
+        "DiffArap: #V= {}, #Steps ={}, time= {} (ms), time/step= {} ms/iter",
+        rx.get_num_vertices(),
+        num_steps,
+        timer.elapsed_millis("Step"),
+        timer.elapsed_millis("Step") / float(num_steps));
+
+    RXMESH_INFO("LinearSolver {} (ms), Diff {} (ms), LineSearch {} (ms)",
+                timer.elapsed_millis("LinearSolver"),
+                timer.elapsed_millis("Diff"),
+                timer.elapsed_millis("LineSearch"));
+
+    RXMESH_INFO(
+        "LinearSolver/step {} (ms), Diff/step {} (ms), LineSearch/step {} (ms)",
+        timer.elapsed_millis("LinearSolver") / float(num_steps),
+        timer.elapsed_millis("Diff") / float(num_steps),
+        timer.elapsed_millis("LineSearch") / float(num_steps));
+
+    RXMESH_INFO(
+        "#Newton_iter = {}, NewtonSolve/Newton_iter = {}, "
+        "LinearSolver/Newton_iter {} (ms), Diff/Newton_iter "
+        "{} (ms), LineSearch/Newton_iter {} (ms)",
+        totla_newton_iter,
+        timer.elapsed_millis("NetwonSolve") / float(totla_newton_iter),
+        timer.elapsed_millis("LinearSolver") / float(totla_newton_iter),
+        timer.elapsed_millis("Diff") / float(totla_newton_iter),
+        timer.elapsed_millis("LineSearch") / float(totla_newton_iter));
 }
 
 int main(int argc, char** argv)
