@@ -17,6 +17,7 @@ void draw(RXMeshStatic& rx,
     polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::Tile;
 
     bool is_running = false;
+    bool is_export  = false;
 
     auto ps_callback = [&]() mutable {
         auto step_and_update = [&]() {
@@ -42,10 +43,13 @@ void draw(RXMeshStatic& rx,
         }
 
         ImGui::SameLine();
-        if (ImGui::Button("Export")) {
-            rx.export_obj("MS_" + std::to_string(time_step) + ".obj", x_tilde);
+        if (is_export) {
+            rx.export_obj(std::to_string(time_step) + ".obj", x_tilde);
         }
 
+        if (ImGui::Button("Export")) {
+            is_export = !is_export;
+        }
         if (is_running) {
             step_and_update();
         }

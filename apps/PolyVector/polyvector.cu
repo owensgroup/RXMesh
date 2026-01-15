@@ -7,9 +7,11 @@
 #include "rxmesh/diff/diff_vector_problem.h"
 #include "rxmesh/diff/gauss_newton_solver.h"
 
-#include "read_raw_field.h"
+#include "raw_field_io.h"
 
 #include "thrust/complex.h"
+
+#include <nvtx3/nvToolsExt.h>
 
 using namespace rxmesh;
 using T = float;
@@ -199,8 +201,20 @@ int main(int argc, char** argv)
 
     std::string base_mesh_name = STRINGIFY(INPUT_DIR) "cheburashka";
 
+    int max_iters = 60;
+
+    int cg_max_iters = 50;
+
     if (argc >= 2) {
         base_mesh_name = std::string(argv[1]);
+    }
+
+    if (argc >= 3) {
+        max_iters = atoi(argv[2]);
+    }
+
+    if (argc >= 4) {
+        cg_max_iters = atoi(argv[3]);
     }
 
     // cheburashka
@@ -218,15 +232,15 @@ int main(int argc, char** argv)
 
     constexpr int N = 4;
 
-    const T   w_smooth_decay             = 0.8;
-    const T   w_polycurl                 = 100.0;
-    const T   w_polyquotient             = 10.0;
-    const T   w_close_unconstrained_sqrt = std::sqrt(1e-3);
-    const T   w_close_constrained_sqrt   = 10.0;
-    const T   w_barrier                  = 0.1;
-    const T   s_barrier                  = 0.9;
-    T         step_size                  = 0.1;
-    const int max_iters                  = 60;
+    const T w_smooth_decay             = 0.8;
+    const T w_polycurl                 = 100.0;
+    const T w_polyquotient             = 10.0;
+    const T w_close_unconstrained_sqrt = std::sqrt(1e-3);
+    const T w_close_constrained_sqrt   = 10.0;
+    const T w_barrier                  = 0.1;
+    const T s_barrier                  = 0.9;
+    T       step_size                  = 0.1;
+
 
     DenseMatrix<T> w_smooth(1, 1, LOCATION_ALL);
     w_smooth(0) = 1.0;
@@ -265,10 +279,10 @@ int main(int argc, char** argv)
     auto x_new = *rx.add_attribute_like("x_new", *problem.objective);
 
 #ifdef USE_CUDSS
-     using SolverT =
-         cuDSSCholeskySolver<SparseMatrix<T>, ProblemT::DenseMatT::OrderT>;
+    using SolverT =
+        cuDSSCholeskySolver<SparseMatrix<T>, ProblemT::DenseMatT::OrderT>;
 
-    //using SolverT = PCGSolver<T, ProblemT::DenseMatT::OrderT>;
+    // using SolverT = CGSolver<T, ProblemT::DenseMatT::OrderT>;
 #else
     using SolverT =
         CholeskySolver<SparseMatrix<T>, ProblemT::DenseMatT::OrderT>;
@@ -438,12 +452,24 @@ int main(int argc, char** argv)
 
     problem.objective->copy_from(x_init, LOCATION_ALL, LOCATION_ALL);
 
-    problem.prep_eval();
-    solver.prep_solver();
-
-    rx.run_query_kernel<Op::EF, 256>(
     Timers<GPUTimer> timer;
     timer.add("Total");
+    timer.add("Diff");
+    timer.add("LineSearch");
+    timer.add("LinearSolver");
+    timer.add("problem.prep_eval");
+    timer.add("solver.prep_solver");
+
+    // nvtxRangePushA("problem.prep_eval");
+    //  nvtxRangePop();
+    timer.start("problem.prep_eval");
+    problem.prep_eval();
+    timer.stop("problem.prep_eval");
+
+
+    timer.start("solver.prep_solver");
+    solver.prep_solver(cg_max_iters);
+    timer.stop("solver.prep_solver");
 
     timer.start("Total");
     for (int iter = 0; iter < max_iters; ++iter) {
@@ -452,15 +478,20 @@ int main(int argc, char** argv)
         // compute g = -J^T r
         // the -1.0 is used here so we don't need to scale things again
         // in the gauss-newton which solves (J^T J).dir = -J^T r
+        timer.start("Diff");
         problem.eval_terms_sum_of_squares(-1.0);
+        timer.stop("Diff");
 
         T f = problem.get_current_loss();
-
         RXMESH_INFO("Iteration: {}, Energy: {}", iter, f);
 
         // compute new direction
+        timer.start("LinearSolver");
         solver.compute_direction();
+        timer.stop("LinearSolver");
 
+
+        timer.start("LineSearch");
         // Line search
         while (true) {
             // take step
@@ -496,8 +527,21 @@ int main(int argc, char** argv)
             }
         }
 
-        x_prev.copy_from(*problem.objective, DEVICE, DEVICE);
-        problem.objective->copy_from(x_new, DEVICE, DEVICE);
+        rx.for_each_face(DEVICE,
+                         [x0  = x_prev,
+                          obj = *problem.objective,
+                          x1  = x_new,
+                          N   = N] __device__(const FaceHandle fh) mutable {
+                             for (int i = 0; i < N; ++i) {
+                                 x0(fh, i)  = obj(fh, i);
+                                 obj(fh, i) = x1(fh, i);
+                             }
+                         });
+
+        timer.stop("LineSearch");
+
+        // x_prev.copy_from(*problem.objective, DEVICE, DEVICE);
+        // problem.objective->copy_from(x_new, DEVICE, DEVICE);
 
 
         // Decay smoothness term after every 5 iters
@@ -507,11 +551,27 @@ int main(int argc, char** argv)
     }
     timer.stop("Total");
 
-    RXMESH_INFO("PolyVector: iterations= {}, time={} (ms)",
+    RXMESH_INFO("PolyVector: iterations= {}, time={} (ms), time/iter (ms) {}",
                 max_iters,
-                timer.elapsed_millis("Total"));
+                timer.elapsed_millis("Total"),
+                timer.elapsed_millis("Total") / max_iters);
 
-    RXMESH_INFO("Solve time: {} (ms)", solver.solve_time);
+    RXMESH_INFO("problem.prep_eval (ms)= {}, solver.prep_solvers (ms) = {}",
+                timer.elapsed_millis("problem.prep_eval"),
+                timer.elapsed_millis("solver.prep_solver"));
+
+    RXMESH_INFO("Diff (ms)= {}, Line Search (ms) = {}, Linear Solver (ms) = {}",
+                timer.elapsed_millis("Diff"),
+                timer.elapsed_millis("LineSearch"),
+                timer.elapsed_millis("LinearSolver"));
+
+    RXMESH_INFO(
+        "Diff/iter (ms)= {}, Line Search/iter (ms) = {}, Linear Solver/iter "
+        "(ms) = {}",
+        timer.elapsed_millis("Diff") / max_iters,
+        timer.elapsed_millis("LineSearch") / max_iters,
+        timer.elapsed_millis("LinearSolver") / max_iters);
+
 #if USE_POLYSCOPE
     problem.objective->move(DEVICE, HOST);
 
@@ -522,6 +582,21 @@ int main(int argc, char** argv)
     rx.get_polyscope_mesh()->addFaceVectorQuantity("B2", b2);
     polyscope::show();
 #endif
+
+
+    // std::string mesh_file_name =
+    //     base_mesh_name.substr(base_mesh_name.find_last_of("/\\") + 1);
+    //
+    // rx.export_obj("rx_" + mesh_file_name + ".obj", v);
+    // Eigen::write_text("rx_" + mesh_file_name + "_x_init.dat",
+    //                   x_init.to_matrix()->to_eigen_copy());
+    // Eigen::write_text("rx_" + mesh_file_name + "_b1.dat",
+    //                   b1.to_matrix()->to_eigen_copy());
+    // Eigen::write_text("rx_" + mesh_file_name + "_b2.dat",
+    //                   b2.to_matrix()->to_eigen_copy());
+    // Eigen::write_text("rx_" + mesh_file_name + "_x.dat",
+    //                   problem.objective->to_matrix()->to_eigen_copy());
+
 
     solver.release();
     w_smooth.release();

@@ -61,7 +61,7 @@ std::pair<PairT*, size_t> generate_pairs(RXMeshStatic& rx)
     rx.for_each_vertex(
         HOST,
         [&](const VertexHandle& vh) {
-            if (x(vh, 1) < 0.0001) {
+            if (x(vh, 1) < 0.1) {
                 bottom.push_back(vh);
             }
         },
@@ -74,7 +74,7 @@ std::pair<PairT*, size_t> generate_pairs(RXMeshStatic& rx)
     rx.for_each_vertex(
         HOST,
         [&](const VertexHandle& vh) {
-            if (x(vh, 1) > 0.99) {
+            if (x(vh, 1) > 0.5) {
                 for (int i = 0; i < bottom.size(); ++i) {
                     VertexHandle nh(bottom[i]);
 
@@ -174,7 +174,7 @@ TEST(Diff, HessUpdate)
 
     using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle, true>;
 
-    int expected_num_new_pairs = n;
+    int expected_num_new_pairs = rx.get_num_vertices()*rx.get_num_vertices();
 
     ProblemT problem(rx, true, expected_num_new_pairs);
 
@@ -189,9 +189,9 @@ TEST(Diff, HessUpdate)
 
     int prev_nnz = problem.hess->non_zeros();
 
-    // problem.hess->reset(0, HOST);
-    // problem.hess->move(DEVICE, HOST);
-    // problem.hess->to_file("old_hess");
+    problem.hess->reset(0, HOST);
+    problem.hess->move(DEVICE, HOST);
+    problem.hess->to_file("old_hess");
 
     auto [d_pairs, num_new_pairs] = generate_pairs(rx);
 
@@ -209,9 +209,9 @@ TEST(Diff, HessUpdate)
     EXPECT_EQ(new_nnz,
               prev_nnz + 2 * num_new_pairs * VariableDim * VariableDim);
 
-    // problem.hess->reset(0, HOST);
-    // problem.hess_new->move(DEVICE, HOST);
-    // problem.hess_new->to_file("new_hess");
+    problem.hess->reset(0, HOST);
+    problem.hess->move(DEVICE, HOST);
+    problem.hess->to_file("new_hess");
 
     // Note that we did not add any new term for the contact pairs. So Hessian
     // still evaluate to the same Hessian without these new contact pairs--we

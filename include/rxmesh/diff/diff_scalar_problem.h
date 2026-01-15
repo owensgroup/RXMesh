@@ -289,6 +289,10 @@ struct DiffScalarProblem
         if (face_interact_vertex) {
             vv_pairs.reset(vv_prv_num_pairs, vv_prv_num_index);
         }
+#ifndef NDEBUG
+        hess->check_repeated_indices();
+        hess_new->check_repeated_indices();
+#endif
     }
 
     /**

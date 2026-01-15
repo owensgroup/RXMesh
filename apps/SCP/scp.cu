@@ -103,7 +103,13 @@ int main(int argc, char** argv)
     const uint32_t device_id = 0;
     cuda_query(device_id);
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bunnyhead.obj");
+    std::string filename = STRINGIFY(INPUT_DIR) "bunnyhead.obj";
+
+    if (argc >= 2) {
+        filename = std::string(argv[1]);
+    }
+
+    RXMeshStatic rx(filename);
 
     constexpr uint32_t CUDABlockSize = 256;
 

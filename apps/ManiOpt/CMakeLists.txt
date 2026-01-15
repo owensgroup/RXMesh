@@ -2,6 +2,7 @@ add_executable(ManiOpt)
 
 set(SOURCE_LIST
     mani_opt.cu	
+	mean_curv.h
 )
 
 target_sources(ManiOpt 
