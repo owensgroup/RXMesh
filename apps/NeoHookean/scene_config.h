@@ -50,13 +50,15 @@ struct MeshConfig
 template <typename T>
 struct SimulationConfig
 {
-    T   time_step      = 0.01;  // Time step (h)
-    T   fricition_coef = 0.11;  // Friction coefficient (mu)
-    T   stiffness_coef = 4e4;   // Stiffness coefficient
-    T   tol            = 0.01;  // Solver tolerance
-    T   dhat           = 0.1;   // Contact distance threshold
-    T   kappa          = 1e5;   // Contact barrier stiffness
-    int num_steps      = 5;     // Number of simulation steps
+    T   time_step       = 0.01;  // Time step (h)
+    T   fricition_coef  = 0.11;  // Friction coefficient (mu)
+    T   stiffness_coef  = 4e4;   // Stiffness coefficient
+    T   tol             = 0.01;  // Solver tolerance
+    T   dhat            = 0.1;   // Contact distance threshold
+    T   kappa           = 1e5;   // Contact barrier stiffness
+    int num_steps       = 5;     // Number of simulation steps
+    int cg_max_iter     = 1000;  // CG Maximum number of iterations
+    int newton_max_iter = 10;    // Maximum number of newton steps
 
     // Export configuration
     std::vector<int> export_steps;  // List of step IDs to export as OBJ
@@ -199,6 +201,10 @@ class SceneConfigParser
             iss >> sim.kappa;
         else if (key == "num_steps")
             iss >> sim.num_steps;
+        else if (key == "cg_max_iter")
+            iss >> sim.cg_max_iter;
+        else if (key == "newton_max_iter")
+            iss >> sim.newton_max_iter;
         else if (key == "export_steps") {
             // Parse space-separated list of integers
             int step_id;

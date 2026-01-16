@@ -9,6 +9,8 @@ simulation {
     dhat 0.05
     kappa 1e8
     num_steps 1001
+	cg_max_iter 1000
+	newton_max_iter 10
 
     # Export mesh at these step IDs (space-separated)
     export_steps 10 200 1000

@@ -9,6 +9,8 @@ simulation {
     dhat 0.05
     kappa 1e8
     num_steps 100
+	cg_max_iter 1000
+	newton_max_iter 10
 
     # Ground plane (point and normal)
     ground_x 0.0

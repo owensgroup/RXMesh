@@ -36,7 +36,9 @@ struct PhysicsParams
     T                kappa          = 1e5;
     T                bending_stiff  = 1e8;  // k_b
     std::vector<int> export_steps;          // List of step IDs to export as OBJ
-    int              num_steps = 5;         // Number of simulation steps
+    int              num_steps       = 5;   // Number of simulation steps
+    int              cg_max_iter     = 1000;
+    int              newton_max_iter = 10;
 
     // Box boundary (5 walls - no ceiling)
     bool use_box   = false;
@@ -129,8 +131,10 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     BVHBuffers<T> vertex_bvh_buffers(rx.get_num_vertices());
     BVHBuffers<T> face_bvh_buffers(rx.get_num_faces());
 
-    // CGSolver<T, ProblemT::DenseMatT::OrderT> solver(*problem.hess, 1, 1000);
-    PCGSolver<T, ProblemT::DenseMatT::OrderT> solver(*problem.hess, 1, 1000);
+    // CGSolver<T, ProblemT::DenseMatT::OrderT> solver(*problem.hess, 1,
+    // params.cg_max_iter);
+    PCGSolver<T, ProblemT::DenseMatT::OrderT> solver(
+        *problem.hess, 1, params.cg_max_iter);
 
 
     NetwtonSolver newton_solver(problem, &solver);
@@ -234,7 +238,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
         problem.update_hessian();
         timer.stop("UpdateHessian");
 
-        timer.start("EnergyEval");        
+        timer.start("EnergyEval");
         problem.eval_terms();
         timer.stop("EnergyEval");
 
@@ -347,7 +351,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 
             iter++;
 
-            if (iter > 10) {
+            if (iter > params.newton_max_iter) {
                 break;
             }
         }
@@ -547,6 +551,10 @@ int main(int argc, char** argv)
             continue;
         } else if (arg == "--density" && i + 1 < argc) {
             params.density = std::atof(argv[++i]);
+        } else if (arg == "--cg_max_iter" && i + 1 < argc) {
+            params.cg_max_iter = std::atoi(argv[++i]);
+        } else if (arg == "--newton_max_iter" && i + 1 < argc) {
+            params.newton_max_iter = std::atoi(argv[++i]);
         } else if (arg == "--young" && i + 1 < argc) {
             params.young_mod = std::atof(argv[++i]);
         } else if (arg == "--poisson" && i + 1 < argc) {
@@ -569,19 +577,21 @@ int main(int argc, char** argv)
             // clang-format off
             printf("Usage: %s [options]\n", argv[0]);
             printf("Options:\n");
-            printf("  --config <file>    Load scene from configuration file\n");
-            printf("  --density <val>    Density (default: 1000)\n");
-            printf("  --young <val>      Young's modulus (default: 1e5)\n");
-            printf("  --poisson <val>    Poisson ratio (default: 0.4)\n");
-            printf("  --timestep <val>   Time step (default: 0.01)\n");            
-            printf("  --stiffness <val>  Stiffness coefficient (default: 4e4)\n");
-            printf("  --tol <val>        Tolerance (default: 0.01)\n");
-            printf("  --dhat <val>       Contact distance threshold (default: 0.1)\n");
-            printf("  --kappa <val>      Contact stiffness (default: 1e5)\n");
-            printf("  --bending <val>    Bending stiffness (default: 1e3)\n");
-            printf("  --steps <val>      Number of simulation steps (default: 5)\n");
-            printf("  --help, -h         Show this help message\n");
-            // clang-format on
+            printf("  --config <file>         Load scene from configuration file\n");
+            printf("  --density <val>         Density (default: 1000)\n");
+            printf("  --cg_max_iter <val>     CG max num of iterations\n");
+            printf("  --newton_max_iter <val> Newton max num of iterations\n");
+            printf("  --young <val>           Young's modulus (default: 1e5)\n");
+            printf("  --poisson <val>         Poisson ratio (default: 0.4)\n");
+            printf("  --timestep <val>        Time step (default: 0.01)\n");            
+            printf("  --stiffness <val>       Stiffness coefficient (default: 4e4)\n");
+            printf("  --tol <val>             Tolerance (default: 0.01)\n");
+            printf("  --dhat <val>            Contact distance threshold (default: 0.1)\n");
+            printf("  --kappa <val>           Contact stiffness (default: 1e5)\n");
+            printf("  --bending <val>         Bending stiffness (default: 1e3)\n");
+            printf("  --steps <val>           Number of simulation steps (default: 5)\n");
+            printf("  --help, -h              Show this help message\n");
+            // clang-format on            
             return 0;
         }
     }
@@ -602,11 +612,14 @@ int main(int argc, char** argv)
         // Override params with simulation config
         params.time_step      = scene_config.simulation.time_step;
         params.stiffness_coef = scene_config.simulation.stiffness_coef;
-        params.tol            = scene_config.simulation.tol;
-        params.dhat           = scene_config.simulation.dhat;
-        params.kappa          = scene_config.simulation.kappa;
-        params.num_steps      = scene_config.simulation.num_steps;
-        params.export_steps   = scene_config.simulation.export_steps;
+        
+        params.tol              = scene_config.simulation.tol;
+        params.dhat             = scene_config.simulation.dhat;
+        params.kappa            = scene_config.simulation.kappa;
+        params.num_steps        = scene_config.simulation.num_steps;
+        params.cg_max_iter      = scene_config.simulation.cg_max_iter;
+        params.newton_max_iter  = scene_config.simulation.newton_max_iter;        
+        params.export_steps     = scene_config.simulation.export_steps;
 
         // Box parameters
         params.use_box   = scene_config.simulation.use_box;
@@ -648,6 +661,8 @@ int main(int argc, char** argv)
     RXMESH_INFO("  kappa: {}", params.kappa);
     RXMESH_INFO("  Bending stiffness: {}", params.bending_stiff);
     RXMESH_INFO("  Number of steps: {}", params.num_steps);
+    RXMESH_INFO("  CG max iter: {}", params.cg_max_iter);
+    RXMESH_INFO("  Newton max iter: {}", params.newton_max_iter);
     if (params.use_box) {
         RXMESH_INFO("  Box enabled: [{}, {}] x [{}, open] x [{}, {}]",
                     params.box_min_x,
@@ -664,8 +679,8 @@ int main(int argc, char** argv)
 
     T    dx       = 0.1f;  // mesh spacing for contact area
     auto x        = *rx.get_input_vertex_coordinates();
-    auto velocity = *rx.add_vertex_attribute<T>("Velocity", 3);
-    velocity.reset(0, DEVICE);
+    auto vel = *rx.add_vertex_attribute<T>("vel", 3);
+    vel.reset(0, DEVICE);
 
     // Apply transformations per instance
     auto vertex_region_label = *rx.get_vertex_region_label();
@@ -689,10 +704,10 @@ int main(int argc, char** argv)
                 x(vh, 1) += t.ty;
                 x(vh, 2) += t.tz;
 
-                // Set initial velocity
-                velocity(vh, 0) = t.vx;
-                velocity(vh, 1) = t.vy;
-                velocity(vh, 2) = t.vz;
+                // Set initial vel
+                vel(vh, 0) = t.vx;
+                vel(vh, 1) = t.vy;
+                vel(vh, 2) = t.vz;
             }
         },
         NULL,
