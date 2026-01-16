@@ -32,7 +32,7 @@ struct PhysicsParams
     T                time_step      = 0.01;  // h
     T                stiffness_coef = 4e4;
     T                tol            = 0.01;
-    T                dhat           = 0.1;
+    T                dhat           = 0.2;
     T                kappa          = 1e5;
     T                bending_stiff  = 1e8;  // k_b
     std::vector<int> export_steps;          // List of step IDs to export as OBJ
