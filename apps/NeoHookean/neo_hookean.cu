@@ -19,6 +19,8 @@
 
 #include "naive_hessian_update.h"
 
+#include <nvtx3/nvToolsExt.h>
+
 using namespace rxmesh;
 
 using T = float;
@@ -60,8 +62,8 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     using HessMatT = typename ProblemT::HessMatT;
 
     // Problem parameters
-    const int max_vv_candidate_pairs = 5000;
-    const int max_vf_candidate_pairs = 5000;
+    const int max_vv_candidate_pairs = rx.get_num_vertices();
+    const int max_vf_candidate_pairs = rx.get_num_faces();
 
     const T density        = params.density;
     const T young_mod      = params.young_mod;
@@ -190,6 +192,8 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     // add bending energy
     bending_energy(problem, rest_angle, edge_area, bending_stiff, time_step);
 
+    int max_vv_contact(0), max_vf_contact(0);
+
     int steps = 0;
 
     Timers<GPUTimer> timer;
@@ -209,6 +213,8 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
         // x_tilde = x + v*h
         // x_n = x (copy current position)
         timer.start("Step");
+
+        nvtxRangePushA("Step");        
         rx.for_each_vertex(DEVICE, [=] __device__(VertexHandle vh) mutable {
             for (int i = 0; i < 3; ++i) {
                 x_tilde(vh, i) = x(vh, i) + time_step * velocity(vh, i);
@@ -218,6 +224,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 
         // evaluate energy
         timer.start("ContactDetection_Explicit");
+        nvtxRangePushA("ContactDetection_Explicit");
         add_contact(problem,
                     rx,
                     problem.vv_pairs,
@@ -232,19 +239,29 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                     vertex_region_label,
                     face_region_label,
                     face_vertices);
+        max_vv_contact = std::max(max_vv_contact, problem.vv_pairs.num_pairs());
+        max_vf_contact = std::max(max_vf_contact, problem.vf_pairs.num_pairs());
+
+        nvtxRangePop();
         timer.stop("ContactDetection_Explicit");
 
         timer.start("UpdateHessian");
+        nvtxRangePushA("UpdateHessian");
         problem.update_hessian();
+        nvtxRangePop();
         timer.stop("UpdateHessian");
 
         timer.start("EnergyEval");
+        nvtxRangePushA("EnergyEval");
         problem.eval_terms();
+        nvtxRangePop();
         timer.stop("EnergyEval");
 
         // get newton direction
         timer.start("LinearSolver");
+        nvtxRangePushA("LinearSolver");
         newton_solver.compute_direction();
+        nvtxRangePop();
         timer.stop("LinearSolver");
 
 
@@ -277,9 +294,11 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
             timer.stop("StepSize");
 
             timer.start("LineSearch");
+            nvtxRangePushA("LineSearch");
             bool ls_success = newton_solver.line_search(
                 line_search_init_step, 0.5, 64, 0.0, [&](auto temp_x) {
                     timer.start("ContactDetection_LineSearch");
+                    nvtxRangePushA("LineSearch");
                     add_contact(problem,
                                 rx,
                                 problem.vv_pairs,
@@ -294,8 +313,14 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                                 vertex_region_label,
                                 face_region_label,
                                 face_vertices);
+                    max_vv_contact =
+                        std::max(max_vv_contact, problem.vv_pairs.num_pairs());
+                    max_vf_contact =
+                        std::max(max_vf_contact, problem.vf_pairs.num_pairs());
+                    nvtxRangePop();
                     timer.stop("ContactDetection_LineSearch");
                 });
+            nvtxRangePop();
             timer.stop("LineSearch");
 
 
@@ -305,6 +330,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 
             // evaluate energy
             timer.start("ContactDetection_PostLineSearch");
+            nvtxRangePushA("ContactDetection_PostLineSearch");
             add_contact(problem,
                         rx,
                         problem.vv_pairs,
@@ -319,22 +345,33 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                         vertex_region_label,
                         face_region_label,
                         face_vertices);
+            max_vv_contact =
+                std::max(max_vv_contact, problem.vv_pairs.num_pairs());
+            max_vf_contact =
+                std::max(max_vf_contact, problem.vf_pairs.num_pairs());
+            nvtxRangePop();
             timer.stop("ContactDetection_PostLineSearch");
 
 
             timer.start("UpdateHessian");
+            nvtxRangePushA("UpdateHessian");
             problem.update_hessian();
+            nvtxRangePop();
             timer.stop("UpdateHessian");
 
 
             timer.start("EnergyEval");
+            nvtxRangePushA("EnergyEval");
             problem.eval_terms();
+            nvtxRangePop();
             timer.stop("EnergyEval");
 
 
             // get newton direction
             timer.start("LinearSolver");
+            nvtxRangePushA("LinearSolver");
             newton_solver.compute_direction();
+            nvtxRangePop();
             timer.stop("LinearSolver");
 
             // residual is abs_max(newton_dir)/ h
@@ -370,6 +407,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 
         steps++;
         timer.stop("Step");
+        nvtxRangePop();
     };
 
 
@@ -419,6 +457,9 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
     // Print comprehensive timing summary
     RXMESH_INFO("=== TIMING SUMMARY ===");
     RXMESH_INFO("Number of steps: {}", steps);
+    RXMESH_INFO("Max VV contact pair: {}, max VF contact pairs: {}",
+                max_vv_contact,
+                max_vf_contact);
     RXMESH_INFO("Total Step Time:        {:.2f} ms ({:.2f} ms/iter)",
                 timer.elapsed_millis("Step"),
                 timer.elapsed_millis("Step") / float(steps));

@@ -218,7 +218,7 @@ void vv_contact(ProblemT&                   problem,
 
             T dist_sq = (xi - xj).squaredNorm();
 
-            if (dist_sq < dhat_sq) {
+            if (dist_sq < dhat_sq && vh.unique_id() < other_vh.unique_id()) {
                 contact_pairs.insert(vh, other_vh);
             }
 
