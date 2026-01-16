@@ -230,9 +230,11 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                     face_vertices);
         timer.stop("ContactDetection_Explicit");
 
-
-        timer.start("EnergyEval");
+        timer.start("UpdateHessian");
         problem.update_hessian();
+        timer.stop("UpdateHessian");
+
+        timer.start("EnergyEval");        
         problem.eval_terms();
         timer.stop("EnergyEval");
 
