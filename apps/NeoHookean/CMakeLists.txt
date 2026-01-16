@@ -1,16 +1,16 @@
 add_executable(NeoHookean)
 
 set(SOURCE_LIST
-    neo_hookean.cu	
-	boundary_condition.h
-	inertial_energy.h
-	spring_energy.h
+    neo_hookean.cu		
+	inertial_energy.h	
 	gravity_energy.h
 	barrier_energy.h
 	draw.h
-	init.h
-	friction_energy.h
+	init.h	
 	neo_hookean_energy.h
+	bending_energy.h	
+	scene_config.h
+	naive_hessian_update.h
 )
 
 target_sources(NeoHookean 

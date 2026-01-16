@@ -286,10 +286,13 @@ int main(int argc, char** argv)
 {
     rx_init(0);
 
-    const uint32_t device_id = 0;
-    cuda_query(device_id);
+    std::string filename = STRINGIFY(INPUT_DIR) "dragon.obj";
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
+    if (argc > 1) {
+        filename = std::string(argv[1]);
+    }
+
+    RXMeshStatic rx(filename);
 
     if (!rx.is_closed()) {
         RXMESH_ERROR("Input mesh should be closed without boundaries");

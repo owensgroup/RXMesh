@@ -111,16 +111,9 @@ void arap(RXMeshStatic& rx)
             ret[2] = o_r[2];
         } else if (constraints(vh) == 1) {
             // user-displaced points
-            Eigen::Vector<T, 12> ci = Eigen::Vector<T, 12>::Zero();
-            ci[0]                   = cn(vh, 0);
-            ci[1]                   = cn(vh, 1);
-            ci[2]                   = cn(vh, 2);
-
-            Eigen::Vector<ActiveT, 12> diff = o_r - ci;
-
-            ret[0] = diff[0];
-            ret[1] = diff[1];
-            ret[2] = diff[2];
+            ret[0] = o_r[0] - cn(vh, 0);
+            ret[1] = o_r[1] - cn(vh, 1);
+            ret[2] = o_r[2] - cn(vh, 2);
         }
         ret[0] *= w_fit_sqrt;
         ret[1] *= w_fit_sqrt;
@@ -159,43 +152,41 @@ void arap(RXMeshStatic& rx)
 
 
     // E_reg
-    problem.template add_term<Op::EV, 3>(
-        [=] __device__(const auto& eh, const auto& iter, auto& obj) {
-            using ActiveT = ACTIVE_TYPE(eh);
-
-            // first vertex variables
-            Eigen::Vector<ActiveT, 12> var0 =
-                iter_val<ActiveT, 12>(eh, iter, obj, 0);
-
-            // second vertex variables
-            Eigen::Vector<ActiveT, 12> var1 =
-                iter_val<ActiveT, 12>(eh, iter, obj, 1);
-
-            // first vertex position
-            Eigen::Vector<ActiveT, 3> o0(var0[0], var0[1], var0[2]);
-
-            // second vertex position
-            Eigen::Vector<ActiveT, 3> o1(var1[0], var1[1], var1[2]);
-
-            // first vertex rotation matrix
-            Eigen::Vector<ActiveT, 3>    c0_v0(var0[3], var0[4], var0[5]);
-            Eigen::Vector<ActiveT, 3>    c1_v0(var0[6], var0[7], var0[8]);
-            Eigen::Vector<ActiveT, 3>    c2_v0(var0[9], var0[10], var0[11]);
-            Eigen::Matrix<ActiveT, 3, 3> r0;
-            r0 << c0_v0, c1_v0, c2_v0;
-
-            // first and second vertex rest position
-            Eigen::Vector<T, 3> u0 = Urshape.to_eigen<3>(iter[0]);
-            Eigen::Vector<T, 3> u1 = Urshape.to_eigen<3>(iter[1]);
-            Eigen::Vector<T, 3> du = u1 - u0;
+    problem.template add_term<Op::EV, 3>([=] __device__(const auto& eh,
+                                                        const auto& iter,
+                                                        auto&       obj) {
+        using ActiveT = ACTIVE_TYPE(eh);
 
 
-            Eigen::Vector<ActiveT, 3> res = (o1 - o0) - (r0 * du);
+        Eigen::Vector<ActiveT, 12> v0 = iter_val<ActiveT, 12>(eh, iter, obj, 0);
+        Eigen::Vector<ActiveT, 12> v1 = iter_val<ActiveT, 12>(eh, iter, obj, 1);
 
 
-            return w_reg_sqrt * res;
-        });
+        // Rest edge
+        Eigen::Vector<T, 3> u0  = Urshape.to_eigen<3>(iter[0]);
+        Eigen::Vector<T, 3> u1  = Urshape.to_eigen<3>(iter[1]);
+        T                   dux = u1[0] - u0[0];
+        T                   duy = u1[1] - u0[1];
+        T                   duz = u1[2] - u0[2];
 
+        ActiveT rdu_x = v0[3] * dux + v0[4] * duy + v0[5] * duz;
+        ActiveT rdu_y = v0[6] * dux + v0[7] * duy + v0[8] * duz;
+        ActiveT rdu_z = v0[9] * dux + v0[10] * duy + v0[11] * duz;
+
+        Eigen::Matrix<ActiveT, 3, 1> res;
+        res[0] = (v1[0] - v0[0]) - rdu_x;
+        res[1] = (v1[1] - v0[1]) - rdu_y;
+        res[2] = (v1[2] - v0[2]) - rdu_z;
+
+        // dux    = u0[0] - u1[0];
+        // duy    = u0[1] - u1[1];
+        // duz    = u0[2] - u1[2];
+        // res[3] = (v0[0] - v1[0]) - rdu_x;
+        // res[4] = (v0[1] - v1[1]) - rdu_y;
+        // res[5] = (v0[2] - v1[2]) - rdu_z;
+
+        return w_reg_sqrt * res;
+    });
 
     Timers<GPUTimer> timer;
     timer.add("Step");
@@ -206,6 +197,7 @@ void arap(RXMeshStatic& rx)
     problem.prep_eval();
     solver.prep_solver(5);
 
+    //problem.jac->to_file("arap_jac");
 
     float       t    = 0;
     bool        flag = false;
@@ -263,6 +255,8 @@ void arap(RXMeshStatic& rx)
             problem.eval_terms_sum_of_squares(-1.0);
             timer.stop("Diff");
 
+            //problem.jac->move(DEVICE, HOST);
+            //problem.jac->to_file("arap_jac"+std::to_string(num_steps));
 
             // get the current value of the loss function
             T f = problem.get_current_loss();
@@ -321,7 +315,7 @@ void arap(RXMeshStatic& rx)
         timer.elapsed_millis("Step"),
         timer.elapsed_millis("Step") / float(num_steps));
 
-    RXMESH_INFO("LinearSolver {} (ms), Diff {} (ms), LineSearch {} (ms)",
+    RXMESH_INFO("LinearSolver {} (ms), Diff {} (ms)",
                 timer.elapsed_millis("LinearSolver"),
                 timer.elapsed_millis("Diff"));
 
@@ -334,19 +328,15 @@ int main(int argc, char** argv)
 {
     rx_init(0);
 
-    const uint32_t device_id = 0;
-    cuda_query(device_id);
+    std::string filename = STRINGIFY(INPUT_DIR) "dragon_simp.obj";
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
-
-    if (!rx.is_closed()) {
-        RXMESH_ERROR("Input mesh should be closed without boundaries");
-        return EXIT_FAILURE;
+    if (argc > 1) {
+        filename = std::string(argv[1]);
     }
 
+    RXMeshStatic rx(filename);
 
     arap<float>(rx);
-
 
     return 0;
 }

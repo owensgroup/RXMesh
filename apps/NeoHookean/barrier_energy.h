@@ -85,8 +85,7 @@ void box_barrier_energy(ProblemT& problem,
         // Precompute Eigen vectors outside the device lambda
         const Eigen::Vector3<T> o_eigen(o[0], o[1], o[2]);
         const Eigen::Vector3<T> n_eigen(n[0], n[1], n[2]);
-
-        printf("adding box energy term %d \n", face_idx);
+                
         problem.template add_term<Op::V, true>(
             [=] __device__(const auto& vh, auto& obj) mutable {
                 using ActiveT = ACTIVE_TYPE(vh);

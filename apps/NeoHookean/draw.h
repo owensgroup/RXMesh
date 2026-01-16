@@ -4,13 +4,12 @@
 
 using namespace rxmesh;
 
-template <typename FunT, typename VAttrT, typename DirT>
+template <typename FunT, typename VAttrT, typename ProblemT>
 void draw(RXMeshStatic& rx,
+          ProblemT&     problem,
           VAttrT&       x,
           VAttrT&       velocity,
           FunT&         step_forward,
-          DirT&         dir_mat,
-          DirT&         grad_mat,
           int&          step)
 {
 #if USE_POLYSCOPE
@@ -31,14 +30,6 @@ void draw(RXMeshStatic& rx,
             auto vel = rx.get_polyscope_mesh()->addVertexVectorQuantity(
                 "Velocity", velocity);
 
-            dir_mat.move(DEVICE, HOST);
-            dir.from_matrix(&dir_mat);
-            rx.get_polyscope_mesh()->addVertexVectorQuantity("Direction", dir);
-
-            grad_mat.move(DEVICE, HOST);
-            grad.from_matrix(&grad_mat);
-            rx.get_polyscope_mesh()->addVertexVectorQuantity("Grad", grad);
-
             rx.get_polyscope_mesh()->updateVertexPositions(x);
         };
         if (ImGui::Button("Step")) {
@@ -56,8 +47,12 @@ void draw(RXMeshStatic& rx,
         }
 
         ImGui::SameLine();
-        if (ImGui::Button("Export")) {
+        if (ImGui::Button("ExportObj")) {
             rx.export_obj("NeoHookean_" + std::to_string(step) + ".obj", x);
+        }
+
+        if (ImGui::Button("ExportHess")) {
+            problem.hess->to_file("NeoHookean_hess_" + std::to_string(step));
         }
 
         if (is_running) {
