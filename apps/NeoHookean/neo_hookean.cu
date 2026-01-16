@@ -1,5 +1,5 @@
-#include <unordered_set>
 #include <Eigen/Core>
+#include <unordered_set>
 
 #include "rxmesh/rxmesh_static.h"
 

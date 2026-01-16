@@ -51,6 +51,7 @@ void draw(RXMeshStatic& rx,
             rx.export_obj("NeoHookean_" + std::to_string(step) + ".obj", x);
         }
 
+        ImGui::SameLine();
         if (ImGui::Button("ExportHess")) {
             problem.hess->to_file("NeoHookean_hess_" + std::to_string(step));
         }

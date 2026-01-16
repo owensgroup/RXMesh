@@ -36,8 +36,6 @@ void init_volume_inverse_b(RXMeshStatic& rx,
             // (tb.transpose());
 
             inv_b(f) = tb.inverse();
-
-
         });
 }
 

@@ -5,11 +5,11 @@
 using namespace rxmesh;
 
 template <typename ProblemT,
-        //   typename VAttrI,
+          //   typename VAttrI,
           typename VAttrF,
           typename VAttrFM,
           typename T>
-void neo_hookean_energy(ProblemT&      problem,
+void neo_hookean_energy(ProblemT& problem,
                         // const VAttrI&  is_dbc,
                         const VAttrF&  volume,
                         const VAttrFM& inv_b,
