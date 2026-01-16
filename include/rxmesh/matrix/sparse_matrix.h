@@ -837,6 +837,7 @@ struct SparseMatrix
         ret.m_num_rows        = m_num_cols;
         ret.m_num_cols        = m_num_rows;
         ret.m_nnz             = m_nnz;
+        ret.m_max_nnz         = m_max_nnz;
         ret.m_context         = m_context;
         ret.m_block_shape.x   = m_block_shape.y;
         ret.m_block_shape.y   = m_block_shape.x;

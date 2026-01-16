@@ -1,6 +1,7 @@
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/diff/diff_vector_problem.h"
+#include "rxmesh/diff/gauss_newton_solver.h"
 
 using namespace rxmesh;
 
@@ -11,18 +12,42 @@ void arap(RXMeshStatic& rx)
 
     constexpr uint32_t blockThreads = 256;
 
-    T w_fit_sqrt = 1;
-    T w_reg_sqrt = 1;
-    T w_rot_sqrt = 1;
+    T w_fit_sqrt = std::sqrt(3.0);
+    T w_reg_sqrt = std::sqrt(12.0);
+    T w_rot_sqrt = std::sqrt(5.0);
 
     using ProblemT = DiffVectorProblem<T, VariableDim, VertexHandle>;
     ProblemT problem(rx);
 
+#ifdef USE_CUDSS
+    // using SolverT =
+    //     cuDSSCholeskySolver<SparseMatrix<T>, ProblemT::DenseMatT::OrderT>;
+
+    using SolverT = PCGSolver<T, ProblemT::DenseMatT::OrderT>;
+#else
+    using SolverT =
+        CholeskySolver<SparseMatrix<T>, ProblemT::DenseMatT::OrderT>;
+#endif
+
+    GaussNetwtonSolver<T, VariableDim, VertexHandle, SolverT> solver(problem);
+
     auto Urshape = *rx.get_input_vertex_coordinates();
 
-    // deformed vertex position that change every iteration
-    auto& offset = *problem.objective;
-    offset.copy_from(Urshape, DEVICE, DEVICE);
+    // combined deformed vertex position and rotation matrix
+    // 0-2 are the offset
+    // 3-11 are the 9 entries of the rotation matrix row-wise, i.e.,
+    // col_0 = [c3, c6, c9]
+    auto& opt_var = *problem.objective;
+
+    rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) mutable {
+        for (int i = 0; i < VariableDim; ++i) {
+            opt_var(vh, i) = 0;
+        }
+
+        opt_var(vh, 3)  = 1;
+        opt_var(vh, 7)  = 1;
+        opt_var(vh, 11) = 1;
+    });
 
     // vertex constraints where
     //  0 means free
@@ -58,70 +83,93 @@ void arap(RXMeshStatic& rx)
                                                      constraints);
 #endif
 
-    // E_fit energy, i.e., offset of constraints vertices should a) for fixed
-    // vertices should be minimized, b) for user-displaced vertices, the
-    // difference between the user-defined displacement and the offset should be
-    // minimized, c) for free vertices, this is just zero
-    problem.template add_term<Op::V, 3, 0, 3>(
-        [=] __device__(const auto& vh, auto& obj) {
-            using ActiveT = ACTIVE_TYPE(vh);
-
-            Eigen::Vector<ActiveT, 3> res;
-
-            if (constraints(vh) != 2) {
-                // fixed point should stay fixed
-                res = iter_val<ActiveT, 3>(vh, obj, 0, 3);
-            }
-
-            if (constraints(vh) != 1) {
-                // user-displaced points
-                Eigen::Vector<ActiveT, 3> oi = iter_val<ActiveT, 3>(vh, obj);
-                Eigen::Vector<ActiveT, 3> ci = cn.template to_eigen<3>(vh);
-
-                res = oi - ci;
-            }
-
-            return w_fit_sqrt * res;
-        });
-
-
-    // E_rot, i.e., soft rotation constraints
-    problem.template add_term<Op::V, 6, 3, 12>([=] __device__(const auto vh,
-                                                              auto&      obj) {
+    // E_fit + E_rot
+    problem.template add_term<Op::V, 9>([=] __device__(const auto& vh,
+                                                       auto&       obj) {
         using ActiveT = ACTIVE_TYPE(vh);
 
-        Eigen::Vector<ActiveT, 6> res;
+        // vertex combined position and rotation matrix variable
+        Eigen::Vector<ActiveT, 12> o_r = iter_val<ActiveT, 12>(vh, obj);
 
-        Eigen::Vector<ActiveT, 9> rot = iter_val<ActiveT, 9>(vh, obj, 3, 12);
+        Eigen::Vector<ActiveT, 9> ret;
 
-        Eigen::Vector<ActiveT, 3> c0(rot[0], rot[1], rot[2]);
-        Eigen::Vector<ActiveT, 3> c1(rot[3], rot[4], rot[5]);
-        Eigen::Vector<ActiveT, 3> c2(rot[6], rot[7], rot[8]);
+        // E_fit energy, i.e., offset of constraints vertices should a) for
+        // fixed vertices should be minimized, b) for user-displaced
+        // vertices, the  difference between the user-defined displacement
+        // and the offset should be minimized, c) for free vertices, this is
+        // just zero
+        if (constraints(vh) == 0) {
+            // free vertices do not contribute to this energy
+            ret[0] = 0;
+            ret[1] = 0;
+            ret[2] = 0;
+        } else if (constraints(vh) == 2) {
+            // fixed point should stay fixed, i.e., its offset should be
+            // minimized
+            ret[0] = o_r[0];
+            ret[1] = o_r[1];
+            ret[2] = o_r[2];
+        } else if (constraints(vh) == 1) {
+            // user-displaced points
+            Eigen::Vector<T, 12> ci = Eigen::Vector<T, 12>::Zero();
+            ci[0]                   = cn(vh, 0);
+            ci[1]                   = cn(vh, 1);
+            ci[2]                   = cn(vh, 2);
 
-        res[0] = c0.dot(c1);
-        res[1] = c1.dot(c2);
-        res[2] = c2.dot(c0);
-        res[3] = c0.dot(c0) - 1;
-        res[4] = c1.dot(c1) - 1;
-        res[5] = c2.dot(c2) - 1;
+            Eigen::Vector<ActiveT, 12> diff = o_r - ci;
+
+            ret[0] = diff[0];
+            ret[1] = diff[1];
+            ret[2] = diff[2];
+        }
+        ret[0] *= w_fit_sqrt;
+        ret[1] *= w_fit_sqrt;
+        ret[2] *= w_fit_sqrt;
 
 
-        return w_rot_sqrt * res;
+        // E_rot, i.e., soft rotation constraints
+
+        //(c0 c1)
+        ret[3] =
+            w_rot_sqrt * (o_r[3] * o_r[4] + o_r[6] * o_r[7] + o_r[9] * o_r[10]);
+
+        //(c0 c2)
+        ret[4] =
+            w_rot_sqrt * (o_r[3] * o_r[5] + o_r[6] * o_r[8] + o_r[9] * o_r[11]);
+
+        //(c1 c2)
+        ret[5] = w_rot_sqrt *
+                 (o_r[4] * o_r[5] + o_r[7] * o_r[8] + o_r[10] * o_r[11]);
+
+        //(c0 c0) - 1
+        ret[6] = w_rot_sqrt *
+                 (o_r[3] * o_r[3] + o_r[6] * o_r[6] + o_r[9] * o_r[9] - 1);
+
+        //(c1 c1) - 1
+        ret[7] = w_rot_sqrt *
+                 (o_r[4] * o_r[4] + o_r[7] * o_r[7] + o_r[10] * o_r[10] - 1);
+
+        //(c2 c2) - 1
+        ret[8] = w_rot_sqrt *
+                 (o_r[5] * o_r[5] + o_r[8] * o_r[8] + o_r[11] * o_r[11] - 1);
+
+
+        return ret;
     });
 
 
     // E_reg
-    problem.template add_term<Op::EV, 3, 0, 12>(
+    problem.template add_term<Op::EV, 3>(
         [=] __device__(const auto& eh, const auto& iter, auto& obj) {
             using ActiveT = ACTIVE_TYPE(eh);
 
             // first vertex variables
             Eigen::Vector<ActiveT, 12> var0 =
-                iter_val<ActiveT, 12>(eh, iter, obj, 0, 0, 12);
+                iter_val<ActiveT, 12>(eh, iter, obj, 0);
 
             // second vertex variables
             Eigen::Vector<ActiveT, 12> var1 =
-                iter_val<ActiveT, 12>(eh, iter, obj, 1, 0, 12);
+                iter_val<ActiveT, 12>(eh, iter, obj, 1);
 
             // first vertex position
             Eigen::Vector<ActiveT, 3> o0(var0[0], var0[1], var0[2]);
@@ -136,13 +184,6 @@ void arap(RXMeshStatic& rx)
             Eigen::Matrix<ActiveT, 3, 3> r0;
             r0 << c0_v0, c1_v0, c2_v0;
 
-            // second vertex rotation matrix
-            Eigen::Vector<ActiveT, 3>    c0_v1(var1[3], var1[4], var1[5]);
-            Eigen::Vector<ActiveT, 3>    c1_v1(var1[6], var1[7], var1[8]);
-            Eigen::Vector<ActiveT, 3>    c2_v1(var1[9], var1[10], var1[11]);
-            Eigen::Matrix<ActiveT, 3, 3> r1;
-            r1 << c0_v1, c1_v1, c2_v1;
-
             // first and second vertex rest position
             Eigen::Vector<T, 3> u0 = Urshape.to_eigen<3>(iter[0]);
             Eigen::Vector<T, 3> u1 = Urshape.to_eigen<3>(iter[1]);
@@ -152,10 +193,19 @@ void arap(RXMeshStatic& rx)
             Eigen::Vector<ActiveT, 3> res = (o1 - o0) - (r0 * du);
 
 
-            return w_rot_sqrt * res;
+            return w_reg_sqrt * res;
         });
 
-    int iterations = 1;
+
+    Timers<GPUTimer> timer;
+    timer.add("Step");
+    timer.add("LinearSolver");
+    timer.add("Diff");
+
+
+    problem.prep_eval();
+    solver.prep_solver(5);
+
 
     float       t    = 0;
     bool        flag = false;
@@ -163,78 +213,121 @@ void arap(RXMeshStatic& rx)
     vec3<float> end(0.0f, -0.2f, 0.0f);
     vec3<float> displacement(0.0f, 0.0f, 0.0f);
 
+    const int num_verts = rx.get_num_vertices();
+
+    int  num_steps  = 0;
+    bool is_running = false;
+
     auto polyscope_callback = [&]() mutable {
-        t += flag ? -0.5f : 0.5f;
+        bool step_once = false;
 
-        flag = (t < 0 || t > 1.0f) ? !flag : flag;
-
-        displacement = (1 - t) * start + (t)*end;
-
-        // apply user deformation
-        rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) {
-            if (constraints(vh) == 1) {
-                cn(vh, 0) = displacement[0];
-                cn(vh, 1) = displacement[1];
-                cn(vh, 2) = displacement[2];
-            } else {
-                cn(vh, 0) = 0;
-                cn(vh, 1) = 0;
-                cn(vh, 2) = 0;
-            }
-        });
-
-
-        // process step
-        for (int i = 0; i < iterations; i++) {
-
-
-            // solve for position via Newton
-            // for (int iter = 0; iter < newton_max_iter; ++iter) {
-            //    // evaluate energy terms
-            //    problem.eval_terms();
-            //
-            //    // get the current value of the loss function
-            //    T f = problem.get_current_loss();
-            //    RXMESH_INFO(
-            //        "Iter {} =, Newton Iter= {}: Energy = {}", i, iter, f);
-            //
-            //    // apply bc
-            //    newton_solver.apply_bc(bc);
-            //
-            //    // direction newton
-            //    newton_solver.compute_direction();
-            //
-            //
-            //    // newton decrement
-            //    if (0.5f * problem.grad.dot(newton_solver.dir) <
-            //        convergence_eps) {
-            //        break;
-            //    }
-            //
-            //    // line search
-            //    newton_solver.line_search();
-            //}
+        if (ImGui::Button("Start")) {
+            is_running = true;
         }
 
+        ImGui::SameLine();
+        if (ImGui::Button("Step")) {
+            step_once = true;
+        }
+
+
+        if (step_once || is_running) {
+            t += flag ? -0.5f : 0.5f;
+
+            flag = (t < 0 || t > 1.0f) ? !flag : flag;
+
+            displacement = (1 - t) * start + (t)*end;
+
+            // apply user deformation
+            rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) {
+                if (constraints(vh) == 1) {
+                    cn(vh, 0) = displacement[0];
+                    cn(vh, 1) = displacement[1];
+                    cn(vh, 2) = displacement[2];
+                } else {
+                    cn(vh, 0) = 0;
+                    cn(vh, 1) = 0;
+                    cn(vh, 2) = 0;
+                }
+            });
+
+            // process step
+            num_steps++;
+
+            timer.start("Step");
+
+            // compute g = -J^T r
+            // the -1.0 is used here so we don't need to scale things again
+            // in the gauss-newton which solves (J^T J).dir = -J^T r
+            timer.start("Diff");
+            problem.eval_terms_sum_of_squares(-1.0);
+            timer.stop("Diff");
+
+
+            // get the current value of the loss function
+            T f = problem.get_current_loss();
+            RXMESH_INFO("Step: {}, Energy: {}", num_steps, f);
+
+
+            // direction newton
+            timer.start("LinearSolver");
+            solver.compute_direction();
+            timer.stop("LinearSolver");
+
+            // take a step
+            rx.for_each_vertex(
+                DEVICE,
+                [p = opt_var, dir = solver.dir, n = num_verts] __device__(
+                    const VertexHandle& vh) mutable {
+                    dir.reshape(n, VariableDim);
+                    for (int i = 0; i < VariableDim; ++i) {
+                        p(vh, i) = p(vh, i) + dir(vh, i);
+                    }
+                });
+
+            timer.stop("Step");
+        }
 
 #if USE_POLYSCOPE
         // repurpose cn to be the new position (for gui only)
         rx.for_each_vertex(DEVICE, [=] __device__(auto vh) {
             for (int i = 0; i < 3; ++i) {
-                cn(vh, i) = Urshape(vh, i) + offset(vh, i);
+                cn(vh, i) = Urshape(vh, i) + opt_var(vh, i);
             }
         });
         cn.move(DEVICE, HOST);
         rx.get_polyscope_mesh()->updateVertexPositions(cn);
 #endif
+        if (ImGui::Button("Export")) {
+            rx.export_obj(std::to_string(num_steps) + ".obj", cn);
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Pause")) {
+            is_running = false;
+        }
     };
 
 #ifdef USE_POLYSCOPE
     polyscope::view::upDir         = polyscope::UpDir::ZUp;
     polyscope::state::userCallback = polyscope_callback;
     polyscope::show();
-
 #endif
+
+    RXMESH_INFO(
+        "DiffArap: #V= {}, #Steps ={}, time= {} (ms), time/step= {} ms/iter",
+        rx.get_num_vertices(),
+        num_steps,
+        timer.elapsed_millis("Step"),
+        timer.elapsed_millis("Step") / float(num_steps));
+
+    RXMESH_INFO("LinearSolver {} (ms), Diff {} (ms), LineSearch {} (ms)",
+                timer.elapsed_millis("LinearSolver"),
+                timer.elapsed_millis("Diff"));
+
+    RXMESH_INFO("LinearSolver/step {} (ms), Diff/step {} (ms)",
+                timer.elapsed_millis("LinearSolver") / float(num_steps),
+                timer.elapsed_millis("Diff") / float(num_steps));
 }
 
 int main(int argc, char** argv)
