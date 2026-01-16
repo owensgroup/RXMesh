@@ -452,10 +452,11 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
                 timer.elapsed_millis("LinearSolver"),
                 100.0 * timer.elapsed_millis("LinearSolver") / timer.elapsed_millis("Step"),
                 timer.elapsed_millis("LinearSolver") / float(steps));
+    //subtracting the collision detection done in line search to get the actual time for line search 
     RXMESH_INFO("  Line Search:          {:.2f} ms  ({:.1f}%) [{:.2f} ms/iter]",
-                timer.elapsed_millis("LineSearch"),
-                100.0 * timer.elapsed_millis("LineSearch") / timer.elapsed_millis("Step"),
-                timer.elapsed_millis("LineSearch") / float(steps));
+                timer.elapsed_millis("LineSearch") - timer.elapsed_millis("ContactDetection_LineSearch"),
+                100.0 * (timer.elapsed_millis("LineSearch") - timer.elapsed_millis("ContactDetection_LineSearch")) / timer.elapsed_millis("Step"),
+                (timer.elapsed_millis("LineSearch") - timer.elapsed_millis("ContactDetection_LineSearch")) / float(steps));
     RXMESH_INFO("  Step Size Compute:    {:.2f} ms  ({:.1f}%) [{:.2f} ms/iter]",
                 timer.elapsed_millis("StepSize"),
                 100.0 * timer.elapsed_millis("StepSize") / timer.elapsed_millis("Step"),
@@ -679,12 +680,11 @@ int main(int argc, char** argv)
 
     T    dx       = 0.1f;  // mesh spacing for contact area
     auto x        = *rx.get_input_vertex_coordinates();
-    auto vel = *rx.add_vertex_attribute<T>("vel", 3);
-    vel.reset(0, DEVICE);
+    
 
     // Apply transformations per instance
     auto vertex_region_label = *rx.get_vertex_region_label();
-    x.move(DEVICE, HOST);
+    
     rx.for_each_vertex(
         HOST,
         [=] __host__(VertexHandle vh) mutable {
@@ -702,12 +702,7 @@ int main(int argc, char** argv)
                 // Apply translation
                 x(vh, 0) += t.tx;
                 x(vh, 1) += t.ty;
-                x(vh, 2) += t.tz;
-
-                // Set initial vel
-                vel(vh, 0) = t.vx;
-                vel(vh, 1) = t.vy;
-                vel(vh, 2) = t.vz;
+                x(vh, 2) += t.tz;                
             }
         },
         NULL,
