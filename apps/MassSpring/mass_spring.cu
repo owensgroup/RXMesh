@@ -17,14 +17,17 @@ using namespace rxmesh;
 
 enum class Scenario
 {
-    Flag    = 0,
-    DropBox = 1,
+    Flag = 0,
+    Drop = 1,
 
 };
 
 template <typename T>
-void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario, int max_time_steps)
+void mass_spring(RXMeshStatic& rx, Scenario scenario, int max_time_steps)
 {
+    RXMESH_INFO(
+        "#Faces: {}, #Vertices: {}", rx.get_num_faces(), rx.get_num_vertices());
+
     constexpr int VariableDim = 3;
 
     constexpr uint32_t blockThreads = 256;
@@ -33,24 +36,40 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario, int max_time_steps)
 
     using HessMatT = typename ProblemT::HessMatT;
 
-    const T rho             = 100;  // density
-    const T k               = 4e4;  // stiffness
-    const T initial_stretch = 1.3;
-    const T tol             = 0.01;
-    const T h               = 0.01;  // time step
-    const T inv_h           = T(1) / h;
-    const T y_ground        = T(-1.0);
+    const T rho              = 100;  // density
+    const T k                = 4e4;  // stiffness
+    const T initial_stretch  = 1.3;
+    const T tol              = 0.01;
+    const T h                = 0.01;  // time step
+    const T inv_h            = T(1) / h;
+    const T contact_area     = 0.1;
+    const T sphere_radius_sq = 0.1 * 0.1;
+
 
     glm::vec3 bb_lower(0), bb_upper(0);
     rx.bounding_box(bb_lower, bb_upper);
+
+    const Eigen::Vector3<T> sphere_center(0.5, 0.0, 0.5);
+
+    const T y_ground = bb_lower.y - 0.1 * (bb_upper.y - bb_lower.y);
+
     glm::vec3 bb = bb_upper - bb_lower;
 
+    T mass = 1;
+
     // mass per vertex = rho * volume /num_vertices
-    T mass = rho * bb[0] * bb[1] / rx.get_num_vertices();
+    if (bb[2] < 1e-5) {
+        mass = rho * bb[0] * bb[1] / rx.get_num_vertices();
+    } else if (bb[1] < 1e-5) {
+        mass = rho * bb[2] * bb[0] / rx.get_num_vertices();
+    } else if (bb[0] < 1e-5) {
+        mass = rho * bb[1] * bb[2] / rx.get_num_vertices();
+    }
+
 
     ProblemT problem(rx, true);
 
-#ifdef USE_CUDSS    
+#ifdef USE_CUDSS
     cuDSSCholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(
         problem.hess.get());
 #else
@@ -68,9 +87,6 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario, int max_time_steps)
     auto is_bc = *rx.add_vertex_attribute<int8_t>("isBC", 1);
     is_bc.reset(0, DEVICE);
 
-    auto contact_area = *rx.add_vertex_attribute<T>("ContactArea", 1);
-    contact_area.reset(dx, DEVICE);
-
     auto x = *rx.get_input_vertex_coordinates();
 
     auto& x_tilde = *problem.objective;
@@ -84,8 +100,12 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario, int max_time_steps)
         case Scenario::Flag:
             flag_bc(rx, is_bc, x, bb_lower, bb_upper);
             break;
-        case Scenario::DropBox:
-            barrier_energy(problem, x, contact_area, h, y_ground);
+        case Scenario::Drop:
+            // barrier_energy(problem, x, contact_area, h, y_ground);
+            barrier_energy(
+                problem, x, contact_area, h, sphere_radius_sq, sphere_center);
+            draw_collision_sphere_polyscope(sphere_center,
+                                            std::sqrt(sphere_radius_sq));
             break;
         default:
             break;
@@ -93,7 +113,7 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario, int max_time_steps)
 
 
     // apply initial stretch along the y direction
-    // apply_init_stretch(rx, x, initial_stretch);
+    apply_init_stretch(rx, x, initial_stretch);
 
 #if USE_POLYSCOPE
     // add BC to polyscope
@@ -132,6 +152,8 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario, int max_time_steps)
     int totla_newton_iter = 0;
 
     auto step_forward = [&]() {
+        timer.start("Step");
+
         // evaluate energy
         timer.start("Diff");
         problem.eval_terms();
@@ -140,7 +162,6 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario, int max_time_steps)
         int newton_iter = 1;
 
         // update x_tilde
-        timer.start("Step");
         rx.for_each_vertex(
             DEVICE,
             [x, x_tilde, velocity, h] __device__(VertexHandle vh) mutable {
@@ -150,7 +171,9 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario, int max_time_steps)
             });
 
         // apply bc
-        newton_solver.apply_bc(is_bc);
+        if (scenario == Scenario::Flag) {
+            newton_solver.apply_bc(is_bc);
+        }
 
         // get newton direction
         timer.start("LinearSolver");
@@ -172,9 +195,14 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario, int max_time_steps)
 
             timer.start("LineSearch");
             T line_search_init_step = 1;
-            if (scenario == Scenario::DropBox) {
-                line_search_init_step =
-                    init_step_size(rx, newton_solver.dir, alpha, x, y_ground);
+            if (scenario == Scenario::Drop) {
+                line_search_init_step = init_step_size(rx,
+                                                       newton_solver.dir,
+                                                       alpha,
+                                                       x,
+                                                       sphere_radius_sq,
+                                                       sphere_center);
+                //  init_step_size(rx, newton_solver.dir, alpha, x, y_ground);
             }
             newton_solver.line_search(line_search_init_step, 0.5);
             timer.stop("LineSearch");
@@ -185,7 +213,9 @@ void mass_spring(RXMeshStatic& rx, T dx, Scenario scenario, int max_time_steps)
             timer.stop("Diff");
 
             // apply bc
-            newton_solver.apply_bc(is_bc);
+            if (scenario == Scenario::Flag) {
+                newton_solver.apply_bc(is_bc);
+            }
 
             // get newton direction
             timer.start("LinearSolver");
@@ -269,31 +299,41 @@ int main(int argc, char** argv)
 
     using T = float;
 
-    std::vector<std::vector<T>>        verts;
-    std::vector<std::vector<uint32_t>> fv;
 
-    int n = 16;
-
+    int scene          = 0;
+    int n              = 16;
     int max_time_steps = 100;
 
     if (argc >= 2) {
-        n = atoi(argv[1]);
+        scene = atoi(argv[1]);
     }
 
     if (argc >= 3) {
-        max_time_steps = atoi(argv[2]);
+        n = atoi(argv[2]);
     }
 
-    T dx = 1 / T(n - 1);
+    if (argc >= 4) {
+        max_time_steps = atoi(argv[3]);
+    }
 
-    create_plane(verts, fv, n, n, 2, dx, false, vec3<float>(0, 0, 0));
+    if (scene == 0) {
+        std::vector<std::vector<T>>        verts;
+        std::vector<std::vector<uint32_t>> fv;
+        T                                  dx = 1 / T(n - 1);
+        create_plane(verts, fv, n, n, 2, dx, false, vec3<float>(0, 0, 0));
+        RXMeshStatic rx(fv);
+        rx.add_vertex_coordinates(verts, "Coords");
+        mass_spring<T>(rx, Scenario::Flag, max_time_steps);
+    }
 
-    RXMeshStatic rx(fv);
-    rx.add_vertex_coordinates(verts, "Coords");
+    if (scene == 1) {
+        std::vector<std::vector<T>>        verts;
+        std::vector<std::vector<uint32_t>> fv;
+        T                                  dx = 1 / T(n - 1);
+        create_plane(verts, fv, n, n, 1, dx, false, vec3<float>(0, 0.2, 0));
+        RXMeshStatic rx(fv);
+        rx.add_vertex_coordinates(verts, "Coords");
 
-    RXMESH_INFO(
-        "#Faces: {}, #Vertices: {}", rx.get_num_faces(), rx.get_num_vertices());
-
-
-    mass_spring<T>(rx, dx, Scenario::Flag, max_time_steps);
+        mass_spring<T>(rx, Scenario::Drop, max_time_steps);
+    }
 }
