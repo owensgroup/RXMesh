@@ -155,6 +155,7 @@ void arap(RXMeshStatic& rx)
 
 
     // E_reg
+    int ddd = 0;
     problem.template add_term<Op::EV, 3>([=] __device__(const auto& eh,
                                                         const auto& iter,
                                                         auto&       obj) {
@@ -178,28 +179,12 @@ void arap(RXMeshStatic& rx)
 
         Eigen::Vector<ActiveT, 3> ret;
 
-        ret[0] = ((u1[0] + v1[0]) - (u0[0] + v0[0])) - rdu_x;
-        ret[1] = ((u1[1] + v1[1]) - (u0[1] + v0[1])) - rdu_y;
-        ret[2] = ((u1[2] + v1[2]) - (u0[2] + v0[2])) - rdu_z;
-
-        // if constexpr (is_scalar_v<ActiveT>) {
-        //     printf(
-        //         "\n ret[0](%f, %f, %f, %f), ret[1](%f, %f, %f, %f),
-        //         ret[2](%f, "
-        //         "%f, %f, %f)",
-        //         ret[0].val(),
-        //         ret[0].grad()[0],
-        //         ret[0].grad()[1],
-        //         ret[0].grad()[2],
-        //         ret[1].val(),
-        //         ret[1].grad()[0],
-        //         ret[1].grad()[1],
-        //         ret[1].grad()[2],
-        //         ret[2].val(),
-        //         ret[2].grad()[0],
-        //         ret[2].grad()[1],
-        //         ret[2].grad()[2]);
-        // }
+        if (ddd == 0) {
+            ret[0] = ((u1[0] + v1[0]) - (u0[0] + v0[0])) - rdu_x;
+            ret[1] = ((u1[1] + v1[1]) - (u0[1] + v0[1])) - rdu_y;
+            ret[2] = ((u1[2] + v1[2]) - (u0[2] + v0[2])) - rdu_z;
+        }
+        
 
         return w_reg_sqrt * ret;
     });

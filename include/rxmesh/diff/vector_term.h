@@ -53,11 +53,6 @@ struct TemplatedVectorTerm
     TemplatedVectorTerm(RXMeshStatic& rx, LambdaT t, bool oreinted)
         : term(t), rx(rx), oreinted(oreinted)
     {
-        // To avoid the clash that happens from adding many losses.
-        std::ostringstream address;
-        address << (void const*)this;
-        std::string name = address.str();
-
         rx.prepare_launch_box(
             {op},
             lb_active,
