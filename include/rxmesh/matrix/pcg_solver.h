@@ -76,6 +76,12 @@ struct PCGSolver : public CGSolver<T, DenseMatOrder>
 
         this->m_iter_taken = 0;
 
+
+        if (this->is_converged(this->m_start_residual, this->delta_new)) {
+            this->m_final_residual = this->delta_new;
+            return;
+        }
+
         while (this->m_iter_taken < this->m_max_iter) {
             // s = Ap
             this->A->multiply(this->P, this->S, false, false, 1, 0, stream);
@@ -166,7 +172,8 @@ struct PCGSolver : public CGSolver<T, DenseMatOrder>
         for_each_item<<<blocks, blockThreads, 0, stream>>>(
             rows,
             [in, out, Amat, cols] __device__(int i) mutable {
-                const T diag = T(1) / Amat(i, i);
+                const T diag =
+                    T(1) / (Amat(i, i) + std::numeric_limits<T>::epsilon());
 
                 for (int j = 0; j < cols; ++j) {
                     out(i, j) = diag * in(i, j);

@@ -92,6 +92,9 @@ void arap(RXMeshStatic& rx)
         Eigen::Vector<ActiveT, 12> o_r = iter_val<ActiveT, 12>(vh, obj);
 
         Eigen::Vector<ActiveT, 9> ret;
+        for (int i = 0; i < 9; ++i) {
+            ret[i] = 0;
+        }
 
         // E_fit energy, i.e., offset of constraints vertices should a) for
         // fixed vertices should be minimized, b) for user-displaced
@@ -173,19 +176,32 @@ void arap(RXMeshStatic& rx)
         ActiveT rdu_y = v0[6] * dux + v0[7] * duy + v0[8] * duz;
         ActiveT rdu_z = v0[9] * dux + v0[10] * duy + v0[11] * duz;
 
-        Eigen::Matrix<ActiveT, 3, 1> res;
-        res[0] = (v1[0] - v0[0]) - rdu_x;
-        res[1] = (v1[1] - v0[1]) - rdu_y;
-        res[2] = (v1[2] - v0[2]) - rdu_z;
+        Eigen::Vector<ActiveT, 3> ret;
 
-        // dux    = u0[0] - u1[0];
-        // duy    = u0[1] - u1[1];
-        // duz    = u0[2] - u1[2];
-        // res[3] = (v0[0] - v1[0]) - rdu_x;
-        // res[4] = (v0[1] - v1[1]) - rdu_y;
-        // res[5] = (v0[2] - v1[2]) - rdu_z;
+        ret[0] = ((u1[0] + v1[0]) - (u0[0] + v0[0])) - rdu_x;
+        ret[1] = ((u1[1] + v1[1]) - (u0[1] + v0[1])) - rdu_y;
+        ret[2] = ((u1[2] + v1[2]) - (u0[2] + v0[2])) - rdu_z;
 
-        return w_reg_sqrt * res;
+        // if constexpr (is_scalar_v<ActiveT>) {
+        //     printf(
+        //         "\n ret[0](%f, %f, %f, %f), ret[1](%f, %f, %f, %f),
+        //         ret[2](%f, "
+        //         "%f, %f, %f)",
+        //         ret[0].val(),
+        //         ret[0].grad()[0],
+        //         ret[0].grad()[1],
+        //         ret[0].grad()[2],
+        //         ret[1].val(),
+        //         ret[1].grad()[0],
+        //         ret[1].grad()[1],
+        //         ret[1].grad()[2],
+        //         ret[2].val(),
+        //         ret[2].grad()[0],
+        //         ret[2].grad()[1],
+        //         ret[2].grad()[2]);
+        // }
+
+        return w_reg_sqrt * ret;
     });
 
     Timers<GPUTimer> timer;
@@ -195,9 +211,9 @@ void arap(RXMeshStatic& rx)
 
 
     problem.prep_eval();
-    solver.prep_solver(5);
+    solver.prep_solver(1000);
 
-    //problem.jac->to_file("arap_jac");
+    // problem.jac->to_file("arap_jac");
 
     float       t    = 0;
     bool        flag = false;
@@ -207,8 +223,9 @@ void arap(RXMeshStatic& rx)
 
     const int num_verts = rx.get_num_vertices();
 
-    int  num_steps  = 0;
-    bool is_running = false;
+    int  num_steps   = 0;
+    bool is_running  = false;
+    int  num_gn_iter = 1;
 
     auto polyscope_callback = [&]() mutable {
         bool step_once = false;
@@ -224,7 +241,7 @@ void arap(RXMeshStatic& rx)
 
 
         if (step_once || is_running) {
-            t += flag ? -0.5f : 0.5f;
+            t += flag ? -0.1f : 0.1f;
 
             flag = (t < 0 || t > 1.0f) ? !flag : flag;
 
@@ -248,36 +265,38 @@ void arap(RXMeshStatic& rx)
 
             timer.start("Step");
 
-            // compute g = -J^T r
-            // the -1.0 is used here so we don't need to scale things again
-            // in the gauss-newton which solves (J^T J).dir = -J^T r
-            timer.start("Diff");
-            problem.eval_terms_sum_of_squares(-1.0);
-            timer.stop("Diff");
+            for (int i = 0; i < num_gn_iter; ++i) {
+                // compute g = -J^T r
+                // the -1.0 is used here so we don't need to scale things again
+                // in the gauss-newton which solves (J^T J).dir = -J^T r
+                timer.start("Diff");
+                problem.eval_terms_sum_of_squares(-1.0);
+                timer.stop("Diff");
 
-            //problem.jac->move(DEVICE, HOST);
-            //problem.jac->to_file("arap_jac"+std::to_string(num_steps));
+                // problem.jac->move(DEVICE, HOST);
+                // problem.jac->to_file("arap_jac"+std::to_string(num_steps));
 
-            // get the current value of the loss function
-            T f = problem.get_current_loss();
-            RXMESH_INFO("Step: {}, Energy: {}", num_steps, f);
+                // get the current value of the loss function
+                T f = problem.get_current_loss();
+                RXMESH_INFO("Step: {}, Energy: {}", num_steps, f);
 
 
-            // direction newton
-            timer.start("LinearSolver");
-            solver.compute_direction();
-            timer.stop("LinearSolver");
+                // direction newton
+                timer.start("LinearSolver");
+                solver.compute_direction();
+                timer.stop("LinearSolver");
 
-            // take a step
-            rx.for_each_vertex(
-                DEVICE,
-                [p = opt_var, dir = solver.dir, n = num_verts] __device__(
-                    const VertexHandle& vh) mutable {
-                    dir.reshape(n, VariableDim);
-                    for (int i = 0; i < VariableDim; ++i) {
-                        p(vh, i) = p(vh, i) + dir(vh, i);
-                    }
-                });
+                // take a step
+                rx.for_each_vertex(
+                    DEVICE,
+                    [p = opt_var, dir = solver.dir, n = num_verts] __device__(
+                        const VertexHandle& vh) mutable {
+                        dir.reshape(n, VariableDim);
+                        for (int i = 0; i < VariableDim; ++i) {
+                            p(vh, i) = p(vh, i) + dir(vh, i);
+                        }
+                    });
+            }
 
             timer.stop("Step");
         }

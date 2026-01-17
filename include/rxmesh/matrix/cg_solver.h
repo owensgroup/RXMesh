@@ -61,6 +61,11 @@ struct CGSolver : public IterativeSolver<T, DenseMatrix<T, DenseMatOrder>>
 
         this->m_iter_taken = 0;
 
+        if (this->is_converged(this->m_start_residual, delta_new)) {
+            this->m_final_residual = delta_new;
+            return;
+        }
+
         while (this->m_iter_taken < this->m_max_iter) {
             // s = Ap
             mat_vec(P, S, stream);
