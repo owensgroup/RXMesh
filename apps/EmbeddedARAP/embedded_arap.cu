@@ -196,7 +196,7 @@ void arap(RXMeshStatic& rx)
 
 
     problem.prep_eval();
-    solver.prep_solver(1000);
+    solver.prep_solver(125);
 
     // problem.jac->to_file("arap_jac");
 
@@ -210,7 +210,12 @@ void arap(RXMeshStatic& rx)
 
     int  num_steps   = 0;
     bool is_running  = false;
-    int  num_gn_iter = 1;
+    int  num_gn_iter = 30;
+
+    RXMESH_INFO("Jacobian shape: {}x{} ({})",
+                problem.jac->rows(),
+                problem.jac->cols(),
+                problem.jac->non_zeros());
 
     auto polyscope_callback = [&]() mutable {
         bool step_once = false;
@@ -258,13 +263,6 @@ void arap(RXMeshStatic& rx)
                 problem.eval_terms_sum_of_squares(-1.0);
                 timer.stop("Diff");
 
-                // problem.jac->move(DEVICE, HOST);
-                // problem.jac->to_file("arap_jac"+std::to_string(num_steps));
-
-                // get the current value of the loss function
-                T f = problem.get_current_loss();
-                RXMESH_INFO("Step: {}, Energy: {}", num_steps, f);
-
 
                 // direction newton
                 timer.start("LinearSolver");
@@ -282,8 +280,11 @@ void arap(RXMeshStatic& rx)
                         }
                     });
             }
-
             timer.stop("Step");
+
+            // get the current value of the loss function
+            T f = problem.get_current_loss();
+            RXMESH_INFO("Step: {}, Energy: {}", num_steps, f);
         }
 
 #if USE_POLYSCOPE
