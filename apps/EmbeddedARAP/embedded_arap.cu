@@ -3,10 +3,12 @@
 #include "rxmesh/diff/diff_vector_problem.h"
 #include "rxmesh/diff/gauss_newton_solver.h"
 
+#include "util.h"
+
 using namespace rxmesh;
 
 template <typename T>
-void arap(RXMeshStatic& rx)
+void arap(RXMeshStatic& rx, Scenario scenario, const std::string& marker_path)
 {
     constexpr int VariableDim = 12;
 
@@ -60,27 +62,67 @@ void arap(RXMeshStatic& rx)
     auto cn = *rx.add_vertex_attribute<T>("cn", 3);
     cn.reset(0, LOCATION_ALL);
 
+    auto viz = *rx.add_vertex_attribute<T>("viz", 3);
+
+
     // set constraints
-    const vec3<float> sphere_center(0.1818329, -0.99023, 0.325066);
-    rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) {
-        const vec3<float> p(Urshape(vh, 0), Urshape(vh, 1), Urshape(vh, 2));
-
-        // fix the bottom
-        if (p[2] < -0.63) {
-            constraints(vh) = 2;
+    if (scenario == Scenario::MarkerFile) {
+        std::unordered_map<int, glm::vec3> markers;
+        if (!read_markers(marker_path, markers)) {
+            RXMESH_ERROR("Failed to read marker file: {}", marker_path);
+            return;
         }
+        rx.for_each_vertex(
+            HOST,
+            [&](const VertexHandle vh) mutable {
+                uint32_t vid = rx.map_to_global(vh);
 
-        // move the jaw
-        if (glm::distance(p, sphere_center) < 0.1) {
-            constraints(vh) = 1;
-        }
-    });
+                auto it = markers.find(static_cast<int>(vid));
+                if (it == markers.end()) {
+                    return;
+                }
+
+                const auto& target = it->second;
+
+
+                cn(vh, 0) = Urshape(vh, 0) - target.x;
+                cn(vh, 1) = Urshape(vh, 1) - target.y;
+                cn(vh, 2) = Urshape(vh, 2) - target.z;
+
+
+                constraints(vh) = 1;
+            },
+            NULL,
+            false);
+
+        constraints.move(HOST, DEVICE);
+        cn.move(HOST, DEVICE);
+
+    } else {
+
+        const vec3<float> sphere_center(0.1818329, -0.99023, 0.325066);
+        rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) {
+            const vec3<float> p(Urshape(vh, 0), Urshape(vh, 1), Urshape(vh, 2));
+
+            // fix the bottom
+            if (p[2] < -0.63) {
+                constraints(vh) = 2;
+            }
+
+            // move the jaw
+            if (glm::distance(p, sphere_center) < 0.1) {
+                constraints(vh) = 1;
+            }
+        });
+    }
 
 #if USE_POLYSCOPE
     // move constraints to the host and add it to Polyscope
     constraints.move(DEVICE, HOST);
     rx.get_polyscope_mesh()->addVertexScalarQuantity("constraintsV",
                                                      constraints);
+    // rx.get_polyscope_mesh()->updateVertexPositions(Urshape);
+    // polyscope::show();
 #endif
 
     // E_fit + E_rot
@@ -204,13 +246,13 @@ void arap(RXMeshStatic& rx)
     bool        flag = false;
     vec3<float> start(0.0f, 0.2f, 0.0f);
     vec3<float> end(0.0f, -0.2f, 0.0f);
-    vec3<float> displacement(0.0f, 0.0f, 0.0f);
+
 
     const int num_verts = rx.get_num_vertices();
 
     int  num_steps   = 0;
     bool is_running  = false;
-    int  num_gn_iter = 30;
+    int  num_gn_iter = 1;
 
     RXMESH_INFO("Jacobian shape: {}x{} ({})",
                 problem.jac->rows(),
@@ -231,24 +273,28 @@ void arap(RXMeshStatic& rx)
 
 
         if (step_once || is_running) {
-            t += flag ? -0.1f : 0.1f;
 
-            flag = (t < 0 || t > 1.0f) ? !flag : flag;
+            if (scenario == Scenario::Animated) {
+                t += flag ? -0.1f : 0.1f;
 
-            displacement = (1 - t) * start + (t)*end;
+                flag = (t < 0 || t > 1.0f) ? !flag : flag;
 
-            // apply user deformation
-            rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) {
-                if (constraints(vh) == 1) {
-                    cn(vh, 0) = displacement[0];
-                    cn(vh, 1) = displacement[1];
-                    cn(vh, 2) = displacement[2];
-                } else {
-                    cn(vh, 0) = 0;
-                    cn(vh, 1) = 0;
-                    cn(vh, 2) = 0;
-                }
-            });
+                vec3<float> displacement = (1 - t) * start + (t)*end;
+
+                // apply user deformation
+                rx.for_each_vertex(DEVICE,
+                                   [=] __device__(const VertexHandle& vh) {
+                                       if (constraints(vh) == 1) {
+                                           cn(vh, 0) = displacement[0];
+                                           cn(vh, 1) = displacement[1];
+                                           cn(vh, 2) = displacement[2];
+                                       } else {
+                                           cn(vh, 0) = 0;
+                                           cn(vh, 1) = 0;
+                                           cn(vh, 2) = 0;
+                                       }
+                                   });
+            }
 
             // process step
             num_steps++;
@@ -288,17 +334,16 @@ void arap(RXMeshStatic& rx)
         }
 
 #if USE_POLYSCOPE
-        // repurpose cn to be the new position (for gui only)
         rx.for_each_vertex(DEVICE, [=] __device__(auto vh) {
             for (int i = 0; i < 3; ++i) {
-                cn(vh, i) = Urshape(vh, i) + opt_var(vh, i);
+                viz(vh, i) = Urshape(vh, i) - opt_var(vh, i);
             }
         });
-        cn.move(DEVICE, HOST);
-        rx.get_polyscope_mesh()->updateVertexPositions(cn);
+        viz.move(DEVICE, HOST);
+        rx.get_polyscope_mesh()->updateVertexPositions(viz);
 #endif
         if (ImGui::Button("Export")) {
-            rx.export_obj(std::to_string(num_steps) + ".obj", cn);
+            rx.export_obj(std::to_string(num_steps) + ".obj", viz);
         }
 
         ImGui::SameLine();
@@ -333,15 +378,35 @@ int main(int argc, char** argv)
 {
     rx_init(0);
 
-    std::string filename = STRINGIFY(INPUT_DIR) "dragon_simp.obj";
+    std::string mesh_path = STRINGIFY(INPUT_DIR) "raptor_simplify2k.obj";
+
+    int scenario_i = 1;
+
+    std::string marker_path = STRINGIFY(INPUT_DIR) "raptor_simplify2k.mrk";
 
     if (argc > 1) {
-        filename = std::string(argv[1]);
+        mesh_path = argv[1];
+    }
+    if (argc > 2) {
+        scenario_i = std::atoi(argv[2]);
+    }
+    if (argc > 3) {
+        marker_path = argv[3];
     }
 
-    RXMeshStatic rx(filename);
+    Scenario scenario =
+        (scenario_i == 1) ? Scenario::MarkerFile : Scenario::Animated;
 
-    arap<float>(rx);
+
+    RXMeshStatic rx(mesh_path);
+
+    if (scenario == Scenario::MarkerFile) {
+        RXMESH_INFO("Scenario=MarkerFile, marker={}", marker_path);
+    } else {
+        RXMESH_INFO("Scenario=Animated");
+    }
+
+    arap<float>(rx, scenario, marker_path);
 
     return 0;
 }

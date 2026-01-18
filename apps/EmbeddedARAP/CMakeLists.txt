@@ -2,6 +2,7 @@ add_executable(EmbeddedARAP)
 
 set(SOURCE_LIST
     embedded_arap.cu
+	util.h
 )
 
 target_sources(EmbeddedARAP 
