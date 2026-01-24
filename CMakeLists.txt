@@ -1,10 +1,16 @@
 #To run with cuDSS:
 #>> cmake -DRX_USE_CUDSS=ON -DCMAKE_PREFIX_PATH="C:\Program Files\NVIDIA cuDSS\v0.6\lib\12\cmake" ..
-cmake_minimum_required(VERSION 3.18 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
+
+if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES native)
+endif()
 
 project(RXMesh 
         VERSION 0.2.1 
         LANGUAGES C CXX CUDA)
+
+message(STATUS "CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
 
 
 set(RX_USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")
@@ -96,9 +102,6 @@ FetchContent_MakeAvailable(cubql)
 # Package Management
 # TODO: Consider using CPM for the various libraries above
 include(cmake/CPM.cmake) 
-
-# Auto-detect GPU architecture
-include("cmake/AutoDetectCudaArch.cmake")
 
 # Direct all output to /bin directory
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin)
