@@ -15,12 +15,13 @@ if(NOT metis_POPULATED)
     FetchContent_Populate(metis)
 endif()
 
+# Add the METIS library
+add_subdirectory(${metis_SOURCE_DIR} ${metis_BINARY_DIR})
+
 # Optionally set IDXTYPEWIDTH and REALTYPEWIDTH
 set(IDXTYPEWIDTH 32 CACHE STRING "Width of integer type for METIS")
 set(REALTYPEWIDTH 32 CACHE STRING "Width of real type for METIS")
 
-# Add the METIS library
-add_subdirectory(${metis_SOURCE_DIR} ${metis_BINARY_DIR})
 
 # Include directories and definitions
 target_include_directories(metis INTERFACE
