@@ -6,6 +6,9 @@ if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
     set(CMAKE_CUDA_ARCHITECTURES native)
 endif()
 
+#So we can use FetchContent_MakeAvailable without warnings
+cmake_policy(SET CMP0169 OLD)
+
 project(RXMesh 
         VERSION 0.2.1 
         LANGUAGES C CXX CUDA)
