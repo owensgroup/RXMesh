@@ -8,7 +8,6 @@
 #include <assert.h>
 #include "../common/openmesh_report.h"
 #include "../common/openmesh_trimesh.h"
-#include "gtest/gtest.h"
 #include "rxmesh/util/export_tools.h"
 #include "rxmesh/util/report.h"
 #include "rxmesh/util/timer.h"
@@ -262,8 +261,11 @@ void geodesic_ptp_openmesh(const std::vector<uint32_t>& h_seeds,
                            std::vector<uint32_t>&       toplesets)
 {
     TriMesh input_mesh;
-    ASSERT_TRUE(OpenMesh::IO::read_mesh(input_mesh, Arg.obj_file_name));
-
+    if (!OpenMesh::IO::read_mesh(input_mesh, Arg.obj_file_name)) {
+        RXMESH_ERROR("Failed to read mesh from {}", Arg.obj_file_name);
+        return;
+    }
+    
     // Report
     //OpenMeshReport report("Geodesic_OpenMesh");
     //report.command_line(Arg.argc, Arg.argv);

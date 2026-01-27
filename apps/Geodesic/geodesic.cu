@@ -4,15 +4,16 @@
 // triangular meshes." Computers & Graphics 84 (2019): 77-92
 
 #include <cuda_profiler_api.h>
+#include <CLI/CLI.hpp>
+#include <cstdlib>
 #include <random>
-
-#include "gtest/gtest.h"
 
 #include "../common/openmesh_trimesh.h"
 
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/cuda_query.h"
 #include "rxmesh/util/import_obj.h"
+#include "rxmesh/util/log.h"
 
 struct arg
 {
@@ -28,21 +29,24 @@ struct arg
 #include "geodesic_ptp_openmesh.h"
 #include "geodesic_ptp_rxmesh.h"
 
-TEST(App, Geodesic)
+void geodesic()
 {
     using namespace rxmesh;
     using dataT = float;
 
-    // Select device
-    cuda_query(Arg.device_id);
-
     RXMeshStatic rx(Arg.obj_file_name);
-    ASSERT_TRUE(rx.is_closed())
-        << "Geodesic only works on watertight/closed manifold mesh without "
-           "boundaries";
-    ASSERT_TRUE(rx.is_edge_manifold())
-        << "Geodesic only works on watertight/closed manifold mesh without "
-           "boundaries";
+    if (!rx.is_closed()) {
+        RXMESH_ERROR(
+            "Geodesic only works on watertight/closed manifold mesh without "
+            "boundaries");
+        return;
+    }
+    if (!rx.is_edge_manifold()) {
+        RXMESH_ERROR(
+            "Geodesic only works on watertight/closed manifold mesh without "
+            "boundaries");
+        return;
+    }
 
 
     // Generate Seeds
@@ -74,49 +78,38 @@ TEST(App, Geodesic)
 int main(int argc, char** argv)
 {
     using namespace rxmesh;
-    Log::init();
 
-    ::testing::InitGoogleTest(&argc, argv);
+
+    CLI::App app{"Geodesic - Compute geodesic distances on triangular meshes"};
+
+    app.add_option("-i,--input", Arg.obj_file_name, "Input OBJ mesh file")
+        ->default_val(std::string(STRINGIFY(INPUT_DIR) "sphere3.obj"));
+
+    app.add_option("-o,--output", Arg.output_folder, "JSON file output folder")
+        ->default_val(std::string(STRINGIFY(OUTPUT_DIR)));
+
+    app.add_option("-d,--device_id", Arg.device_id, "GPU device ID")
+        ->default_val(0u);
+
+    // num_seeds is commented out in the original, keeping it for now but not
+    // exposing it app.add_option("--num_seeds", Arg.num_seeds, "Number of input
+    // seeds")
+    //     ->default_val(1u);
+
+    rx_init(Arg.device_id);
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError& e) {
+        return app.exit(e);
+    }
+
     Arg.argv = argv;
     Arg.argc = argc;
-
-
-    if (argc > 1) {
-        if (cmd_option_exists(argv, argc + argv, "-h")) {
-            // clang-format off
-            RXMESH_INFO("\nUsage: Geodesic.exe < -option X>\n"
-                        " -h:          Display this massage and exit\n"
-                        " -input:      Input OBJ mesh file. Default is {} \n"
-                        " -o:          JSON file output folder. Default is {} \n"
-                       // "-num_seeds:   Number of input seeds. Default is {}\n"
-                        " -device_id:  GPU device ID. Default is {}",
-            Arg.obj_file_name, Arg.output_folder ,Arg.num_seeds, Arg.device_id);
-            // clang-format on
-            exit(EXIT_SUCCESS);
-        }
-
-        if (cmd_option_exists(argv, argc + argv, "-input")) {
-            Arg.obj_file_name =
-                std::string(get_cmd_option(argv, argv + argc, "-input"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-o")) {
-            Arg.output_folder =
-                std::string(get_cmd_option(argv, argv + argc, "-o"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-device_id")) {
-            Arg.device_id =
-                atoi(get_cmd_option(argv, argv + argc, "-device_id"));
-        }
-        // if (cmd_option_exists(argv, argc + argv, "-num_seeds")) {
-        //    Arg.num_seeds =
-        //        atoi(get_cmd_option(argv, argv + argc, "-num_seeds"));
-        //}
-    }
 
     RXMESH_TRACE("input= {}", Arg.obj_file_name);
     RXMESH_TRACE("output_folder= {}", Arg.output_folder);
     RXMESH_TRACE("num_seeds= {}", Arg.num_seeds);
     RXMESH_TRACE("device_id= {}", Arg.device_id);
 
-    return RUN_ALL_TESTS();
+    geodesic();
 }
