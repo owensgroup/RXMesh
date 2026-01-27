@@ -1,4 +1,4 @@
-
+#include <CLI/CLI.hpp>
 #include <filesystem>
 
 #include "rxmesh/rxmesh_static.h"
@@ -11,6 +11,7 @@
 #include "rxmesh/matrix/sparse_matrix.h"
 
 #include "rxmesh/matrix/cholesky_solver.h"
+#include "rxmesh/util/log.h"
 
 #include "count_nnz_fillin.h"
 
@@ -22,7 +23,7 @@ using namespace rxmesh;
 
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "cloth_uni_loop.obj";
+    std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
 
     uint32_t device_id = 0;
 
@@ -338,41 +339,28 @@ void all_perm(RXMeshStatic& rx)
 
 int main(int argc, char** argv)
 {
-    Log::init(spdlog::level::info);
+    CLI::App app{"NDReorder - Test nested dissection reordering methods"};
 
-    if (argc > 1) {
-        if (cmd_option_exists(argv, argc + argv, "-h")) {
-            // clang-format off
-            RXMESH_INFO("\nUsage: NDReorder.exe < -option X>\n"
-                        " -h:          Display this massage and exits\n"
-                        " -input:      Input file. Only accepts OBJ files. Default is {}\n"
-                        " -n:          Number of grid points for a grid mesh. Default is {}\n"
-                        " -device_id:  GPU device ID. Default is {}",
-            Arg.obj_file_name,  Arg.n, Arg.device_id);
-            // clang-format on
-            exit(EXIT_SUCCESS);
-        }
+    app.add_option("-i,--input", Arg.obj_file_name, "Input OBJ mesh file")
+        ->default_val(std::string(STRINGIFY(INPUT_DIR) "cloth_uni_loop.obj"));
 
-        if (cmd_option_exists(argv, argc + argv, "-input")) {
-            Arg.obj_file_name =
-                std::string(get_cmd_option(argv, argv + argc, "-input"));
-        }
+    app.add_option("-n", Arg.n, "Number of grid points for a grid mesh (if > 0, creates a grid mesh instead of loading from file)")
+        ->default_val(-1);
 
-        if (cmd_option_exists(argv, argc + argv, "-device_id")) {
-            Arg.device_id =
-                atoi(get_cmd_option(argv, argv + argc, "-device_id"));
-        }
+    app.add_option("-d,--device_id", Arg.device_id, "GPU device ID")
+        ->default_val(0u);
 
-        if (cmd_option_exists(argv, argc + argv, "-n")) {
-            Arg.n = atoi(get_cmd_option(argv, argv + argc, "-n"));
-        }
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError& e) {
+        return app.exit(e);
     }
+
+    rx_init(Arg.device_id);
 
     RXMESH_TRACE("input= {}", Arg.obj_file_name);
     RXMESH_TRACE("device_id= {}", Arg.device_id);
     RXMESH_TRACE("n= {}", Arg.n);
-
-    cuda_query(Arg.device_id);
 
     if (Arg.n > 0) {
         std::vector<std::vector<float>>    verts;

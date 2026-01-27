@@ -6,5 +6,5 @@ set(SOURCE_LIST
 
 rxmesh_add_app(NDReorder
   SOURCES ${SOURCE_LIST}
-  LIBS RXMesh metis Eigen3::Eigen
+  LIBS RXMesh CLI11::CLI11 metis Eigen3::Eigen
 )
