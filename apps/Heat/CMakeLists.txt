@@ -4,5 +4,5 @@ set(SOURCE_LIST
 
 rxmesh_add_app(Heat
   SOURCES ${SOURCE_LIST}
-  LIBS RXMesh
+  LIBS RXMesh CLI11::CLI11
 )
