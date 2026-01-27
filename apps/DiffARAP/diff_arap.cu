@@ -1,3 +1,4 @@
+#include <CLI/CLI.hpp>
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/matrix/sparse_matrix.h"
@@ -284,13 +285,24 @@ void arap(RXMeshStatic& rx)
 
 int main(int argc, char** argv)
 {
-    rx_init(0);
-
+    CLI::App app{"DiffARAP"};
+    
     std::string filename = STRINGIFY(INPUT_DIR) "dragon.obj";
+    uint32_t device_id = 0;
+    
+    app.add_option("-i,--input", filename, "Input OBJ mesh file")
+        ->default_val(std::string(STRINGIFY(INPUT_DIR) "dragon.obj"));
+    
+    app.add_option("-d,--device_id", device_id, "GPU device ID")
+        ->default_val(0u);
 
-    if (argc > 1) {
-        filename = std::string(argv[1]);
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError& e) {
+        return app.exit(e);
     }
+
+    rx_init(device_id);
 
     RXMeshStatic rx(filename);
 
