@@ -16,7 +16,19 @@ set(RXMESH_LIBRARY_SOURCES
     "${RXMESH_SOURCE_DIR}/include/rxmesh/util/MshSaver.cpp"
 )
 
-add_library(RXMesh STATIC ${RXMESH_LIBRARY_SOURCES})
+file(GLOB_RECURSE RXMESH_LIBRARY_HEADERS CONFIGURE_DEPENDS
+    "${RXMESH_SOURCE_DIR}/include/rxmesh/*.h"
+    "${RXMESH_SOURCE_DIR}/include/rxmesh/*.hpp"
+    "${RXMESH_SOURCE_DIR}/include/rxmesh/*.cuh"
+    "${RXMESH_SOURCE_DIR}/include/rxmesh/*.inl"
+)
+
+add_library(RXMesh STATIC ${RXMESH_LIBRARY_SOURCES} ${RXMESH_LIBRARY_HEADERS})
+
+source_group(
+    TREE ${RXMESH_SOURCE_DIR}
+    FILES ${RXMESH_LIBRARY_SOURCES} ${RXMESH_LIBRARY_HEADERS}
+)
 
 # Required for targets that compile CUDA sources.
 set_property(TARGET RXMesh PROPERTY CUDA_SEPARABLE_COMPILATION ON)
