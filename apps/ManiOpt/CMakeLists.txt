@@ -5,5 +5,5 @@ set(SOURCE_LIST
 
 rxmesh_add_app(ManiOpt
   SOURCES ${SOURCE_LIST}
-  LIBS RXMesh
+  LIBS RXMesh CLI11::CLI11
 )

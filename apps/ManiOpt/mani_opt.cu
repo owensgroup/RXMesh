@@ -1,10 +1,13 @@
 // Reference Implementation
 // https://github.com/patr-schm/TinyAD-Examples/blob/main/apps/manifold_optimization.cc
+#include <CLI/CLI.hpp>
+
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/diff/diff_scalar_problem.h"
 #include "rxmesh/diff/lbfgs_solver.h"
 #include "rxmesh/diff/newton_solver.h"
+#include "rxmesh/util/log.h"
 
 #include "mean_curv.h"
 
@@ -342,67 +345,54 @@ void manifold_optimization(RXMeshStatic&                          rx,
 
 int main(int argc, char** argv)
 {
-    Log::init(spdlog::level::info);
-
     using T = float;
 
-    if (argc > 1) {
-        if (cmd_option_exists(argv, argc + argv, "-h")) {
-            // clang-format off
-            RXMESH_INFO("\nUsage: Param.exe < -option X>\n"
-                        " -h:                 Display this massage and exit\n"
-                        " -input:             Input OBJ mesh file. Default is {} \n"
-                        " -embed:             Input initial embedding mesh (OBJ file). Default is {} \n"
-                        " -o:                 JSON file output folder. Default is {} \n"
-                        " -solver:            Solver to use. Options are newton and lbfgs. Default is {}\n",
-                        " -max_iter:          Maximum number of iterations for Newton solver. Default is {}\n"
-                        " -history:           History size in LBFGS. Default is {}\n"
-                        " -device_id:         GPU device ID. Default is {}",                        
-            Arg.obj_file_name, Arg.embed_file_name, Arg.output_folder, Arg.solver, Arg.max_iter, Arg.history, Arg.device_id);
-            // clang-format on
-            exit(EXIT_SUCCESS);
-        }
+    CLI::App app{"ManiOpt - Manifold optimization on triangular meshes"};
 
-        if (cmd_option_exists(argv, argc + argv, "-input")) {
-            Arg.obj_file_name =
-                std::string(get_cmd_option(argv, argv + argc, "-input"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-embed")) {
-            Arg.embed_file_name =
-                std::string(get_cmd_option(argv, argv + argc, "-embed"));
-        }
+    app.add_option("-i,--input", Arg.obj_file_name, "Input OBJ mesh file")
+        ->default_val(std::string(STRINGIFY(INPUT_DIR) "giraffe.obj"));
 
-        if (cmd_option_exists(argv, argc + argv, "-solver")) {
-            Arg.solver =
-                std::string(get_cmd_option(argv, argv + argc, "-solver"));
-        }
+    app.add_option("-e,--embed",
+                   Arg.embed_file_name,
+                   "Input initial embedding mesh (OBJ file)")
+        ->default_val(
+            std::string(STRINGIFY(INPUT_DIR) "giraffe_embedding.obj"));
 
-        if (cmd_option_exists(argv, argc + argv, "-o")) {
-            Arg.output_folder =
-                std::string(get_cmd_option(argv, argv + argc, "-o"));
-        }
+    app.add_option("-o,--output", Arg.output_folder, "JSON file output folder")
+        ->default_val(std::string(STRINGIFY(OUTPUT_DIR)));
 
-        if (cmd_option_exists(argv, argc + argv, "-max_iter")) {
-            Arg.max_iter =
-                std::atoi(get_cmd_option(argv, argv + argc, "-max_iter"));
-        }
+    app.add_option("-s,--solver", Arg.solver, "Solver to use (newton or lbfgs)")
+        ->default_val(std::string("newton"))
+        ->check(CLI::IsMember({"newton", "lbfgs"}));
 
-        if (cmd_option_exists(argv, argc + argv, "-history")) {
-            Arg.history =
-                std::atoi(get_cmd_option(argv, argv + argc, "-history"));
-        }
+    app.add_option("-m,--max_iter",
+                   Arg.max_iter,
+                   "Maximum number of iterations for Newton solver")
+        ->default_val(100);
 
-        if (cmd_option_exists(argv, argc + argv, "-device_id")) {
-            Arg.device_id =
-                atoi(get_cmd_option(argv, argv + argc, "-device_id"));
-        }
+    app.add_option("--history", Arg.history, "History size in LBFGS")
+        ->default_val(5);
+
+    app.add_option("-d,--device_id", Arg.device_id, "GPU device ID")
+        ->default_val(0u);
+
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError& e) {
+        return app.exit(e);
     }
+
+    rx_init(Arg.device_id);
+
+    Arg.argv = argv;
+    Arg.argc = argc;
 
     RXMESH_INFO("input= {}", Arg.obj_file_name);
     RXMESH_INFO("embed= {}", Arg.embed_file_name);
     RXMESH_INFO("output_folder= {}", Arg.output_folder);
     RXMESH_INFO("solver= {}", Arg.solver);
     RXMESH_INFO("max_iter= {}", Arg.max_iter);
+    RXMESH_INFO("history= {}", Arg.history);
     RXMESH_INFO("device_id= {}", Arg.device_id);
 
 
