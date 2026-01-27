@@ -2,16 +2,19 @@
 // Desbrun, Mathieu, et al "Implicit Fairing of Irregular Meshes using Diffusion
 // and Curvature Flow." SIGGRAPH 1999
 
-#include "gtest/gtest.h"
+#include <CLI/CLI.hpp>
+#include <cstdlib>
+
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/cuda_query.h"
+#include "rxmesh/util/log.h"
 
 struct arg
 {
-    std::string obj_file_name        = STRINGIFY(INPUT_DIR) "dragon.obj";
+    std::string obj_file_name        = STRINGIFY(INPUT_DIR) "sphere3.obj";
     std::string output_folder        = STRINGIFY(OUTPUT_DIR);
     std::string perm_method          = "nstdis";
-    std::string solver               = "gmg";
+    std::string solver               = "chol";
     uint32_t    device_id            = 0;
     float       time_step            = 10;
     float       tol_abs              = 1e-6;
@@ -71,10 +74,6 @@ void creat_matrices(rxmesh::RXMeshStatic& rx)
     auto A_mat_copy = A_mat.to_eigen_copy();
     auto B_mat_copy = B_mat.to_eigen();
 
-    // std::cout << B_mat_copy << "\n";
-    // std::cout << "\n*******\n*******\n";
-    // std::cout << A_mat_copy << "\n";
-
     std::filesystem::create_directories(output_dir);
 
     Eigen::saveMarketDense(
@@ -91,7 +90,7 @@ void creat_matrices(rxmesh::RXMeshStatic& rx)
     RXMESH_INFO("Wrote A and b .mtx files and mesh obj to {}/", output_dir);
 }
 
-TEST(App, MCF)
+int mcf()
 {
     using namespace rxmesh;
     using dataT = float;
@@ -101,7 +100,11 @@ TEST(App, MCF)
 
     RXMeshStatic rx(Arg.obj_file_name, "", 256);
 
-    ASSERT_TRUE(rx.is_edge_manifold());
+    if (!rx.is_edge_manifold()) {
+        RXMESH_ERROR("MCF requires an edge-manifold mesh");
+        return EXIT_FAILURE;
+    }
+
     if (Arg.create_mat) {
         creat_matrices(rx);
     } else if (Arg.solver == "cg") {
@@ -124,132 +127,114 @@ TEST(App, MCF)
 #endif
     } else {
         RXMESH_ERROR("Unrecognized input solver type: {}", Arg.solver);
+        return EXIT_FAILURE;
     }
+
+    return 0;
 }
 
 int main(int argc, char** argv)
 {
     using namespace rxmesh;
-    Log::init(spdlog::level::info);
 
-    ::testing::InitGoogleTest(&argc, argv);
+    CLI::App app{
+        "MCF - Implicit Fairing of Irregular Meshes using Diffusion and "
+        "Curvature Flow"};
+
+    app.add_option("-i,--input", Arg.obj_file_name, "Input OBJ mesh file")
+        ->default_val(std::string(STRINGIFY(INPUT_DIR) "dragon.obj"));
+
+    app.add_option("-o,--output", Arg.output_folder, "JSON file output folder")
+        ->default_val(std::string(STRINGIFY(OUTPUT_DIR)));
+
+    app.add_flag("--uniform_laplace",
+                 Arg.use_uniform_laplace,
+                 "Use uniform Laplace weights")
+        ->default_val(true);
+
+    app.add_option("--dt", Arg.time_step, "Time step (delta t)")
+        ->default_val(10.0f);
+
+    app.add_option("-s,--solver", Arg.solver, "Solver to use")
+        ->default_val(std::string("chol"))
+        ->check(CLI::IsMember({"cg",
+                               "pcg",
+                               "cg_mat_free",
+                               "pcg_mat_free",
+                               "chol",
+                               "cudss_chol",
+                               "gmg"}));
+
+    app.add_option("--perm",
+                   Arg.perm_method,
+                   "Permutation method for Cholesky factorization")
+        ->default_val(std::string("nstdis"))
+        ->check(
+            CLI::IsMember({"symrcm", "symamd", "nstdis", "gpumgnd", "gpund"}));
+
+    app.add_option("--max_iter",
+                   Arg.max_num_iter,
+                   "Maximum number of iterations for iterative solvers")
+        ->default_val(100u);
+
+    app.add_option(
+           "--tol_abs", Arg.tol_abs, "Iterative solver absolute tolerance")
+        ->default_val(1e-6f);
+
+    app.add_option(
+           "--tol_rel", Arg.tol_rel, "Iterative solver relative tolerance")
+        ->default_val(0.0f);
+
+    app.add_flag("--create_mat",
+                 Arg.create_mat,
+                 "Export the linear system matrices (.mtx) and mesh obj to "
+                 "files and exit");
+
+    app.add_option("--gmg_levels",
+                   Arg.gmg_levels,
+                   "GMG number of levels in the hierarchy")
+        ->default_val(5);
+
+    app.add_option("--gmg_csolver", Arg.gmg_csolver, "GMG coarse solver")
+        ->default_val(std::string("cholesky"))
+        ->check(CLI::IsMember({"jacobi", "cholesky", "cudsscholesky"}));
+
+    app.add_option("--gmg_sampling",
+                   Arg.gmg_sampling,
+                   "GMG sampling method to create the hierarchy")
+        ->default_val(std::string("random"))
+        ->check(CLI::IsMember({"random", "fps", "kmeans"}));
+
+    app.add_option("--gmg_threshold",
+                   Arg.gmg_threshold,
+                   "GMG threshold for the coarsest level")
+        ->default_val(1000);
+
+    app.add_flag("--gmg_pruned_ptap",
+                 Arg.gmg_pruned_ptap,
+                 "GMG toggle using pruned PtAP for fast construction");
+
+    app.add_flag("--gmg_verify_ptap",
+                 Arg.gmg_verify_ptap,
+                 "GMG toggle verifying the construction of PtAP");
+
+    app.add_flag("--gmg_rh",
+                 Arg.gmg_render_hierarchy,
+                 "GMG toggle rendering the hierarchy");
+
+    app.add_option("-d,--device_id", Arg.device_id, "GPU device ID")
+        ->default_val(0u);
+
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError& e) {
+        return app.exit(e);
+    }
+
+    rx_init(Arg.device_id);
+
     Arg.argv = argv;
     Arg.argc = argc;
-    if (argc > 1) {
-        if (cmd_option_exists(argv, argc + argv, "-h")) {
-            // clang-format off
-            RXMESH_INFO("\nUsage: MCF.exe < -option X>\n"
-                        " -h:                 Display this massage and exit\n"
-                        " -input:             Input file. Default is {}\n"                        
-                        " -o:                 JSON file output folder. Default is {}\n"
-                        " -uniform_laplace:   Toggle the use of uniform Laplace weights. Default is {}\n"
-                        " -dt:                Time step (delta t). Default is {}\n"
-                        "                     Hint: should be between (0.001, 1) for cotan Laplace or between (1, 100) for uniform Laplace\n"
-                        " -solver:            Solver to use. Options are cg_mat_free, pcg_mat_free, cg, pcg, chol, cudss_chol, or gmg. Default is {}\n"                         
-                        " -perm:              Permutation method for Cholesky factorization (symrcm, symamd, nstdis, gpumgnd, gpund). Default is {}\n"
-                        " -max_iter:          Maximum number of iterations for iterative solvers. Default is {}\n"                                            
-                        " -tol_abs:           Iterative solver absolute tolerance. Default is {}\n"
-                        " -tol_rel:           Iterative solver relative tolerance. Default is {}\n"
-                        " -create_mat:        Export the linear system matrices (.mtx) and mesh obj to files and exit. Default is {}\n"
-                        " -gmg_levels:        GMG number of levels in the hierarchy, includes the finest level. Default is {}\n"
-                        " -gmg_csolver:       GMG coarse solver (jacobi, cholesky, cudsscholesky). Default is {}\n"
-                        " -gmg_sampling:      GMG sampling method to create the hierarchy (random, fps, kmeans). Default is {}\n"
-                        " -gmg_threshold:     GMG threshold for the coarsest level in the hierarchy, i.e., number of vertices in the coarsest level. Default is {}\n"
-                        " -gmg_pruned_ptap:   GMG toggle using pruned PtAP for fast construction. Default is {}\n"
-                        " -gmg_verify_ptap:   GMG toggle verifying the construction of PtAP. Default is {}\n"
-                        " -gmg_rh:            GMG toggle rendering the hierarchy. Default is {}\n"
-                        " -device_id:         GPU device ID. Default is {}\n",
-            Arg.obj_file_name, Arg.output_folder,  
-            (Arg.use_uniform_laplace? "true" : "false"), 
-            Arg.time_step, 
-            Arg.solver,             
-            Arg.perm_method, 
-            Arg.max_num_iter,            
-            Arg.tol_abs,
-            Arg.tol_rel, 
-            Arg.create_mat,
-            Arg.gmg_levels,
-            Arg.gmg_csolver,
-            Arg.gmg_sampling,
-            Arg.gmg_threshold,
-            (Arg.gmg_pruned_ptap? "true" : "false"),
-            (Arg.gmg_verify_ptap? "true" : "false"),
-            (Arg.gmg_render_hierarchy? "true" : "false"),            
-            Arg.device_id);
-            // clang-format on
-            exit(EXIT_SUCCESS);
-        }
-
-        if (cmd_option_exists(argv, argc + argv, "-input")) {
-            Arg.obj_file_name =
-                std::string(get_cmd_option(argv, argv + argc, "-input"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-o")) {
-            Arg.output_folder =
-                std::string(get_cmd_option(argv, argv + argc, "-o"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-dt")) {
-            Arg.time_step = std::atof(get_cmd_option(argv, argv + argc, "-dt"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-max_iter")) {
-            Arg.max_num_iter =
-                std::atoi(get_cmd_option(argv, argv + argc, "-max_iter"));
-        }
-
-        if (cmd_option_exists(argv, argc + argv, "-uniform_laplace")) {
-            Arg.use_uniform_laplace = !Arg.use_uniform_laplace;
-        }
-        if (cmd_option_exists(argv, argc + argv, "-device_id")) {
-            Arg.device_id =
-                atoi(get_cmd_option(argv, argv + argc, "-device_id"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-perm")) {
-            Arg.perm_method =
-                std::string(get_cmd_option(argv, argv + argc, "-perm"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-solver")) {
-            Arg.solver =
-                std::string(get_cmd_option(argv, argv + argc, "-solver"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-gmg_levels")) {
-            Arg.gmg_levels =
-                std::atoi(get_cmd_option(argv, argv + argc, "-gmg_levels"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-tol_abs")) {
-            Arg.tol_abs =
-                std::atof(get_cmd_option(argv, argv + argc, "-tol_abs"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-tol_rel")) {
-            Arg.tol_rel =
-                std::atof(get_cmd_option(argv, argv + argc, "-tol_rel"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-gmg_threshold")) {
-            Arg.gmg_threshold =
-                std::atoi(get_cmd_option(argv, argv + argc, "-gmg_threshold"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-gmg_csolver")) {
-            Arg.gmg_csolver =
-                std::string(get_cmd_option(argv, argv + argc, "-gmg_csolver"));
-        }
-
-        if (cmd_option_exists(argv, argc + argv, "-gmg_sampling")) {
-            Arg.gmg_sampling =
-                std::string(get_cmd_option(argv, argv + argc, "-gmg_sampling"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-gmg_rh")) {
-            Arg.gmg_render_hierarchy = !Arg.gmg_render_hierarchy;
-        }
-
-        if (cmd_option_exists(argv, argc + argv, "-create_mat")) {
-            Arg.create_mat = true;
-        }
-        if (cmd_option_exists(argv, argc + argv, "-gmg_pruned_ptap")) {
-            Arg.gmg_pruned_ptap = !Arg.gmg_pruned_ptap;
-        }
-        if (cmd_option_exists(argv, argc + argv, "-gmg_verify_ptap")) {
-            Arg.gmg_verify_ptap = !Arg.gmg_verify_ptap;
-        }
-    }
 
     RXMESH_INFO("input= {}", Arg.obj_file_name);
     RXMESH_INFO("output_folder= {}", Arg.output_folder);
@@ -270,5 +255,5 @@ int main(int argc, char** argv)
     RXMESH_INFO("gmg_render_hierarchy= {}", Arg.gmg_render_hierarchy);
     RXMESH_INFO("device_id= {}", Arg.device_id);
 
-    return RUN_ALL_TESTS();
+    return mcf();
 }

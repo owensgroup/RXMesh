@@ -23,10 +23,11 @@ void run_cg_mat_free(rxmesh::RXMeshStatic& rx,
     report.device();
     report.system();
     report.model_data(Arg.obj_file_name, rx);
-    if (pcg)
+    if (pcg){
         report.add_member("method", std::string("PCG_MAT_FREE"));
-    else
+    } else{
         report.add_member("method", std::string("CG_MAT_FREE"));
+    }
     report.add_member("application", std::string("MCF"));
     report.add_member("time_step", Arg.time_step);
     report.add_member("tol_abs", Arg.tol_abs);
@@ -35,8 +36,10 @@ void run_cg_mat_free(rxmesh::RXMeshStatic& rx,
     report.add_member("max_num_iter", Arg.max_num_iter);
     report.add_member("blockThreads", blockThreads);
 
-    ASSERT_TRUE(rx.is_closed())
-        << "mcf_rxmesh only takes watertight/closed mesh without boundaries";
+    if (!rx.is_closed()) {
+        RXMESH_ERROR("mcf_rxmesh only takes watertight/closed mesh without boundaries");
+        return;
+    }
 
     // Different attributes used throughout the application
     auto input_coord = rx.get_input_vertex_coordinates();

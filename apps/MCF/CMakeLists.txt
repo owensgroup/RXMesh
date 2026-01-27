@@ -11,7 +11,7 @@ set(SOURCE_LIST
 
 rxmesh_add_app(MCF
     SOURCES ${SOURCE_LIST}
-    LIBS RXMesh gtest_main
+    LIBS RXMesh CLI11::CLI11
 )
 if(${RX_USE_SUITESPARSE})
     target_link_libraries(MCF PRIVATE SuiteSparse::CHOLMOD)
