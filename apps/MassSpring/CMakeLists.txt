@@ -10,5 +10,5 @@ set(SOURCE_LIST
 
 rxmesh_add_app(MassSpring
     SOURCES ${SOURCE_LIST}
-    LIBS RXMesh
+    LIBS RXMesh CLI11::CLI11
 )

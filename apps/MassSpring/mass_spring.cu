@@ -1,3 +1,4 @@
+#include <CLI/CLI.hpp>
 
 #include "rxmesh/rxmesh_static.h"
 
@@ -5,6 +6,7 @@
 
 #include "rxmesh/diff/diff_scalar_problem.h"
 #include "rxmesh/diff/newton_solver.h"
+#include "rxmesh/util/log.h"
 
 #include "barrier_energy.h"
 #include "boundary_condition.h"
@@ -295,26 +297,42 @@ void mass_spring(RXMeshStatic& rx, Scenario scenario, int max_time_steps)
 
 int main(int argc, char** argv)
 {
-    Log::init(spdlog::level::info);
-
     using T = float;
 
+    CLI::App app{"MassSpring - Mass-spring system simulation"};
 
-    int scene          = 0;
-    int n              = 16;
-    int max_time_steps = 100;
+    int      scene          = 0;
+    int      n              = 16;
+    int      max_time_steps = -1;
+    uint32_t device_id      = 0;
 
-    if (argc >= 2) {
-        scene = atoi(argv[1]);
+    app.add_option("-s,--scene", scene, "Scene type (0=Flag, 1=Drop)")
+        ->default_val(0)
+        ->check(CLI::IsMember({0, 1}));
+
+    app.add_option("-n,--grid_size", n, "Grid size for plane generation")
+        ->default_val(16);
+
+    app.add_option("-t,--max_time_steps",
+                   max_time_steps,
+                   "Maximum number of time steps")
+        ->default_val(-1);
+
+    app.add_option("-d,--device_id", device_id, "GPU device ID")
+        ->default_val(0u);
+
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError& e) {
+        return app.exit(e);
     }
 
-    if (argc >= 3) {
-        n = atoi(argv[2]);
-    }
+    rx_init(device_id);
 
-    if (argc >= 4) {
-        max_time_steps = atoi(argv[3]);
-    }
+    RXMESH_INFO("scene= {}", scene);
+    RXMESH_INFO("grid_size= {}", n);
+    RXMESH_INFO("max_time_steps= {}", max_time_steps);
+    RXMESH_INFO("device_id= {}", device_id);
 
     if (scene == 0) {
         std::vector<std::vector<T>>        verts;
@@ -336,4 +354,6 @@ int main(int argc, char** argv)
 
         mass_spring<T>(rx, Scenario::Drop, max_time_steps);
     }
+
+    return 0;
 }
