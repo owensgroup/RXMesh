@@ -7,8 +7,8 @@ set(SOURCE_LIST
     flip.cuh
     smoothing.cuh
     link_condition.cuh
-    ../common/openmesh_trimesh.h
-    ../common/openmesh_report.h
+    #../common/openmesh_trimesh.h
+    #../common/openmesh_report.h
 )
 
 

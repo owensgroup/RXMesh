@@ -11,9 +11,11 @@ include(CMakeParseArguments)
 #     [SOURCE_GROUP_PREFIX <prefix>]  # defaults to target name
 #   )
 function(rxmesh_add_app target)  
-  set(oneValueArgs FOLDER SOURCE_GROUP_PREFIX)  
+  set(options)
+  set(oneValueArgs FOLDER SOURCE_GROUP_PREFIX)
+  set(multiValueArgs SOURCES LIBS DEPENDS)
 
-  cmake_parse_arguments(RXAPP "${options}" "${oneValueArgs}"  ${ARGN})
+  cmake_parse_arguments(RXAPP "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
   if(NOT RXAPP_FOLDER)
     set(RXAPP_FOLDER "apps")
@@ -33,7 +35,7 @@ function(rxmesh_add_app target)
   set_property(TARGET ${target} PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 
   if(RXAPP_SOURCES)
-    source_group(
+    source_group(      
       TREE ${CMAKE_CURRENT_LIST_DIR}
       PREFIX "${RXAPP_SOURCE_GROUP_PREFIX}"
       FILES ${RXAPP_SOURCES}

@@ -1,6 +1,4 @@
-add_executable( RXMesh_test )
-
-set( SOURCE_LIST
+set(SOURCE_LIST
     rxmesh_test_main.cu	
 	rxmesh_test.h
     test_attribute.cu
@@ -38,22 +36,8 @@ set( SOURCE_LIST
 	test_multiple_meshes.cu
 )
 
-target_sources( RXMesh_test 
-    PRIVATE
-	${SOURCE_LIST}    
+rxmesh_add_app(RXMesh_test
+  SOURCES ${SOURCE_LIST}
+  LIBS RXMesh gtest_main
+  FOLDER "tests"
 )
-
-set_target_properties( RXMesh_test PROPERTIES FOLDER "tests")
-
-set_property(TARGET RXMesh_test PROPERTY CUDA_SEPARABLE_COMPILATION ON)
-
-source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "RXMesh_test" FILES ${SOURCE_LIST})
-
-target_link_libraries( RXMesh_test    
-    PRIVATE RXMesh
-	PRIVATE gtest_main
-)
-
-if(WIN32 AND ${RX_USE_CUDSS})
-	add_dependencies(RXMesh_test CopyCUDSSDLL)
-endif()

@@ -3,8 +3,8 @@ set(SOURCE_LIST
   sec_rxmesh.cuh
   sec_kernels.cuh
   link_condition.cuh
-  ../common/openmesh_trimesh.h
-  ../common/openmesh_report.h
+  #../common/openmesh_trimesh.h
+  #../common/openmesh_report.h
 )
 
 

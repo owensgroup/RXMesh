@@ -6,4 +6,3 @@ rxmesh_add_app(ARAP
   SOURCES ${SOURCE_LIST}
   LIBS RXMesh
 )
-#gtest_discover_tests( ARAP )

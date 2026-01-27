@@ -1,29 +1,11 @@
 if(${RX_USE_POLYSCOPE})
-	add_executable( Polyscope_test )
-
-	set( SOURCE_LIST   
+	set(SOURCE_LIST
 		test_polyscope.cu
 	)
 
-	target_sources( Polyscope_test 
-	    PRIVATE
-		${SOURCE_LIST}    
+	rxmesh_add_app(Polyscope_test
+	  SOURCES ${SOURCE_LIST}
+	  LIBS polyscope RXMesh gtest_main
+	  FOLDER "tests"
 	)
-
-	set_target_properties( Polyscope_test PROPERTIES FOLDER "tests")
-
-	set_property(TARGET Polyscope_test PROPERTY CUDA_SEPARABLE_COMPILATION ON)
-
-	source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "Polyscope_test" FILES ${SOURCE_LIST})
-
-	target_link_libraries( Polyscope_test
-		PRIVATE polyscope	    
-	    PRIVATE RXMesh
-		PRIVATE gtest_main
-	)
-
-	
-	if(WIN32 AND ${RX_USE_CUDSS})
-		add_dependencies(Polyscope_test CopyCUDSSDLL)
-	endif()
 endif()

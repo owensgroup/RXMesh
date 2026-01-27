@@ -3,8 +3,8 @@ set(SOURCE_LIST
   delaunay_rxmesh.cuh
   mcf_rxmesh.h
   mcf_rxmesh_kernel.cuh
-  ../common/openmesh_trimesh.h
-  ../common/openmesh_report.h
+  #../common/openmesh_trimesh.h
+  #../common/openmesh_report.h
 )
 
 rxmesh_add_app(DelaunayEdgeFlip

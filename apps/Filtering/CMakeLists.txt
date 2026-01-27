@@ -4,8 +4,8 @@ set(SOURCE_LIST
   filtering.cu
   filtering_openmesh.h
   filtering_rxmesh.cuh
-  ../common/openmesh_trimesh.h
-  ../common/openmesh_report.h
+  #../common/openmesh_trimesh.h
+  #../common/openmesh_report.h
 )
 
 
