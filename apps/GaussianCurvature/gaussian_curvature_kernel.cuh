@@ -1,4 +1,5 @@
 #pragma once
+#include <glm/gtc/constants.hpp>
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
 #include "rxmesh/query.cuh"
@@ -36,7 +37,7 @@ __global__ static void compute_gaussian_curvature(
 
         bool is_ob = false;
         for (int i = 0; i < 3; ++i) {
-            if (rads[i] > PI * 0.5)
+            if (rads[i] > glm::pi<T>() * T(0.5))
                 is_ob = true;
         }
 
@@ -45,7 +46,7 @@ __global__ static void compute_gaussian_curvature(
             uint32_t v2 = (v + 2) % 3;
 
             if (is_ob) {
-                if (rads[v] > PI * 0.5) {
+                if (rads[v] > glm::pi<T>() * T(0.5)) {
                     atomicAdd(&amix(fv[v]), 0.25 * s);
                 } else {
                     atomicAdd(&amix(fv[v]), 0.125 * s);

@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <glm/gtc/constants.hpp>
 #include "rxmesh/util/report.h"
 
 
@@ -14,7 +15,7 @@ inline void gaussian_curvature_ref(
 
     std::vector<T> region_mixed(gaussian_curvature.size());
 
-    std::fill(gaussian_curvature.begin(), gaussian_curvature.end(), 2 * PI);
+    std::fill(gaussian_curvature.begin(), gaussian_curvature.end(), T(2.0) * glm::pi<T>());
     std::fill(region_mixed.begin(), region_mixed.end(), 0);
 
     T        edge_len_sq[3];
@@ -78,7 +79,7 @@ inline void gaussian_curvature_ref(
                                         Verts[v[i1]][1],
                                         Verts[v[i1]][2]);
             rads[i]        = atan2(angle_sin, angle_cos[i]);
-            if (rads[i] > PI * 0.5)
+            if (rads[i] > glm::pi<T>() * T(0.5))
                 is_ob = true;
         }
 
@@ -87,7 +88,7 @@ inline void gaussian_curvature_ref(
             uint32_t i2 = (i + 2) % 3;
 
             if (is_ob) {
-                if (rads[i] > PI * 0.5) {
+                if (rads[i] > glm::pi<T>() * T(0.5)) {
                     region_mixed[v[i]] += 0.25 * angle_sin;
                 } else {
                     region_mixed[v[i]] += 0.125 * angle_sin;

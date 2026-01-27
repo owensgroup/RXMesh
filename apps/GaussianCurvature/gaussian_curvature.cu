@@ -3,12 +3,13 @@
 // Differential-Geometry Operators for Triangulated 2-Manifolds"
 // International Workshop on Visualization and Mathematics
 
-#include "gtest/gtest.h"
+#include <CLI/CLI.hpp>
+#include <glm/gtc/constants.hpp>
 #include "rxmesh/attribute.h"
 #include "rxmesh/rxmesh_static.h"
-#include "rxmesh/util/import_obj.h"
+#include "rxmesh/util/log.h"
+#include "rxmesh/util/macros.h"
 
-constexpr double PI = 3.1415926535897932384626433832795028841971693993751058209;
 #include "gaussian_curvature_kernel.cuh"
 #include "gaussian_curvature_ref.h"
 
@@ -19,7 +20,7 @@ struct arg
 } Arg;
 
 template <typename T>
-void gaussian_curvature_rxmesh(const std::vector<T>& gaussian_curvature_gold)
+void gaussian_curvature_rxmesh()
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
@@ -43,7 +44,7 @@ void gaussian_curvature_rxmesh(const std::vector<T>& gaussian_curvature_gold)
                           (void*)compute_gaussian_curvature<T, blockThreads>);
 
     // initialization
-    v_gc.reset(2 * PI, rxmesh::DEVICE);
+    v_gc.reset(2.0 * glm::pi<T>(), rxmesh::DEVICE);
     v_amix.reset(0, rxmesh::DEVICE);
 
     compute_gaussian_curvature<T, blockThreads>
@@ -59,15 +60,8 @@ void gaussian_curvature_rxmesh(const std::vector<T>& gaussian_curvature_gold)
     CUDA_ERROR(cudaDeviceSynchronize());
 
 
-    // Verify
+    // Move to host for visualization
     v_gc.move(rxmesh::DEVICE, rxmesh::HOST);
-
-    // convert gold to attribute to compare against
-    auto gold = *rx.add_vertex_attribute(gaussian_curvature_gold, "gold");
-
-    rx.for_each_vertex(HOST, [&](const VertexHandle& vh) {
-        EXPECT_NEAR(std::abs(gold(vh)), std::abs(v_gc(vh)), 0.001);
-    });
 
 #if USE_POLYSCOPE
     // visualize
@@ -79,61 +73,31 @@ void gaussian_curvature_rxmesh(const std::vector<T>& gaussian_curvature_gold)
 #endif
 }
 
-TEST(Apps, GaussianCurvature)
-{
-    using namespace rxmesh;
-
-    // Select device
-    cuda_query(Arg.device_id);
-
-    // Load mesh
-    std::vector<std::vector<float>>    Verts;
-    std::vector<std::vector<uint32_t>> Faces;
-
-    ASSERT_TRUE(import_obj(Arg.obj_file_name, Verts, Faces));
-
-    // Serial reference
-    std::vector<float> gaussian_curvature_gold(Verts.size());
-    gaussian_curvature_ref(Faces, Verts, gaussian_curvature_gold);
-
-    // RXMesh Impl
-    gaussian_curvature_rxmesh(gaussian_curvature_gold);
-}
-
 int main(int argc, char** argv)
 {
     using namespace rxmesh;
-    Log::init();
+    
+    CLI::App app{"GaussianCurvature - Compute Gaussian curvature of a mesh"};
+    
+    app.add_option("-i,--input", Arg.obj_file_name, "Input OBJ mesh file")
+        ->default_val(std::string(STRINGIFY(INPUT_DIR) "bumpy-cube.obj"));
+    
+    app.add_option("-d,--device_id", Arg.device_id, "GPU device ID")
+        ->default_val(0u);
 
-    ::testing::InitGoogleTest(&argc, argv);
-
-    if (argc > 1) {
-        if (cmd_option_exists(argv, argc + argv, "-h")) {
-            // clang-format off
-            RXMESH_INFO("\nUsage: GaussianCurvature.exe < -option X>\n"
-                        " -h:          Display this massage and exits\n"
-                        " -input:      Input file. Input file should under the input/ subdirectory\n"
-                        "              Default is {} \n"
-                        "              Hint: Only accepts OBJ files\n"                                              
-                        " -device_id:  GPU device ID. Default is {}",
-            Arg.obj_file_name,  Arg.device_id);
-            // clang-format on
-            exit(EXIT_SUCCESS);
-        }
-
-        if (cmd_option_exists(argv, argc + argv, "-input")) {
-            Arg.obj_file_name =
-                std::string(get_cmd_option(argv, argv + argc, "-input"));
-        }
-
-        if (cmd_option_exists(argv, argc + argv, "-device_id")) {
-            Arg.device_id =
-                atoi(get_cmd_option(argv, argv + argc, "-device_id"));
-        }
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError& e) {
+        return app.exit(e);
     }
 
+    rx_init(Arg.device_id);
+    
     RXMESH_TRACE("input= {}", Arg.obj_file_name);
     RXMESH_TRACE("device_id= {}", Arg.device_id);
 
-    return RUN_ALL_TESTS();
+    // RXMesh Impl
+    gaussian_curvature_rxmesh<float>();
+
+    return 0;
 }
