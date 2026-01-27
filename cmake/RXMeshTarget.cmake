@@ -6,34 +6,40 @@ if(NOT DEFINED RXMESH_SOURCE_DIR)
     get_filename_component(RXMESH_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 endif()
 
-# RXMesh: could think of this as just the header library, so name RXMesh
-file(GLOB_RECURSE RXMESH_SOURCES "${RXMESH_SOURCE_DIR}/include/*.*")
-add_library(RXMesh INTERFACE)
-
-target_sources(RXMesh
-    INTERFACE ${RXMESH_SOURCES}
+# RXMesh compiled library
+set(RXMESH_LIBRARY_SOURCES
+    "${RXMESH_SOURCE_DIR}/include/rxmesh/rxmesh.cpp"
+    "${RXMESH_SOURCE_DIR}/include/rxmesh/rxmesh_dynamic.cu"
+    "${RXMESH_SOURCE_DIR}/include/rxmesh/patcher/patcher.cu"
+    "${RXMESH_SOURCE_DIR}/include/rxmesh/util/git_sha1.cpp"
+    "${RXMESH_SOURCE_DIR}/include/rxmesh/util/MshLoader.cpp"
+    "${RXMESH_SOURCE_DIR}/include/rxmesh/util/MshSaver.cpp"
 )
 
+add_library(RXMesh STATIC ${RXMESH_LIBRARY_SOURCES})
 
-target_compile_features(RXMesh INTERFACE cxx_std_17)
+# Required for targets that compile CUDA sources.
+set_property(TARGET RXMesh PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+
+target_compile_features(RXMesh PUBLIC cxx_std_17)
 target_compile_definitions(RXMesh
-    INTERFACE INPUT_DIR=${RXMESH_SOURCE_DIR}/input/
-    INTERFACE OUTPUT_DIR=${RXMESH_SOURCE_DIR}/output/
+    PUBLIC INPUT_DIR=${RXMESH_SOURCE_DIR}/input/
+    PUBLIC OUTPUT_DIR=${RXMESH_SOURCE_DIR}/output/
 )
 
 if(${RX_USE_POLYSCOPE})
-    target_compile_definitions(RXMesh INTERFACE USE_POLYSCOPE)
+    target_compile_definitions(RXMesh PUBLIC USE_POLYSCOPE)
 endif()
 
 target_include_directories(RXMesh
-    INTERFACE "${RXMESH_SOURCE_DIR}/include"
-    INTERFACE "${rapidjson_SOURCE_DIR}/include"
-    INTERFACE "${spdlog_SOURCE_DIR}/include"
-    INTERFACE "${cereal_SOURCE_DIR}/include"
-    INTERFACE ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
+    PUBLIC "${RXMESH_SOURCE_DIR}/include"
+    PUBLIC "${rapidjson_SOURCE_DIR}/include"
+    PUBLIC "${spdlog_SOURCE_DIR}/include"
+    PUBLIC "${cereal_SOURCE_DIR}/include"
+    PUBLIC ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
 )
 
-target_link_libraries(RXMesh INTERFACE cuBQL cuBQL_queries)
+target_link_libraries(RXMesh PUBLIC cuBQL cuBQL_queries)
 
 # CUDA and C++ compiler flags
 set(cxx_flags
@@ -61,7 +67,7 @@ set(cuda_flags
     --ptxas-options=-v
 )
 
-target_compile_options(RXMesh INTERFACE
+target_compile_options(RXMesh PUBLIC
     $<$<COMPILE_LANGUAGE:CXX>:${cxx_flags}>
     $<$<COMPILE_LANGUAGE:CUDA>:${cuda_flags}>
 )
@@ -69,21 +75,21 @@ target_compile_options(RXMesh INTERFACE
 #SuiteSparse
 if(${RX_USE_SUITESPARSE})
 	include("${CMAKE_CURRENT_LIST_DIR}/suitesparse.cmake")
-	target_compile_definitions(RXMesh INTERFACE USE_SUITESPARSE)
+	target_compile_definitions(RXMesh PUBLIC USE_SUITESPARSE)
 endif()
-target_link_libraries(RXMesh INTERFACE glm::glm)
+target_link_libraries(RXMesh PUBLIC glm::glm)
 if(${RX_USE_POLYSCOPE})
     include("${CMAKE_CURRENT_LIST_DIR}/polyscope.cmake")
-	target_link_libraries(RXMesh INTERFACE polyscope)	
+	target_link_libraries(RXMesh PUBLIC polyscope)
 endif()
 
 #METIS
-target_link_libraries(RXMesh INTERFACE metis)	
+target_link_libraries(RXMesh PUBLIC metis)
 
 #OpenMP
 find_package(OpenMP)
 if (OpenMP_CXX_FOUND)
-    target_link_libraries(RXMesh INTERFACE OpenMP::OpenMP_CXX)
+    target_link_libraries(RXMesh PUBLIC OpenMP::OpenMP_CXX)
 endif()
 
 
@@ -95,12 +101,12 @@ endif()
 
 #cuSolver and cuSparse
 find_package(CUDAToolkit REQUIRED)
-target_link_libraries(RXMesh INTERFACE CUDA::cusparse)
-target_link_libraries(RXMesh INTERFACE CUDA::cusolver)
+target_link_libraries(RXMesh PUBLIC CUDA::cusparse)
+target_link_libraries(RXMesh PUBLIC CUDA::cusolver)
 
 
 #Eigen
 include("${CMAKE_CURRENT_LIST_DIR}/eigen.cmake")
-target_link_libraries(RXMesh INTERFACE Eigen3::Eigen)
+target_link_libraries(RXMesh PUBLIC Eigen3::Eigen)
 # https://eigen.tuxfamily.org/dox/TopicCUDA.html
-target_compile_definitions(RXMesh INTERFACE "EIGEN_DEFAULT_DENSE_INDEX_TYPE=int")
+target_compile_definitions(RXMesh PUBLIC "EIGEN_DEFAULT_DENSE_INDEX_TYPE=int")
