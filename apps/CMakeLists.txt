@@ -1,3 +1,5 @@
+include("${CMAKE_CURRENT_LIST_DIR}/../cmake/RXMeshApp.cmake")
+
 #add_subdirectory(Filtering)
 add_subdirectory(VertexNormal)
 add_subdirectory(MCF)

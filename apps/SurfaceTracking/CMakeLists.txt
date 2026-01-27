@@ -1,46 +1,19 @@
-add_executable(SurfaceTracking)
-
 set(SOURCE_LIST
-    tracking.cu  
-	tracking_rxmesh.cuh
-	tracking_kernels.cuh
-	flipper.cuh
-	splitter.cuh
-	smoother.cuh
-	frame_stepper.h
-	simulation.h
-	noise.h	
-	collapser.cuh
-	link_condition.cuh
-	util.cuh
+    tracking.cu
+    tracking_rxmesh.cuh
+    tracking_kernels.cuh
+    flipper.cuh
+    splitter.cuh
+    smoother.cuh
+    frame_stepper.h
+    simulation.h
+    noise.h
+    collapser.cuh
+    link_condition.cuh
+    util.cuh
 )
 
-
-target_sources(SurfaceTracking 
-    PRIVATE
-    ${SOURCE_LIST} ${COMMON_LIST}
+rxmesh_add_app(SurfaceTracking
+    SOURCES ${SOURCE_LIST}
+    LIBS RXMesh gtest_main
 )
-
-if (WIN32)
-    target_compile_definitions(SurfaceTracking
-      PRIVATE _USE_MATH_DEFINES 
-      PRIVATE NOMINMAX
-      PRIVATE _CRT_SECURE_NO_WARNINGS)
-endif()
-
-set_target_properties(SurfaceTracking PROPERTIES FOLDER "apps")
-
-set_property(TARGET SurfaceTracking PROPERTY CUDA_SEPARABLE_COMPILATION ON)
-
-source_group(TREE ${CMAKE_CURRENT_LIST_DIR} PREFIX "SurfaceTracking" FILES ${SOURCE_LIST})
-
-target_link_libraries(SurfaceTracking     
-    PRIVATE RXMesh
-    PRIVATE gtest_main
-)
-
-if(WIN32 AND ${RX_USE_CUDSS})
-	add_dependencies(SurfaceTracking CopyCUDSSDLL)
-endif()
-
-#gtest_discover_tests( SurfaceTracking )

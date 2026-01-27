@@ -57,5 +57,3 @@ target_link_libraries( RXMesh_test
 if(WIN32 AND ${RX_USE_CUDSS})
 	add_dependencies(RXMesh_test CopyCUDSSDLL)
 endif()
-
-#gtest_discover_tests( RXMesh_test )
