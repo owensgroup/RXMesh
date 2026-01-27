@@ -437,4 +437,6 @@ int main(int argc, char** argv)
         manifold_optimization<T>(
             rx, problem, lbfgs_solver, init_s, Direction::Default);
     }
+
+    return 0;
 }

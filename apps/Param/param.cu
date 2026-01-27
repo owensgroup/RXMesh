@@ -1,11 +1,15 @@
 // Reference Implementation
 // https://github.com/patr-schm/TinyAD-Examples/blob/main/apps/parametrization_openmesh.cc
+#include <CLI/CLI.hpp>
+#include <cstdlib>
+
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/algo/tutte_embedding.h"
 
 #include "rxmesh/diff/diff_scalar_problem.h"
 #include "rxmesh/diff/newton_solver.h"
+#include "rxmesh/util/log.h"
 
 
 struct arg
@@ -258,74 +262,61 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
 
 int main(int argc, char** argv)
 {
-    rx_init(0);
-
     using T = float;
 
-    if (argc > 1) {
-        if (cmd_option_exists(argv, argc + argv, "-h")) {
-            // clang-format off
-            RXMESH_INFO("\nUsage: Param.exe < -option X>\n"
-                        " -h:                 Display this massage and exit\n"
-                        " -input:             Input OBJ mesh file. Default is {} \n"                  
-                        " -uv:                Input UV OBJ file. If empty, will compyte tutte embedding. Default is {} \n"                        
-                        " -o:                 JSON file output folder. Default is {} \n"
-                        " -solver:            Solver to use. Options are cg_mat_free, cg, pcg, chol, cudss_chol, or lu. Default is {}\n"
-                        " -abs_eps:           Iterative solvers absolute tolerance. Default is {}\n"
-                        " -rel_eps:           Iterative solvers relative tolerance. Default is {}\n"
-                        " -cg_max_iter:       Maximum number of iterations for iterative solvers. Default is {}\n"
-                        " -newton_max_iter:   Maximum number of iterations for Newton solver. Default is {}\n"
-                        " -device_id:         GPU device ID. Default is {}",
-            Arg.obj_file_name,Arg.uv_file_name, Arg.output_folder,  Arg.solver, Arg.cg_abs_tol, Arg.cg_rel_tol, Arg.cg_max_iter, Arg.newton_max_iter, Arg.device_id);
-            // clang-format on
-            exit(EXIT_SUCCESS);
-        }
+    CLI::App app{
+        "Param - Mesh parametrization using symmetric Dirichlet energy"};
 
-        if (cmd_option_exists(argv, argc + argv, "-input")) {
-            Arg.obj_file_name =
-                std::string(get_cmd_option(argv, argv + argc, "-input"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-uv")) {
-            Arg.uv_file_name =
-                std::string(get_cmd_option(argv, argv + argc, "-uv"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-o")) {
-            Arg.output_folder =
-                std::string(get_cmd_option(argv, argv + argc, "-o"));
-        }
+    app.add_option("-i,--input", Arg.obj_file_name, "Input OBJ mesh file")
+        ->default_val(std::string(STRINGIFY(INPUT_DIR) "bunnyhead.obj"));
 
-        if (cmd_option_exists(argv, argc + argv, "-cg_max_iter")) {
-            Arg.cg_max_iter =
-                std::atoi(get_cmd_option(argv, argv + argc, "-cg_max_iter"));
-        }
+    app.add_option("--uv",
+                   Arg.uv_file_name,
+                   "Input UV OBJ file (if empty, will compute tutte embedding)")
+        ->default_val(std::string(""));
 
-        if (cmd_option_exists(argv, argc + argv, "-newton_max_iter")) {
-            Arg.newton_max_iter = std::atoi(
-                get_cmd_option(argv, argv + argc, "-newton_max_iter"));
-        }
+    app.add_option("-o,--output", Arg.output_folder, "JSON file output folder")
+        ->default_val(std::string(STRINGIFY(OUTPUT_DIR)));
 
-        if (cmd_option_exists(argv, argc + argv, "-abs_eps")) {
-            Arg.cg_abs_tol =
-                std::atof(get_cmd_option(argv, argv + argc, "-abs_eps"));
-        }
+    app.add_option("-s,--solver", Arg.solver, "Solver to use")
+        ->default_val(std::string("cudss_chol"))
+        ->check(CLI::IsMember(
+            {"cg_mat_free", "cg", "pcg", "chol", "cudss_chol", "lu"}));
 
-        if (cmd_option_exists(argv, argc + argv, "-rel_eps")) {
-            Arg.cg_rel_tol =
-                std::atof(get_cmd_option(argv, argv + argc, "-rel_eps"));
-        }
+    app.add_option(
+           "--abs_eps", Arg.cg_abs_tol, "Iterative solvers absolute tolerance")
+        ->default_val(1e-6f);
 
-        if (cmd_option_exists(argv, argc + argv, "-device_id")) {
-            Arg.device_id =
-                atoi(get_cmd_option(argv, argv + argc, "-device_id"));
-        }
+    app.add_option(
+           "--rel_eps", Arg.cg_rel_tol, "Iterative solvers relative tolerance")
+        ->default_val(0.0f);
 
-        if (cmd_option_exists(argv, argc + argv, "-solver")) {
-            Arg.solver =
-                std::string(get_cmd_option(argv, argv + argc, "-solver"));
-        }
+    app.add_option("--cg_max_iter",
+                   Arg.cg_max_iter,
+                   "Maximum number of iterations for iterative solvers")
+        ->default_val(10u);
+
+    app.add_option("--newton_max_iter",
+                   Arg.newton_max_iter,
+                   "Maximum number of iterations for Newton solver")
+        ->default_val(100u);
+
+    app.add_option("-d,--device_id", Arg.device_id, "GPU device ID")
+        ->default_val(0u);
+
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError& e) {
+        return app.exit(e);
     }
 
+    rx_init(Arg.device_id);
+
+    Arg.argv = argv;
+    Arg.argc = argc;
+
     RXMESH_INFO("input= {}", Arg.obj_file_name);
+    RXMESH_INFO("uv_file= {}", Arg.uv_file_name);
     RXMESH_INFO("output_folder= {}", Arg.output_folder);
     RXMESH_INFO("solver= {}", Arg.solver);
     RXMESH_INFO("cg_max_iter= {}", Arg.cg_max_iter);
@@ -334,15 +325,12 @@ int main(int argc, char** argv)
     RXMESH_INFO("rel_eps= {0:f}", Arg.cg_rel_tol);
     RXMESH_INFO("device_id= {}", Arg.device_id);
 
-
-    cuda_query(Arg.device_id);
-
     RXMeshStatic rx(Arg.obj_file_name);
 
     if (rx.is_closed()) {
         RXMESH_ERROR(
             "The input mesh is closed. The input mesh should have boundaries.");
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
     constexpr int VariableDim = 2;
@@ -382,4 +370,6 @@ int main(int argc, char** argv)
             num_rows, 1, Arg.cg_max_iter, Arg.cg_abs_tol, Arg.cg_rel_tol);
         parameterize<T>(rx, problem, solver);
     }
+
+    return 0;
 }
