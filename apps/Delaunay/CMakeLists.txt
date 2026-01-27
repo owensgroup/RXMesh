@@ -9,5 +9,5 @@ set(SOURCE_LIST
 
 rxmesh_add_app(DelaunayEdgeFlip
   SOURCES ${SOURCE_LIST}
-  LIBS RXMesh gtest_main OpenMeshCore OpenMeshTools
+  LIBS RXMesh OpenMeshCore OpenMeshTools CLI11::CLI11
 )
