@@ -51,27 +51,26 @@ void launcher(const std::vector<std::vector<uint32_t>>& Faces,
     float total_time = 0;
 
 
-    for (uint32_t itr = 0; itr < rxmesh_args.num_run; itr++) {
-        // Reset input/output
-        input.reset(InputHandleT(), rxmesh::DEVICE);
-        output.reset(OutputHandleT(), rxmesh::DEVICE);
-        CUDA_ERROR(cudaDeviceSynchronize());
+    // Reset input/output
+    input.reset(InputHandleT(), rxmesh::DEVICE);
+    output.reset(OutputHandleT(), rxmesh::DEVICE);
+    CUDA_ERROR(cudaDeviceSynchronize());
 
-        CUDA_ERROR(cudaProfilerStart());
-        GPUTimer timer;
-        timer.start();
-        query_kernel<blockThreads, op, InputHandleT, OutputHandleT>
-            <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
-                rx.get_context(), input, output, oriented);
+    CUDA_ERROR(cudaProfilerStart());
+    GPUTimer timer;
+    timer.start();
+    query_kernel<blockThreads, op, InputHandleT, OutputHandleT>
+        <<<launch_box.blocks, blockThreads, launch_box.smem_bytes_dyn>>>(
+            rx.get_context(), input, output, oriented);
 
-        timer.stop();
-        CUDA_ERROR(cudaDeviceSynchronize());
-        CUDA_ERROR(cudaGetLastError());
-        CUDA_ERROR(cudaProfilerStop());
+    timer.stop();
+    CUDA_ERROR(cudaDeviceSynchronize());
+    CUDA_ERROR(cudaGetLastError());
+    CUDA_ERROR(cudaProfilerStop());
 
-        total_time += timer.elapsed_millis();
-        td.time_ms.push_back(timer.elapsed_millis());
-    }
+    total_time += timer.elapsed_millis();
+    td.time_ms.push_back(timer.elapsed_millis());
+
 
     // move containers to the CPU for testing
     output.move(rxmesh::DEVICE, rxmesh::HOST);
@@ -88,7 +87,7 @@ void launcher(const std::vector<std::vector<uint32_t>>& Faces,
     RXMESH_INFO(" {} {} time = {} (ms) \n",
                 td.test_name.c_str(),
                 (passed ? " passed " : " failed "),
-                total_time / float(rxmesh_args.num_run));
+                total_time);
 }
 
 TEST(RXMeshStatic, Queries)

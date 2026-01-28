@@ -31,5 +31,5 @@ TEST(RXMeshStatic, MultipleMeshes)
     rx.get_polyscope_mesh()->updateVertexPositions(x);
 
 
-    polyscope::show();
+    //polyscope::show();
 }
