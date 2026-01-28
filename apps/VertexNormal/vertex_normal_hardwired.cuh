@@ -168,7 +168,9 @@ inline void vertex_normal_hardwired(
                           Verts.size() * 3,
                           false);
     td.passed.push_back(passed);
-    EXPECT_TRUE(passed) << " Hardwired Validation failed \n";
+    if (!passed) {
+        RXMESH_ERROR("VertexNormal hardwired validation failed");
+    }
 
     free(verts_normal_hardwired);
 

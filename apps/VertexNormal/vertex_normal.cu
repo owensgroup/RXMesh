@@ -3,7 +3,9 @@
 // Journal of Graphics Tools 4, no. 2 (1999): 1-6.
 
 #include <cuda_profiler_api.h>
-#include "gtest/gtest.h"
+#include <CLI/CLI.hpp>
+#include <cstdlib>
+
 #include "rxmesh/attribute.h"
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/import_obj.h"
@@ -88,15 +90,22 @@ void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rx,
     // Verify
     v_normals->move(rxmesh::DEVICE, rxmesh::HOST);
 
-     rx.for_each_vertex(HOST, [&](const VertexHandle& vh) {
+    bool passed = true;
+    rx.for_each_vertex(HOST, [&](const VertexHandle& vh) {
         uint32_t v_id = rx.map_to_global(vh);
 
         for (uint32_t i = 0; i < 3; ++i) {
-            EXPECT_NEAR(std::abs(vertex_normal_gold[v_id * 3 + i]),
-                        std::abs((*v_normals)(vh, i)),
-                        0.0001);
+            float ref = std::abs(vertex_normal_gold[v_id * 3 + i]);
+            float val = std::abs((*v_normals)(vh, i));
+            if (std::abs(ref - val) > 0.0001f) {
+                passed = false;
+            }
         }
     });
+
+    if (!passed) {
+        RXMESH_ERROR("VertexNormal RXMesh validation failed");
+    }
 
     // Finalize report
     report.add_test(td);
@@ -104,20 +113,19 @@ void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rx,
                  "VertexNormal_RXMesh_" + extract_file_name(Arg.obj_file_name));
 }
 
-TEST(Apps, VertexNormal)
+int vertex_normal_main()
 {
     using namespace rxmesh;
     using dataT = float;
-
-    // Select device
-    cuda_query(Arg.device_id);
 
     // Load mesh
     std::vector<std::vector<dataT>>    Verts;
     std::vector<std::vector<uint32_t>> Faces;
 
-    ASSERT_TRUE(import_obj(Arg.obj_file_name, Verts, Faces));
-
+    if (!import_obj(Arg.obj_file_name, Verts, Faces)) {
+        RXMESH_ERROR("Failed to import OBJ file: {}", Arg.obj_file_name);
+        return EXIT_FAILURE;
+    }
 
     RXMeshStatic rx(Faces);
 
@@ -130,53 +138,45 @@ TEST(Apps, VertexNormal)
 
     // Hardwired Impl
     vertex_normal_hardwired(Faces, Verts, vertex_normal_gold);
+
+    return 0;
 }
 
 int main(int argc, char** argv)
 {
     using namespace rxmesh;
-    Log::init();
 
-    ::testing::InitGoogleTest(&argc, argv);
+    CLI::App app{"VertexNormal - Vertex-normal computation benchmark"};
+
+    app.add_option("-i,--input", Arg.obj_file_name, "Input OBJ mesh file")
+        ->default_val(std::string(STRINGIFY(INPUT_DIR) "sphere3.obj"));
+
+    app.add_option("-o,--output", Arg.output_folder, "JSON file output folder")
+        ->default_val(std::string(STRINGIFY(OUTPUT_DIR)));
+
+    app.add_option("--num_run",
+                   Arg.num_run,
+                   "Number of iterations for performance testing")
+        ->default_val(1u);
+
+    app.add_option("-d,--device_id", Arg.device_id, "GPU device ID")
+        ->default_val(0u);
+
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError& e) {
+        return app.exit(e);
+    }
+
+    rx_init(static_cast<int>(Arg.device_id));
+
     Arg.argv = argv;
     Arg.argc = argc;
-
-    if (argc > 1) {
-        if (cmd_option_exists(argv, argc + argv, "-h")) {
-            // clang-format off
-            RXMESH_INFO("\nUsage: VertexNormal.exe < -option X>\n"
-                        " -h:          Display this massage and exit\n"
-                        " -input:      Input OBJ mesh file. Default is {} \n"
-                        " -o:          JSON file output folder. Default is {} \n"
-                        " -num_run:    Number of iterations for performance testing. Default is {} \n"                        
-                        " -device_id:  GPU device ID. Default is {}",
-            Arg.obj_file_name, Arg.output_folder, Arg.num_run, Arg.device_id);
-            // clang-format on
-            exit(EXIT_SUCCESS);
-        }
-
-        if (cmd_option_exists(argv, argc + argv, "-num_run")) {
-            Arg.num_run = atoi(get_cmd_option(argv, argv + argc, "-num_run"));
-        }
-
-        if (cmd_option_exists(argv, argc + argv, "-input")) {
-            Arg.obj_file_name =
-                std::string(get_cmd_option(argv, argv + argc, "-input"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-o")) {
-            Arg.output_folder =
-                std::string(get_cmd_option(argv, argv + argc, "-o"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-device_id")) {
-            Arg.device_id =
-                atoi(get_cmd_option(argv, argv + argc, "-device_id"));
-        }
-    }
 
     RXMESH_TRACE("input= {}", Arg.obj_file_name);
     RXMESH_TRACE("output_folder= {}", Arg.output_folder);
     RXMESH_TRACE("num_run= {}", Arg.num_run);
     RXMESH_TRACE("device_id= {}", Arg.device_id);
 
-    return RUN_ALL_TESTS();
+    return vertex_normal_main();
 }
