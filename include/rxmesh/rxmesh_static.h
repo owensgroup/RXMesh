@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <assert.h>
 #include <fstream>
 #include <functional>
@@ -48,34 +48,7 @@ class RXMeshStatic : public RXMesh
                           const uint32_t    patch_size               = 512,
                           const float       capacity_factor          = 1.0,
                           const float       patch_alloc_factor       = 1.0,
-                          const float       lp_hashtable_load_factor = 0.8)
-        : RXMesh(patch_size)
-    {
-        m_num_regions = 1;
-
-        std::vector<std::vector<uint32_t>> fv;
-        std::vector<std::vector<float>>    vertices;
-        if (!import_obj(file_path, vertices, fv)) {
-            RXMESH_ERROR(
-                "RXMeshStatic::RXMeshStatic could not read the input file {}",
-                file_path);
-            exit(EXIT_FAILURE);
-        }
-
-        this->init(fv,
-                   patcher_file,
-                   capacity_factor,
-                   patch_alloc_factor,
-                   lp_hashtable_load_factor);
-
-        m_attr_container = std::make_shared<AttributeContainer>();
-
-        std::string name = extract_file_name(file_path);
-#if USE_POLYSCOPE
-        name = polyscope::guessNiceNameFromPath(file_path);
-#endif
-        add_vertex_coordinates(vertices, name);
-    };
+                          const float       lp_hashtable_load_factor = 0.8);
 
     /**
      * @brief Constructor using triangles and vertices
@@ -86,110 +59,13 @@ class RXMeshStatic : public RXMesh
                           const uint32_t                      patch_size = 512,
                           const float capacity_factor                    = 1.0,
                           const float patch_alloc_factor                 = 1.0,
-                          const float lp_hashtable_load_factor           = 0.8)
-        : RXMesh(patch_size), m_input_vertex_coordinates(nullptr)
-    {
-        m_num_regions = 1;
-        this->init(fv,
-                   patcher_file,
-                   capacity_factor,
-                   patch_alloc_factor,
-                   lp_hashtable_load_factor);
-        m_attr_container = std::make_shared<AttributeContainer>();
-    };
+                          const float lp_hashtable_load_factor           = 0.8);
 
     /**
      * @brief Constructor using path to multiple meshes
      */
     explicit RXMeshStatic(const std::vector<std::string> files_path,
-                          const uint32_t                 patch_size = 512)
-        : RXMesh(patch_size)
-    {
-        m_num_regions = files_path.size();
-
-        std::vector<std::vector<uint32_t>> fv;
-        std::vector<std::vector<float>>    vertices;
-
-        std::vector<int> region_num_faces;
-        std::vector<int> region_num_vertices;
-
-        for (auto path : files_path) {
-            if (!import_obj(path, vertices, fv, true)) {
-                RXMESH_ERROR(
-                    "RXMeshStatic::RXMeshStatic could not read the input file "
-                    "{}",
-                    path);
-                exit(EXIT_FAILURE);
-            }
-            region_num_faces.push_back(fv.size());
-            region_num_vertices.push_back(vertices.size());
-        }
-
-        this->init(fv, "", 1.0, 1.0, 0.8);
-
-        m_attr_container = std::make_shared<AttributeContainer>();
-
-        std::string name;
-        for (auto path : files_path) {
-            name += extract_file_name(path);
-        }
-
-#if USE_POLYSCOPE
-        name = polyscope::guessNiceNameFromPath(name);
-#endif
-        add_vertex_coordinates(vertices, name);
-
-        // add region labels for faces, vertices, and edges
-        m_face_label =
-            add_face_attribute<int>("rx:face_label", 1, LOCATION_ALL);
-        m_edge_label =
-            add_edge_attribute<int>("rx:edge_label", 1, LOCATION_ALL);
-        m_vertex_label =
-            add_vertex_attribute<int>("rx:vertex_label", 1, LOCATION_ALL);
-
-        for_each_face(
-            HOST,
-            [=](const FaceHandle fh) {
-                int id = map_to_global(fh);
-
-                auto upper = std::upper_bound(
-                    region_num_faces.begin(), region_num_faces.end(), id);
-
-                int label = std::distance(region_num_faces.begin(), upper);
-
-                (*m_face_label)(fh) = label;
-            },
-            NULL,
-            false);
-
-        for_each_vertex(
-            HOST,
-            [=](const VertexHandle vh) {
-                int id = map_to_global(vh);
-
-                auto upper = std::upper_bound(
-                    region_num_vertices.begin(), region_num_vertices.end(), id);
-
-                int label = std::distance(region_num_vertices.begin(), upper);
-
-                (*m_vertex_label)(vh) = label;
-            },
-            NULL,
-            false);
-        m_face_label->move(HOST, DEVICE);
-        m_vertex_label->move(HOST, DEVICE);
-
-        add_edge_labels(*m_face_label, *m_edge_label);
-
-        m_edge_label->move(DEVICE, HOST);
-
-
-#if USE_POLYSCOPE
-        m_polyscope_mesh->addFaceScalarQuantity("rx:FLabel", *m_face_label);
-        m_polyscope_mesh->addEdgeScalarQuantity("rx:ELabel", *m_edge_label);
-        m_polyscope_mesh->addVertexScalarQuantity("rx:VLabel", *m_vertex_label);
-#endif
-    };
+                          const uint32_t                 patch_size = 512);
 
     /**
      * @brief Add vertex coordinates to the input mesh. When calling
@@ -200,41 +76,16 @@ class RXMeshStatic : public RXMesh
      * mesh file
      */
     void add_vertex_coordinates(std::vector<std::vector<float>>& vertices,
-                                std::string                      mesh_name = "")
-    {
-        if (m_input_vertex_coordinates == nullptr) {
+                                std::string mesh_name = "");
 
-            m_input_vertex_coordinates =
-                this->add_vertex_attribute<float>(vertices, "rx:vertices");
-
-#if USE_POLYSCOPE
-            // polyscope::options::autocenterStructures = true;
-            // polyscope::options::autoscaleStructures  = true;
-            // polyscope::options::automaticallyComputeSceneExtents = true;
-            polyscope::init();
-            m_polyscope_mesh_name = mesh_name.empty() ? "RXMesh" : mesh_name;
-            m_polyscope_mesh_name += std::to_string(rand());
-            this->register_polyscope();
-            render_vertex_patch();
-            render_edge_patch();
-            render_face_patch();
-#endif
-        }
-    }
-
-    virtual ~RXMeshStatic()
-    {
-    }
+    virtual ~RXMeshStatic() = default;
 
 #if USE_POLYSCOPE
     /**
      * @brief return a pointer to polyscope surface which has been registered
      * with this instance
      */
-    polyscope::SurfaceMesh* get_polyscope_mesh()
-    {
-        return m_polyscope_mesh;
-    }
+    polyscope::SurfaceMesh* get_polyscope_mesh();
 
 
     /**
@@ -251,30 +102,7 @@ class RXMeshStatic : public RXMesh
     polyscope::SurfaceMesh* render_patch(const uint32_t p,
                                          bool with_vertex_patch = true,
                                          bool with_edge_patch   = true,
-                                         bool with_face_patch   = true)
-    {
-        std::vector<std::array<uint32_t, 3>> fv;
-        fv.reserve(m_h_patches_info[p].num_faces[0]);
-        add_patch_to_polyscope(p, fv, true);
-
-        auto ps = polyscope::registerSurfaceMesh(
-            m_polyscope_mesh_name + "_patch_" + std::to_string(p),
-            *m_input_vertex_coordinates,
-            fv,
-            m_polyscope_edges_map);
-
-        if (with_vertex_patch) {
-            render_vertex_patch_and_local_id(p, ps);
-        }
-        if (with_edge_patch) {
-            render_edge_patch_and_local_id(p, ps);
-        }
-        if (with_face_patch) {
-            render_face_patch_and_local_id(p, ps);
-        }
-
-        return ps;
-    }
+                                         bool with_face_patch   = true);
 
     /**
      * @brief add the face's patch and local ID scalar quantities to a polyscope
@@ -285,39 +113,7 @@ class RXMeshStatic : public RXMesh
      * render_patch with the same input patch
      */
     void render_face_patch_and_local_id(const uint32_t          p,
-                                        polyscope::SurfaceMesh* polyscope_mesh)
-    {
-        std::string      p_name = "rx:FPatch" + std::to_string(p);
-        std::string      l_name = "rx:FLocal" + std::to_string(p);
-        std::vector<int> patch_id(m_h_patches_info[p].num_faces[0], -1);
-        std::vector<int> local_id(m_h_patches_info[p].num_faces[0], -1);
-
-        for (uint16_t f = 0; f < this->m_h_patches_info[p].num_faces[0]; ++f) {
-            const LocalFaceT lf(f);
-            if (!this->m_h_patches_info[p].is_deleted(lf)) {
-
-                const FaceHandle fh = get_owner_handle<FaceHandle>({p, lf});
-
-                patch_id[f] = fh.patch_id();
-                local_id[f] = fh.local_id();
-            }
-        }
-
-        patch_id.erase(std::remove(patch_id.begin(), patch_id.end(), -1),
-                       patch_id.end());
-        std::pair<double, double> p_range(0.0, double(get_num_patches() - 1));
-        polyscope_mesh->addFaceScalarQuantity(p_name, patch_id)
-            ->setMapRange(p_range);
-
-
-        local_id.erase(std::remove(local_id.begin(), local_id.end(), -1),
-                       local_id.end());
-        std::pair<double, double> l_range(
-            0.0,
-            double(*std::max_element(local_id.begin(), local_id.end()) - 1));
-        polyscope_mesh->addFaceScalarQuantity(l_name, local_id)
-            ->setMapRange(l_range);
-    }
+                                        polyscope::SurfaceMesh* polyscope_mesh);
 
     /**
      * @brief add the edge's patch and local ID scalar quantities to a polyscope
@@ -328,34 +124,7 @@ class RXMeshStatic : public RXMesh
      * render_patch with the same input patch
      */
     void render_edge_patch_and_local_id(const uint32_t          p,
-                                        polyscope::SurfaceMesh* polyscope_mesh)
-    {
-        std::string p_name = "rx:EPatch" + std::to_string(p);
-        std::string l_name = "rx:ELocal" + std::to_string(p);
-        // unlike render_face_patch and  where the size of this
-        // std::vector is the size of number faces in patch, here we
-        // use the total number of edges since we pass to polyscope the edge map
-        // for the whole mesh (not just for this patch) (see render_patch) and
-        // thus it expects the size of this quantity to be the same size i.e.,
-        // total number of edges
-        std::vector<int> patch_id(get_num_edges(), -(p + 1));
-        std::vector<int> local_id(get_num_edges(), -(p + 1));
-
-        for_each_edge(HOST, [&](EdgeHandle eh) {
-            patch_id[linear_id(eh)] = eh.patch_id();
-            local_id[linear_id(eh)] = eh.local_id();
-        });
-
-        std::pair<double, double> p_range(0.0, double(get_num_patches() - 1));
-        polyscope_mesh->addEdgeScalarQuantity(p_name, patch_id)
-            ->setMapRange(p_range);
-
-        std::pair<double, double> l_range(
-            0.0,
-            double(*std::max_element(local_id.begin(), local_id.end()) - 1));
-        polyscope_mesh->addEdgeScalarQuantity(l_name, local_id)
-            ->setMapRange(l_range);
-    }
+                                        polyscope::SurfaceMesh* polyscope_mesh);
 
     /**
      * @brief add the vertex's patch and local ID scalar quantities to a
@@ -368,34 +137,7 @@ class RXMeshStatic : public RXMesh
      */
     void render_vertex_patch_and_local_id(
         const uint32_t          p,
-        polyscope::SurfaceMesh* polyscope_mesh)
-    {
-        std::string p_name = "rx:VPatch" + std::to_string(p);
-        std::string l_name = "rx:VLocal" + std::to_string(p);
-        // unlike render_face_patch and  where the size of this
-        // std::vector is the size of number faces in patch, here we
-        // use the total number of vertices since we pass to polyscope the
-        // vertex position for the whole mesh (not just for this patch) (see
-        // render_patch) and thus it expects the size of this quantity to be the
-        // same size i.e., total number of vertices
-        std::vector<int> patch_id(get_num_vertices(), -(p + 1));
-        std::vector<int> local_id(get_num_vertices(), -(p + 1));
-
-        for_each_vertex(HOST, [&](VertexHandle vh) {
-            patch_id[linear_id(vh)] = vh.patch_id();
-            local_id[linear_id(vh)] = vh.local_id();
-        });
-
-        std::pair<double, double> p_range(0.0, double(get_num_patches() - 1));
-        polyscope_mesh->addVertexScalarQuantity(p_name, patch_id)
-            ->setMapRange(p_range);
-
-        std::pair<double, double> l_range(
-            0.0,
-            double(*std::max_element(local_id.begin(), local_id.end()) - 1));
-        polyscope_mesh->addVertexScalarQuantity(l_name, local_id)
-            ->setMapRange(l_range);
-    }
+        polyscope::SurfaceMesh* polyscope_mesh);
 
 
     /**
@@ -403,40 +145,14 @@ class RXMeshStatic : public RXMesh
      * associated RXMeshStatic
      * @return pointer to polyscope's face scalar quantity
      */
-    polyscope::SurfaceFaceScalarQuantity* render_face_patch()
-    {
-        std::string name = "rx:FPatch";
-        auto face_patch  = this->add_face_attribute<uint32_t>(name, 1, HOST);
-        for_each_face(
-            HOST, [&](FaceHandle fh) { (*face_patch)(fh) = fh.patch_id(); });
-        auto ret = m_polyscope_mesh->addFaceScalarQuantity(name, *face_patch);
-        remove_attribute(name);
-
-        std::pair<double, double> range(0.0, double(get_num_patches() - 1));
-        ret->setMapRange(range);
-
-        return ret;
-    }
+    polyscope::SurfaceFaceScalarQuantity* render_face_patch();
 
     /**
      * @brief add the edge's patch scalar quantity to the polyscope instance
      * associated RXMeshStatic
      * @return pointer to polyscope's edge scalar quantity
      */
-    polyscope::SurfaceEdgeScalarQuantity* render_edge_patch()
-    {
-        std::string name = "rx:EPatch";
-        auto edge_patch  = this->add_edge_attribute<uint32_t>(name, 1, HOST);
-        for_each_edge(
-            HOST, [&](EdgeHandle eh) { (*edge_patch)(eh) = eh.patch_id(); });
-        auto ret = m_polyscope_mesh->addEdgeScalarQuantity(name, *edge_patch);
-        remove_attribute(name);
-
-        std::pair<double, double> range(0.0, double(get_num_patches() - 1));
-        ret->setMapRange(range);
-
-        return ret;
-    }
+    polyscope::SurfaceEdgeScalarQuantity* render_edge_patch();
 
 
     /**
@@ -444,18 +160,7 @@ class RXMeshStatic : public RXMesh
      * associated RXMeshStatic
      * @return pointer to polyscope's vertex scalar quantity
      */
-    polyscope::SurfaceVertexScalarQuantity* render_vertex_patch()
-    {
-        std::string name  = "rx:VPatch";
-        auto vertex_patch = this->add_vertex_attribute<uint32_t>(name, 1, HOST);
-        for_each_vertex(HOST, [&](VertexHandle vh) {
-            (*vertex_patch)(vh) = vh.patch_id();
-        });
-        auto ret =
-            m_polyscope_mesh->addVertexScalarQuantity(name, *vertex_patch);
-        remove_attribute(name);
-        return ret;
-    }
+    polyscope::SurfaceVertexScalarQuantity* render_vertex_patch();
 
 
     /**
@@ -463,21 +168,7 @@ class RXMeshStatic : public RXMesh
      * associated RXMeshStatic
      * @return pointer to polyscope's face scalar quantity
      */
-    polyscope::SurfaceFaceScalarQuantity* render_face_local_id()
-    {
-        std::string name = "rx:FLocal";
-
-        auto f_local = add_face_attribute<uint16_t>(name, 1);
-
-        for_each_face(
-            HOST, [&](const FaceHandle fh) { (*f_local)(fh) = fh.local_id(); });
-
-        auto ret = m_polyscope_mesh->addFaceScalarQuantity(name, *f_local);
-
-        remove_attribute(name);
-
-        return ret;
-    }
+    polyscope::SurfaceFaceScalarQuantity* render_face_local_id();
 
 
     /**
@@ -485,43 +176,14 @@ class RXMeshStatic : public RXMesh
      * associated RXMeshStatic
      * @return pointer to polyscope's edge scalar quantity
      */
-    polyscope::SurfaceEdgeScalarQuantity* render_edge_local_id()
-    {
-        std::string name = "rx:ELocal";
-
-        auto e_local = add_edge_attribute<uint16_t>(name, 1);
-
-        for_each_edge(
-            HOST, [&](const EdgeHandle eh) { (*e_local)(eh) = eh.local_id(); });
-
-        auto ret = m_polyscope_mesh->addEdgeScalarQuantity(name, *e_local);
-
-        remove_attribute(name);
-
-        return ret;
-    }
+    polyscope::SurfaceEdgeScalarQuantity* render_edge_local_id();
 
     /**
      * @brief add the vertex's local ID scalar quantity to the polyscope
      * instance associated RXMeshStatic
      * @return pointer to polyscope's vertex scalar quantity
      */
-    polyscope::SurfaceVertexScalarQuantity* render_vertex_local_id()
-    {
-        std::string name = "rx:VLocal";
-
-        auto v_local = add_vertex_attribute<uint16_t>(name, 1);
-
-        for_each_vertex(HOST, [&](const VertexHandle vh) {
-            (*v_local)(vh) = vh.local_id();
-        });
-
-        auto ret = m_polyscope_mesh->addVertexScalarQuantity(name, *v_local);
-
-        remove_attribute(name);
-
-        return ret;
-    }
+    polyscope::SurfaceVertexScalarQuantity* render_vertex_local_id();
 #endif
 
     /**
@@ -990,11 +652,7 @@ class RXMeshStatic : public RXMesh
         const std::string& name,
         uint32_t           num_attributes,
         locationT          location = LOCATION_ALL,
-        layoutT            layout   = SoA)
-    {
-        return m_attr_container->template add<FaceAttribute<T>>(
-            name.c_str(), num_attributes, location, layout, this);
-    }
+        layoutT            layout   = SoA);
 
     /**
      * @brief Adding a new face attribute by reading values from a host buffer
@@ -1012,46 +670,7 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<FaceAttribute<T>> add_face_attribute(
         const std::vector<std::vector<T>>& f_attributes,
         const std::string&                 name,
-        layoutT                            layout = SoA)
-    {
-        if (f_attributes.empty()) {
-            RXMESH_ERROR(
-                "RXMeshStatic::add_face_attribute() input attribute is empty");
-        }
-
-        if (f_attributes.size() != get_num_faces()) {
-            RXMESH_ERROR(
-                "RXMeshStatic::add_face_attribute() input attribute size ({}) "
-                "is not the same as number of faces in the input mesh ({})",
-                f_attributes.size(),
-                get_num_faces());
-        }
-
-        uint32_t num_attributes = f_attributes[0].size();
-
-        auto ret = m_attr_container->template add<FaceAttribute<T>>(
-            name.c_str(), num_attributes, LOCATION_ALL, layout, this);
-
-        // populate the attribute before returning it
-        const int num_patches = this->get_num_patches();
-#pragma omp parallel for
-        for (int p = 0; p < num_patches; ++p) {
-            for (uint16_t f = 0; f < this->m_h_num_owned_f[p]; ++f) {
-
-                const FaceHandle f_handle(static_cast<uint32_t>(p), f);
-
-                uint32_t global_f = m_h_patches_ltog_f[p][f];
-
-                for (uint32_t a = 0; a < num_attributes; ++a) {
-                    (*ret)(f_handle, a) = f_attributes[global_f][a];
-                }
-            }
-        }
-
-        // move to device
-        ret->move(rxmesh::HOST, rxmesh::DEVICE);
-        return ret;
-    }
+        layoutT                            layout = SoA);
 
     /**
      * @brief Adding a new face attribute similar to another face attribute
@@ -1089,44 +708,7 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<FaceAttribute<T>> add_face_attribute(
         const std::vector<T>& f_attributes,
         const std::string&    name,
-        layoutT               layout = SoA)
-    {
-        if (f_attributes.empty()) {
-            RXMESH_ERROR(
-                "RXMeshStatic::add_face_attribute() input attribute is empty");
-        }
-
-        if (f_attributes.size() != get_num_faces()) {
-            RXMESH_ERROR(
-                "RXMeshStatic::add_face_attribute() input attribute size ({}) "
-                "is not the same as number of faces in the input mesh ({})",
-                f_attributes.size(),
-                get_num_faces());
-        }
-
-        uint32_t num_attributes = 1;
-
-        auto ret = m_attr_container->template add<FaceAttribute<T>>(
-            name.c_str(), num_attributes, LOCATION_ALL, layout, this);
-
-        // populate the attribute before returning it
-        const int num_patches = this->get_num_patches();
-#pragma omp parallel for
-        for (int p = 0; p < num_patches; ++p) {
-            for (uint16_t f = 0; f < this->m_h_num_owned_f[p]; ++f) {
-
-                const FaceHandle f_handle(static_cast<uint32_t>(p), f);
-
-                uint32_t global_f = m_h_patches_ltog_f[p][f];
-
-                (*ret)(f_handle, 0) = f_attributes[global_f];
-            }
-        }
-
-        // move to device
-        ret->move(rxmesh::HOST, rxmesh::DEVICE);
-        return ret;
-    }
+        layoutT               layout = SoA);
 
     /**
      * @brief Adding a new edge attribute
@@ -1144,11 +726,7 @@ class RXMeshStatic : public RXMesh
         const std::string& name,
         uint32_t           num_attributes,
         locationT          location = LOCATION_ALL,
-        layoutT            layout   = SoA)
-    {
-        return m_attr_container->template add<EdgeAttribute<T>>(
-            name.c_str(), num_attributes, location, layout, this);
-    }
+        layoutT            layout   = SoA);
 
     /**
      * @brief Adding a new edge attribute similar to another edge attribute
@@ -1162,13 +740,7 @@ class RXMeshStatic : public RXMesh
     template <class T>
     std::shared_ptr<EdgeAttribute<T>> add_edge_attribute_like(
         const std::string&      name,
-        const EdgeAttribute<T>& other)
-    {
-        return add_edge_attribute<T>(name,
-                                     other.get_num_attributes(),
-                                     other.get_allocated(),
-                                     other.get_layout());
-    }   
+        const EdgeAttribute<T>& other);
 
     /**
      * @brief Adding a new vertex attribute
@@ -1186,11 +758,7 @@ class RXMeshStatic : public RXMesh
         const std::string& name,
         uint32_t           num_attributes,
         locationT          location = LOCATION_ALL,
-        layoutT            layout   = SoA)
-    {
-        return m_attr_container->template add<VertexAttribute<T>>(
-            name.c_str(), num_attributes, location, layout, this);
-    }
+        layoutT            layout   = SoA);
 
     /**
      * @brief Adding a new vertex attribute similar to another vertex attribute
@@ -1204,13 +772,7 @@ class RXMeshStatic : public RXMesh
     template <class T>
     std::shared_ptr<VertexAttribute<T>> add_vertex_attribute_like(
         const std::string&        name,
-        const VertexAttribute<T>& other)
-    {
-        return add_vertex_attribute<T>(name,
-                                       other.get_num_attributes(),
-                                       other.get_allocated(),
-                                       other.get_layout());
-    }
+        const VertexAttribute<T>& other);
 
     /**
      * @brief Adding a new vertex attribute by reading values from a host buffer
@@ -1229,48 +791,7 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<VertexAttribute<T>> add_vertex_attribute(
         const std::vector<std::vector<T>>& v_attributes,
         const std::string&                 name,
-        layoutT                            layout = SoA)
-    {
-        if (v_attributes.empty()) {
-            RXMESH_ERROR(
-                "RXMeshStatic::add_vertex_attribute() input attribute is "
-                "empty");
-        }
-
-        if (v_attributes.size() != get_num_vertices()) {
-            RXMESH_ERROR(
-                "RXMeshStatic::add_vertex_attribute() input attribute size "
-                "({}) is not the same as number of vertices in the input mesh "
-                "({})",
-                v_attributes.size(),
-                get_num_vertices());
-        }
-
-        uint32_t num_attributes = v_attributes[0].size();
-
-        auto ret = m_attr_container->template add<VertexAttribute<T>>(
-            name.c_str(), num_attributes, LOCATION_ALL, layout, this);
-
-        // populate the attribute before returning it
-        const int num_patches = this->get_num_patches();
-#pragma omp parallel for
-        for (int p = 0; p < num_patches; ++p) {
-            for (uint16_t v = 0; v < this->m_h_num_owned_v[p]; ++v) {
-
-                const VertexHandle v_handle(static_cast<uint32_t>(p), v);
-
-                uint32_t global_v = m_h_patches_ltog_v[p][v];
-
-                for (uint32_t a = 0; a < num_attributes; ++a) {
-                    (*ret)(v_handle, a) = v_attributes[global_v][a];
-                }
-            }
-        }
-
-        // move to device
-        ret->move(rxmesh::HOST, rxmesh::DEVICE);
-        return ret;
-    }
+        layoutT                            layout = SoA);
 
     /**
      * @brief Adding a new vertex attribute by reading values from a host buffer
@@ -1289,46 +810,7 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<VertexAttribute<T>> add_vertex_attribute(
         const std::vector<T>& v_attributes,
         const std::string&    name,
-        layoutT               layout = SoA)
-    {
-        if (v_attributes.empty()) {
-            RXMESH_ERROR(
-                "RXMeshStatic::add_vertex_attribute() input attribute is "
-                "empty");
-        }
-
-        if (v_attributes.size() != get_num_vertices()) {
-            RXMESH_ERROR(
-                "RXMeshStatic::add_vertex_attribute() input attribute size "
-                "({}) is not the same as number of vertices in the input mesh "
-                "({})",
-                v_attributes.size(),
-                get_num_vertices());
-        }
-
-        uint32_t num_attributes = 1;
-
-        auto ret = m_attr_container->template add<VertexAttribute<T>>(
-            name.c_str(), num_attributes, LOCATION_ALL, layout, this);
-
-        // populate the attribute before returning it
-        const int num_patches = this->get_num_patches();
-#pragma omp parallel for
-        for (int p = 0; p < num_patches; ++p) {
-            for (uint16_t v = 0; v < this->m_h_num_owned_v[p]; ++v) {
-
-                const VertexHandle v_handle(static_cast<uint32_t>(p), v);
-
-                uint32_t global_v = m_h_patches_ltog_v[p][v];
-
-                (*ret)(v_handle, 0) = v_attributes[global_v];
-            }
-        }
-
-        // move to device
-        ret->move(rxmesh::HOST, rxmesh::DEVICE);
-        return ret;
-    }
+        layoutT               layout = SoA);
 
     /**
      * @brief similar to add_vertex/edge/face_attribute where the mesh element
@@ -1340,23 +822,7 @@ class RXMeshStatic : public RXMesh
         const std::string& name,
         uint32_t           num_attributes,
         locationT          location = LOCATION_ALL,
-        layoutT            layout   = SoA)
-    {
-        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
-            return add_vertex_attribute<T>(
-                name, num_attributes, location, layout);
-        }
-
-        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
-            return add_edge_attribute<T>(
-                name, num_attributes, location, layout);
-        }
-
-        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
-            return add_face_attribute<T>(
-                name, num_attributes, location, layout);
-        }
-    }
+        layoutT            layout   = SoA);
 
     /**
      * @brief Adding a new attribute similar to another attribute in allocation,
@@ -1372,57 +838,20 @@ class RXMeshStatic : public RXMesh
     template <class T, class HandleT>
     std::shared_ptr<Attribute<T, HandleT>> add_attribute_like(
         const std::string&           name,
-        const Attribute<T, HandleT>& other)
-    {
-
-        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
-            return add_vertex_attribute<T>(name,
-                                           other.get_num_attributes(),
-                                           other.get_allocated(),
-                                           other.get_layout());
-        }
-
-        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
-            return add_edge_attribute<T>(name,
-                                         other.get_num_attributes(),
-                                         other.get_allocated(),
-                                         other.get_layout());
-        }
-
-        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
-            return add_face_attribute<T>(name,
-                                         other.get_num_attributes(),
-                                         other.get_allocated(),
-                                         other.get_layout());
-        }
-    }
+        const Attribute<T, HandleT>& other);
 
     /**
      * @brief Checks if an attribute exists given its name
      * @param name the attribute name
      * @return True if the attribute exists. False otherwise.
      */
-    bool does_attribute_exist(const std::string& name)
-    {
-        return m_attr_container->does_exist(name.c_str());
-    }
+    bool does_attribute_exist(const std::string& name);
 
     /**
      * @brief Remove an attribute. Could be vertex, edge, or face attribute
      * @param name the attribute name
      */
-    void remove_attribute(const std::string& name)
-    {
-        if (!this->does_attribute_exist(name)) {
-            RXMESH_WARN(
-                "RXMeshStatic::remove_attribute() trying to remove an "
-                "attribute that does not exit with name {}",
-                name);
-            return;
-        }
-
-        m_attr_container->remove(name.c_str());
-    }
+    void remove_attribute(const std::string& name);
 
     /**
      * @brief populate boundary_v with 1 if the vertex is a boundary vertex and
@@ -1434,112 +863,32 @@ class RXMeshStatic : public RXMesh
     template <typename T>
     void get_boundary_vertices(VertexAttribute<T>& boundary_v,
                                bool                move_to_host = true,
-                               cudaStream_t        stream       = NULL) const
-    {
-        if (!boundary_v.is_device_allocated()) {
-            RXMESH_ERROR(
-                "RXMeshStatic::get_boundary_vertices the input/output "
-                "VertexAttribute (i.e., boundary_v) should be allocated on "
-                "device since the boundary vertices are identified first on "
-                "the device (before optionally moving them to the host). "
-                "Returning without calculating the boundary vertices!");
-            return;
-        }
-
-        boundary_v.reset(0, LOCATION_ALL);
-
-        constexpr uint32_t blockThreads = 256;
-
-        int max_shmem_bytes = 89 * 1024;
-        CUDA_ERROR(cudaFuncSetAttribute(
-            (void*)detail::identify_boundary_vertices<blockThreads, T>,
-            cudaFuncAttributeMaxDynamicSharedMemorySize,
-            max_shmem_bytes));
-
-        LaunchBox<blockThreads> lb;
-
-        prepare_launch_box(
-            {Op::EF, Op::EV},
-            lb,
-            (void*)detail::identify_boundary_vertices<blockThreads, T>,
-            false,
-            false,
-            false,
-            [&](uint32_t v, uint32_t e, uint32_t f) {
-                return detail::mask_num_bytes(e) +
-                       ShmemAllocator::default_alignment;
-            });
-
-        detail::identify_boundary_vertices<blockThreads>
-            <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn, stream>>>(
-                get_context(), boundary_v);
-
-        if (move_to_host && boundary_v.is_host_allocated()) {
-            boundary_v.move(DEVICE, HOST, stream);
-        }
-    }
+                               cudaStream_t        stream       = NULL) const;
 
     /**
      * @brief return a shared pointer the input vertex position
      */
-    std::shared_ptr<VertexAttribute<float>> get_input_vertex_coordinates()
-    {
-        if (!m_input_vertex_coordinates) {
-            RXMESH_ERROR(
-                "RXMeshStatic::get_input_vertex_coordinates input vertex was "
-                "not initialized. Call RXMeshStatic with constructor to the "
-                "obj file path");
-            exit(EXIT_FAILURE);
-        }
-        return m_input_vertex_coordinates;
-    }
+    std::shared_ptr<VertexAttribute<float>> get_input_vertex_coordinates();
 
     /**
      * @brief return the number of regions (labels) in the mesh.
      */
-    int get_num_regions() const
-    {
-        return m_num_regions;
-    }
+    int get_num_regions() const;
 
     /**
      * @brief return a shared pointer of the face region label
      */
-    std::shared_ptr<FaceAttribute<int>> get_face_region_label()
-    {
-        if (!m_face_label) {
-            RXMESH_ERROR(
-                "RXMeshStatic::get_face_region_label() there is no region "
-                "label.");
-        }
-        return m_face_label;
-    }
+    std::shared_ptr<FaceAttribute<int>> get_face_region_label();
 
     /**
      * @brief return a shared pointer of the edge region label
      */
-    std::shared_ptr<EdgeAttribute<int>> get_edge_region_label()
-    {
-        if (!m_edge_label) {
-            RXMESH_ERROR(
-                "RXMeshStatic::get_edge_region_label() there is no region "
-                "label.");
-        }
-        return m_edge_label;
-    }
+    std::shared_ptr<EdgeAttribute<int>> get_edge_region_label();
 
     /**
      * @brief return a shared pointer of the vertex region label
      */
-    std::shared_ptr<VertexAttribute<int>> get_vertex_region_label()
-    {
-        if (!m_vertex_label) {
-            RXMESH_ERROR(
-                "RXMeshStatic::get_vertex_region_label() there is no region "
-                "label.");
-        }
-        return m_vertex_label;
-    }
+    std::shared_ptr<VertexAttribute<int>> get_vertex_region_label();
 
     /**
      * @brief return a shared pointer of region label based on the template type
@@ -1567,49 +916,7 @@ class RXMeshStatic : public RXMesh
      * @param lower bounding box lower corner
      * @param upper bounding box upper corner
      */
-    void scale(glm::fvec3 lower, glm::fvec3 upper)
-    {
-        if (lower[0] > upper[0] || lower[1] > upper[1] || lower[2] > upper[2]) {
-            RXMESH_ERROR(
-                "RXMeshStatic::scale() can not scale the mesh since the lower "
-                "corner ({},{},{}) is higher than upper corner ({},{},{}).",
-                lower[0],
-                lower[1],
-                lower[2],
-                upper[0],
-                upper[1],
-                upper[2]);
-            return;
-        }
-
-        glm::vec3 bb_lower(0), bb_upper(0);
-
-        bounding_box(bb_lower, bb_upper);
-
-        glm::vec3 factor;
-        for (int i = 0; i < 3; ++i) {
-            factor[i] =
-                (upper[i] - lower[i]) / ((bb_upper[i] - bb_lower[i]) +
-                                         std::numeric_limits<float>::epsilon());
-        }
-
-        float the_factor = std::min(std::min(factor[0], factor[1]), factor[2]);
-
-        auto coord = *get_input_vertex_coordinates();
-
-        for_each_vertex(HOST, [&](const VertexHandle vh) {
-            for (int i = 0; i < 3; ++i) {
-                coord(vh, i) += (lower[i] - bb_lower[i]);
-                coord(vh, i) *= the_factor;
-            }
-        });
-
-        coord.move(HOST, DEVICE);
-
-#if USE_POLYSCOPE
-        get_polyscope_mesh()->updateVertexPositions(coord);
-#endif
-    }
+    void scale(glm::fvec3 lower, glm::fvec3 upper);
 
     /**
      * @brief compute the mesh bounding box using coordinates returned by
@@ -1617,30 +924,7 @@ class RXMeshStatic : public RXMesh
      * @param lower
      * @param upper
      */
-    void bounding_box(glm::vec3& lower, glm::vec3& upper)
-    {
-        lower[0] = std::numeric_limits<float>::max();
-        lower[1] = std::numeric_limits<float>::max();
-        lower[2] = std::numeric_limits<float>::max();
-
-        upper[0] = std::numeric_limits<float>::lowest();
-        upper[1] = std::numeric_limits<float>::lowest();
-        upper[2] = std::numeric_limits<float>::lowest();
-
-        auto coord = *get_input_vertex_coordinates();
-
-        for_each_vertex(
-            HOST,
-            [&](const VertexHandle vh) {
-                glm::vec3 v(coord(vh, 0), coord(vh, 1), coord(vh, 2));
-                for (int i = 0; i < 3; ++i) {
-                    lower[i] = std::min(lower[i], v[i]);
-                    upper[i] = std::max(upper[i], v[i]);
-                }
-            },
-            NULL,
-            false);
-    }
+    void bounding_box(glm::vec3& lower, glm::vec3& upper);
 
     /**
      * @brief Map a vertex handle into a global index as seen in the input
@@ -1648,22 +932,14 @@ class RXMeshStatic : public RXMesh
      * @param vh input vertex handle
      * @return the global index of vh
      */
-    uint32_t map_to_global(const VertexHandle vh) const
-    {
-        auto pl = vh.unpack();
-        return m_h_patches_ltog_v[pl.first][pl.second];
-    }
+    uint32_t map_to_global(const VertexHandle vh) const;
 
     /**
      * @brief Map an edge handle into a global index
      * @param eh input edge handle
      * @return the global index of eh
      */
-    uint32_t map_to_global(const EdgeHandle eh) const
-    {
-        auto pl = eh.unpack();
-        return m_h_patches_ltog_e[pl.first][pl.second];
-    }
+    uint32_t map_to_global(const EdgeHandle eh) const;
 
     /**
      * @brief Map a face handle into a global index as seen in the input
@@ -1671,11 +947,7 @@ class RXMeshStatic : public RXMesh
      * @param vh input face handle
      * @return the global index of fh
      */
-    uint32_t map_to_global(const FaceHandle fh) const
-    {
-        auto pl = fh.unpack();
-        return m_h_patches_ltog_f[pl.first][pl.second];
-    }
+    uint32_t map_to_global(const FaceHandle fh) const;
 
     /**
      * @brief compute a linear compact index for a give vertex/edge/face handle
@@ -1683,41 +955,7 @@ class RXMeshStatic : public RXMesh
      * @param input handle
      */
     template <typename HandleT>
-    uint32_t linear_id(HandleT input) const
-    {
-        using LocalT = typename HandleT::LocalT;
-
-        if (!input.is_valid()) {
-            RXMESH_ERROR("RXMeshStatic::linear_id() input handle is not valid");
-        }
-
-
-        if (input.patch_id() >= get_num_patches()) {
-            RXMESH_ERROR(
-                "RXMeshStatic::linear_id() patch index ({}) is out-of-bound",
-                input.patch_id());
-        }
-
-        const HandleT owner_handle = get_owner_handle(input);
-
-        uint32_t p_id = owner_handle.patch_id();
-        uint16_t ret  = owner_handle.local_id();
-
-        ret = this->m_h_patches_info[p_id].count_num_owned(
-            m_h_patches_info[p_id].get_owned_mask<HandleT>(),
-            m_h_patches_info[p_id].get_active_mask<HandleT>(),
-            ret);
-
-        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
-            return ret + m_h_vertex_prefix[p_id];
-        }
-        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
-            return ret + m_h_edge_prefix[p_id];
-        }
-        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
-            return ret + m_h_face_prefix[p_id];
-        }
-    }
+    uint32_t linear_id(HandleT input) const;
 
     /**
      * @brief get the owner handle of a given mesh element handle
@@ -1725,10 +963,7 @@ class RXMeshStatic : public RXMesh
      * memory
      */
     template <typename HandleT>
-    HandleT get_owner_handle(const HandleT input) const
-    {
-        return get_context().get_owner_handle(input, m_h_patches_info);
-    }
+    HandleT get_owner_handle(const HandleT input) const;
 
     /**
      * @brief Export the mesh to obj file
@@ -1738,37 +973,7 @@ class RXMeshStatic : public RXMesh
      */
     template <typename T>
     void export_obj(const std::string&        filename,
-                    const VertexAttribute<T>& coords) const
-    {
-        std::string  fn = filename;
-        std::fstream file(fn, std::ios::out);
-        file.precision(30);
-
-        std::vector<glm::vec3> v_list;
-        create_vertex_list(v_list, coords);
-
-        assert(get_num_vertices() == v_list.size());
-
-        for (uint32_t v = 0; v < v_list.size(); ++v) {
-            file << "v " << v_list[v][0] << " " << v_list[v][1] << " "
-                 << v_list[v][2] << " \n";
-        }
-
-        std::vector<glm::uvec3> f_list;
-        create_face_list(f_list);
-
-        assert(f_list.size() == get_num_faces());
-
-        for (uint32_t f = 0; f < f_list.size(); ++f) {
-            file << "f ";
-            for (uint32_t i = 0; i < 3; ++i) {
-                file << f_list[f][i] + 1 << " ";
-            }
-            file << "\n";
-        }
-
-        file.close();
-    }
+                    const VertexAttribute<T>& coords) const;
 
     /**
      * @brief export the mesh to a VTK file which can be visualized using
@@ -1832,54 +1037,12 @@ class RXMeshStatic : public RXMesh
      */
     template <typename T>
     void create_vertex_list(std::vector<glm::vec3>&   v_list,
-                            const VertexAttribute<T>& coords) const
-    {
-        v_list.resize(get_num_vertices());
-        for_each_vertex(
-            HOST,
-            [&](const VertexHandle vh) {
-                uint32_t vid   = linear_id(vh);
-                v_list[vid][0] = coords(vh, 0);
-                v_list[vid][1] = coords(vh, 1);
-                v_list[vid][2] = coords(vh, 2);
-            },
-            NULL,
-            false);
-    }
+                            const VertexAttribute<T>& coords) const;
 
     /**
      * @brief convert the mesh connectivity to face list
      */
-    void create_face_list(std::vector<glm::uvec3>& f_list) const
-    {
-        f_list.reserve(get_num_faces());
-
-        for (uint32_t p = 0; p < this->m_num_patches; ++p) {
-            const uint32_t p_num_faces = this->m_h_patches_info[p].num_faces[0];
-            for (uint32_t f = 0; f < p_num_faces; ++f) {
-                if (!detail::is_deleted(
-                        f, this->m_h_patches_info[p].active_mask_f) &&
-                    detail::is_owned(f,
-                                     this->m_h_patches_info[p].owned_mask_f)) {
-
-                    glm::uvec3 face;
-
-                    for (uint32_t e = 0; e < 3; ++e) {
-                        uint16_t edge =
-                            this->m_h_patches_info[p].fe[3 * f + e].id;
-                        flag_t dir(0);
-                        Context::unpack_edge_dir(edge, edge, dir);
-                        uint16_t     e_id = (2 * edge) + dir;
-                        uint16_t     v = this->m_h_patches_info[p].ev[e_id].id;
-                        VertexHandle vh(p, v);
-                        uint32_t     vid = linear_id(vh);
-                        face[e]          = vid;
-                    }
-                    f_list.push_back(face);
-                }
-            }
-        }
-    }
+    void create_face_list(std::vector<glm::uvec3>& f_list) const;
 
    protected:
     template <typename AttributeT>
@@ -2408,87 +1571,12 @@ class RXMeshStatic : public RXMesh
 #if USE_POLYSCOPE
     void add_patch_to_polyscope(const uint32_t                        p,
                                 std::vector<std::array<uint32_t, 3>>& fv,
-                                bool with_ribbon)
-    {
-        for (uint16_t f = 0; f < this->m_h_patches_info[p].num_faces[0]; ++f) {
-            if (!detail::is_deleted(f,
-                                    this->m_h_patches_info[p].active_mask_f)) {
-                if (!with_ribbon) {
-                    if (!detail::is_owned(
-                            f, this->m_h_patches_info[p].owned_mask_f)) {
-                        // fv.push_back({0, 0, 0});
-                        continue;
-                    }
-                }
-
-                std::array<uint32_t, 3> face;
-                for (uint32_t e = 0; e < 3; ++e) {
-                    LocalEdgeT edge = this->m_h_patches_info[p].fe[3 * f + e];
-                    flag_t     dir(0);
-                    Context::unpack_edge_dir(edge.id, edge.id, dir);
-                    uint16_t     eid0 = (2 * edge.id) + dir;
-                    VertexHandle vh(p, {this->m_h_patches_info[p].ev[eid0].id});
-                    uint32_t     v_org0 = linear_id(vh);
-                    face[e]             = v_org0;
-                    assert(v_org0 < get_num_vertices());
-                }
-                fv.push_back(face);
-            }
-        }
-    }
+                                bool with_ribbon);
 
 
-    void update_polyscope_edge_map()
-    {
-        m_polyscope_edges_map.clear();
+    void update_polyscope_edge_map();
 
-        for (uint32_t p = 0; p < this->m_num_patches; ++p) {
-
-            for (uint16_t e = 0; e < this->m_h_patches_info[p].num_edges[0];
-                 ++e) {
-                LocalEdgeT local_e(e);
-                if (!this->m_h_patches_info[p].is_deleted(local_e) &&
-                    this->m_h_patches_info[p].is_owned(local_e)) {
-
-                    VertexHandle v0(
-                        p, {this->m_h_patches_info[p].ev[2 * e + 0].id});
-                    VertexHandle v1(
-                        p, {this->m_h_patches_info[p].ev[2 * e + 1].id});
-
-                    uint32_t v_org0 = linear_id(v0);
-                    uint32_t v_org1 = linear_id(v1);
-
-                    auto key = detail::edge_key(v_org0, v_org1);
-                    assert(v_org0 < get_num_vertices());
-                    assert(v_org1 < get_num_vertices());
-                    auto e_iter = m_polyscope_edges_map.find(key);
-                    if (e_iter == m_polyscope_edges_map.end()) {
-                        EdgeHandle eh(p, {e});
-                        m_polyscope_edges_map.insert(
-                            std::make_pair(key, linear_id(eh)));
-                    }
-                }
-            }
-        }
-    }
-
-    void register_polyscope()
-    {
-        update_polyscope_edge_map();
-
-        std::vector<std::array<uint32_t, 3>> fv;
-        fv.reserve(get_num_faces());
-
-        for (uint32_t p = 0; p < this->m_num_patches; ++p) {
-            add_patch_to_polyscope(p, fv, false);
-        }
-
-        m_polyscope_mesh =
-            polyscope::registerSurfaceMesh(m_polyscope_mesh_name,
-                                           *m_input_vertex_coordinates,
-                                           fv,
-                                           m_polyscope_edges_map);
-    }
+    void register_polyscope();
 
     std::string             m_polyscope_mesh_name;
     polyscope::SurfaceMesh* m_polyscope_mesh;
@@ -2497,19 +1585,7 @@ class RXMeshStatic : public RXMesh
 
    public:
     void add_edge_labels(FaceAttribute<int>& face_label,
-                         EdgeAttribute<int>& edge_label)
-    {
-
-        run_query_kernel<Op::FE, 256>(
-            [face_label, edge_label] __device__(const FaceHandle   fh,
-                                                const EdgeIterator iter) {
-                int label = face_label(fh);
-
-                edge_label(iter[0]) = label;
-                edge_label(iter[1]) = label;
-                edge_label(iter[2]) = label;
-            });
-    }
+                         EdgeAttribute<int>& edge_label);
 
 
    protected:
@@ -2521,4 +1597,8 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<VertexAttribute<int>> m_vertex_label;
     int                                   m_num_regions;
 };
+
+
 }  // namespace rxmesh
+
+#include "rxmesh/rxmesh_static.inl"
