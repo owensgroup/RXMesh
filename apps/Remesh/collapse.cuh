@@ -578,7 +578,9 @@ inline void collapse_short_edges(rxmesh::RXMeshDynamic&             rx,
             if (show) {
 
                 rx.update_host();
-                EXPECT_TRUE(rx.validate());
+                if (!rx.validate()) {
+                    RXMESH_ERROR("Mesh validation failed during collapse");
+                }
 
                 coords->move(DEVICE, HOST);
                 edge_status->move(DEVICE, HOST);

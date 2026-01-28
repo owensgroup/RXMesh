@@ -288,7 +288,9 @@ inline void split_long_edges(rxmesh::RXMeshDynamic&             rx,
             if (show) {
 
                 rx.update_host();
-                EXPECT_TRUE(rx.validate());
+                if (!rx.validate()) {
+                    RXMESH_ERROR("Mesh validation failed during split");
+                }
 
                 // float max_v(0), min_v(5000.0), max_e(0), min_e(5000.0),
                 //     max_f(0), min_f(5000.0);

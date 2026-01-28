@@ -1,4 +1,6 @@
-#include "gtest/gtest.h"
+#include <CLI/CLI.hpp>
+#include <cstdlib>
+
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/util.h"
@@ -20,12 +22,9 @@ struct arg
 
 #include "remesh_rxmesh.cuh"
 
-TEST(Apps, Remesh)
+int remesh()
 {
     using namespace rxmesh;
-
-    // Select device
-    cuda_query(Arg.device_id);
 
     // std::vector<std::vector<float>>    verts;
     // std::vector<std::vector<uint32_t>> fv;
@@ -43,70 +42,64 @@ TEST(Apps, Remesh)
     //                      extract_file_name(Arg.obj_file_name) + "_patches");
     //
 
-    ASSERT_TRUE(rx.is_edge_manifold());
+    if (!rx.is_edge_manifold()) {
+        RXMESH_ERROR("Remesh requires an edge-manifold mesh");
+        return EXIT_FAILURE;
+    }
 
     // rx.export_obj("grid_" + std::to_string(Arg.nx) + "_" +
     //                   std::to_string(Arg.ny) + ".obj",
     //               *rx.get_input_vertex_coordinates());
 
     remesh_rxmesh(rx);
+
+    return 0;
 }
 
 
 int main(int argc, char** argv)
 {
     using namespace rxmesh;
-    Log::init();
 
-    ::testing::InitGoogleTest(&argc, argv);
+    CLI::App app{"Remesh - Mesh remeshing application"};
+
+    app.add_option("-i,--input", Arg.obj_file_name, "Input OBJ mesh file")
+        ->default_val(std::string(STRINGIFY(INPUT_DIR) "cloth.obj"));
+
+    app.add_option("-o,--output", Arg.output_folder, "JSON file output folder")
+        ->default_val(std::string(STRINGIFY(OUTPUT_DIR)));
+
+    app.add_option(
+           "-n,--num_iter", Arg.num_iter, "Number of remeshing iterations")
+        ->default_val(3u);
+
+    app.add_option("--relative_len",
+                   Arg.relative_len,
+                   "Target edge length as a ratio of the input mesh average "
+                   "edge length")
+        ->default_val(1.0f);
+
+    app.add_option(
+           "--nx", Arg.nx, "Grid size in x direction (for plane generation)")
+        ->default_val(66u);
+
+    app.add_option(
+           "--ny", Arg.ny, "Grid size in y direction (for plane generation)")
+        ->default_val(66u);
+
+    app.add_option("-d,--device_id", Arg.device_id, "GPU device ID")
+        ->default_val(0u);
+
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError& e) {
+        return app.exit(e);
+    }
+
+    rx_init(Arg.device_id);
+
     Arg.argv = argv;
     Arg.argc = argc;
-
-
-    if (argc > 1) {
-        if (cmd_option_exists(argv, argc + argv, "-h")) {
-            // clang-format off
-            RXMESH_INFO("\nUsage: Remesh.exe < -option X>\n"
-                        " -h:              Display this massage and exit\n"
-                        " -input:          Input obj file. Default is {} \n"
-                        "                  Hint: Only accept OBJ files\n"
-                        " -num_iter:       Number of remeshing iterations. Default is {}\n"
-                        " -relative_len:   Target edge length as a ratio of the input mesh average edge length. Default is {}\n"
-                        "                  Hint: should be slightly less than the average edge length of the input mesh\n"
-                        " -o:              JSON file output folder. Default is {} \n"
-                        " -device_id:      GPU device ID. Default is {}",
-            Arg.obj_file_name, Arg.num_iter,Arg.relative_len, Arg.output_folder, Arg.device_id);
-            // clang-format on
-            exit(EXIT_SUCCESS);
-        }
-
-        if (cmd_option_exists(argv, argc + argv, "-input")) {
-            Arg.obj_file_name =
-                std::string(get_cmd_option(argv, argv + argc, "-input"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-o")) {
-            Arg.output_folder =
-                std::string(get_cmd_option(argv, argv + argc, "-o"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-device_id")) {
-            Arg.device_id =
-                atoi(get_cmd_option(argv, argv + argc, "-device_id"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-num_iter")) {
-            Arg.num_iter = atoi(get_cmd_option(argv, argv + argc, "-num_iter"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-relative_len")) {
-            Arg.relative_len =
-                std::stof(get_cmd_option(argv, argv + argc, "-relative_len"));
-        }
-
-        if (cmd_option_exists(argv, argc + argv, "-nx")) {
-            Arg.nx = atoi(get_cmd_option(argv, argv + argc, "-nx"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-ny")) {
-            Arg.ny = atoi(get_cmd_option(argv, argv + argc, "-ny"));
-        }
-    }
 
     RXMESH_TRACE("input= {}", Arg.obj_file_name);
     RXMESH_TRACE("output_folder= {}", Arg.output_folder);
@@ -116,6 +109,5 @@ int main(int argc, char** argv)
     RXMESH_TRACE("nx= {}", Arg.nx);
     RXMESH_TRACE("ny= {}", Arg.ny);
 
-
-    return RUN_ALL_TESTS();
+    return remesh();
 }
