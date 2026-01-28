@@ -1,3 +1,6 @@
+#include <CLI/CLI.hpp>
+#include <cstdlib>
+
 #include "rxmesh/matrix/cholesky_solver.h"
 #include "rxmesh/matrix/sparse_matrix.h"
 #include "rxmesh/query.cuh"
@@ -10,7 +13,7 @@ using namespace rxmesh;
 template <uint32_t blockThreads>
 __global__ static void area_term(const Context              context,
                                  const VertexAttribute<int> v_bd,
-                                 SparseMatrix<cuComplex>   E)
+                                 SparseMatrix<cuComplex>    E)
 {
     using namespace rxmesh;
 
@@ -38,7 +41,7 @@ __global__ static void area_term(const Context              context,
 template <uint32_t blockThreads>
 __global__ static void conformal_energy(const Context                context,
                                         const VertexAttribute<float> coord,
-                                        SparseMatrix<cuComplex>     E)
+                                        SparseMatrix<cuComplex>      E)
 {
     using namespace rxmesh;
 
@@ -98,16 +101,31 @@ __global__ static void conformal_energy(const Context                context,
 
 int main(int argc, char** argv)
 {
-    Log::init();
+    CLI::App app{"SCP"};
 
-    const uint32_t device_id = 0;
-    cuda_query(device_id);
+    uint32_t    device_id  = 0;
+    std::string filename   = STRINGIFY(INPUT_DIR) "bunnyhead.obj";
+    int         iterations = 32;
 
-    std::string filename = STRINGIFY(INPUT_DIR) "bunnyhead.obj";
+    app.add_option("-i,--input", filename, "Input OBJ mesh file")
+        ->default_val(std::string(STRINGIFY(INPUT_DIR) "bunnyhead.obj"));
 
-    if (argc >= 2) {
-        filename = std::string(argv[1]);
+    app.add_option("-d,--device_id", device_id, "GPU device ID")
+        ->default_val(0u);
+
+    app.add_option(
+           "--iterations",
+           iterations,
+           "Number of power-method iterations (early-exit on convergence)")
+        ->default_val(32);
+
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError& e) {
+        return app.exit(e);
     }
+
+    rx_init(static_cast<int>(device_id));
 
     RXMeshStatic rx(filename);
 
@@ -171,9 +189,6 @@ int main(int argc, char** argv)
     CholeskySolver solver(&Lc);
     solver.pre_solve(rx);
 
-    // the power method
-    int iterations = 32;
-
     float prv_norm = std::numeric_limits<float>::max();
 
     for (int i = 0; i < iterations; i++) {
@@ -230,7 +245,7 @@ int main(int argc, char** argv)
         uv(vh, 1) -= upper[1];
         uv(vh, 0) /= s;
         uv(vh, 1) /= s;
-    });  
+    });
 
 
 #if USE_POLYSCOPE
