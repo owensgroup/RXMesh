@@ -326,16 +326,14 @@ void __global__ solve_stretch_and_bending(const Context                context,
 
 int main(int argc, char** argv)
 {
-    Log::init();
+    const int device_id = 0;
+    rx_init(device_id);
 
 #if USE_POLYSCOPE
     polyscope::view::upDir                             = polyscope::UpDir::ZUp;
     polyscope::options::groundPlaneHeightFactor        = 1.5;
     polyscope::options::openImGuiWindowForUserCallback = false;
 #endif
-    // set device
-    const uint32_t device_id = 0;
-    cuda_query(device_id);
 
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "cloth.obj");
 
@@ -600,4 +598,5 @@ int main(int argc, char** argv)
     if (test) {
         RXMESH_INFO("mean= {}, mean2= {}", mean, mean2);
     }
+    return 0;
 }
