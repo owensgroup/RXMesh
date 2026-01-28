@@ -592,7 +592,10 @@ void run_simulation(Simulation<T>&                     sim,
 
 inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
 {
-    EXPECT_TRUE(rx.validate());
+    if (!rx.validate()) {
+        RXMESH_ERROR("Mesh validation failed");
+        return;
+    }
 
     using namespace rxmesh;
 

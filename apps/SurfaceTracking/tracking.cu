@@ -1,8 +1,12 @@
-#include "gtest/gtest.h"
+#include <CLI/CLI.hpp>
+#include <cstdlib>
+
 #include "rxmesh/geometry_factory.h"
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/util.h"
+
+using namespace rxmesh;
 
 inline float deg2rad(float deg)
 {
@@ -36,89 +40,59 @@ struct arg
 
 #include "tracking_rxmesh.cuh"
 
-TEST(Apps, SurfaceTracking)
-{
-    using namespace rxmesh;
-
-    // Select device
-    cuda_query(Arg.device_id);
-
-    // std::vector<std::vector<float>> verts;
-    //
-    // std::vector<std::vector<uint32_t>> fv;
-    //
-    // const vec3<float> lower_corner(-3.0, 0.0, -3.0);
-    //
-    // Arg.plane_name =
-    //     "plane" + std::to_string(Arg.n) + "x" + std::to_string(Arg.n);
-    //
-    // float spacing = 6.f / float(Arg.n);
-    //
-    // create_plane(verts, fv, Arg.n, Arg.n, 1, spacing, false, lower_corner);
-    //
-    //  RXMeshDynamic rx(fv, "", 256, 5.0, 3);
-    // rx.add_vertex_coordinates(verts, "plane");
-
-    RXMeshDynamic rx(Arg.obj_file_name, "", 256, 3.5, 5);
-
-
-    // RXMeshDynamic rx(fv, STRINGIFY(OUTPUT_DIR) + Arg.plane_name +
-    // "_patches"); rx.save(STRINGIFY(OUTPUT_DIR) + Arg.plane_name +
-    // "_patches");
-
-    tracking_rxmesh(rx);
-}
-
-
 int main(int argc, char** argv)
 {
     using namespace rxmesh;
-    Log::init();
 
-    ::testing::InitGoogleTest(&argc, argv);
+    CLI::App app{"SurfaceTracking - Surface tracking simulation"};
+
+    app.add_option("-i,--input", Arg.obj_file_name, "Input OBJ mesh file")
+        ->default_val(
+            std::string(STRINGIFY(INPUT_DIR) "el_topo_sphere_1280.obj"));
+
+    app.add_option("-o,--output", Arg.output_folder, "JSON file output folder")
+        ->default_val(std::string(STRINGIFY(OUTPUT_DIR)));
+
+    app.add_option("-n,--grid_n",
+                   Arg.n,
+                   "Grid resolution used for the optional plane setup")
+        ->default_val(60);
+
+    app.add_option("--frame_dt", Arg.frame_dt, "Frame step size")
+        ->default_val(0.05f);
+
+    app.add_option("--sim_dt", Arg.sim_dt, "Simulation time step")
+        ->default_val(0.05f);
+
+    app.add_option("--end_sim_t", Arg.end_sim_t, "Simulation duration")
+        ->default_val(5.0f);
+
+    app.add_option("-d,--device_id", Arg.device_id, "GPU device ID")
+        ->default_val(0u);
+
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError& e) {
+        return app.exit(e);
+    }
+
+    rx_init(static_cast<int>(Arg.device_id));
+
     Arg.argv = argv;
     Arg.argc = argc;
 
-
-    if (argc > 1) {
-        if (cmd_option_exists(argv, argc + argv, "-h")) {
-            // clang-format off
-            RXMESH_INFO("\nUsage: ShortestEdgeCollapse.exe < -option X>\n"
-                        " -h:          Display this massage and exit\n"
-                        " -input:      Input obj file. Default is {} \n"
-                        " -n:          Number of point along x(or y) direction. Default is {} \n"
-                        " -d:          Simulation duration. Default is {} \n"
-                        " -o:          JSON file output folder. Default is {} \n"
-                        " -device_id:  GPU device ID. Default is {}",
-            Arg.obj_file_name, Arg.n, Arg.end_sim_t, Arg.output_folder, Arg.device_id);
-            // clang-format on
-            exit(EXIT_SUCCESS);
-        }
-
-        if (cmd_option_exists(argv, argc + argv, "-input")) {
-            Arg.obj_file_name =
-                std::string(get_cmd_option(argv, argv + argc, "-input"));
-        }
-
-        if (cmd_option_exists(argv, argc + argv, "-o")) {
-            Arg.output_folder =
-                std::string(get_cmd_option(argv, argv + argc, "-o"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-device_id")) {
-            Arg.device_id =
-                atoi(get_cmd_option(argv, argv + argc, "-device_id"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-n")) {
-            Arg.n = atoi(get_cmd_option(argv, argv + argc, "-n"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-d")) {
-            Arg.end_sim_t = atof(get_cmd_option(argv, argv + argc, "-d"));
-        }
-    }
-
+    RXMESH_TRACE("input= {}", Arg.obj_file_name);
     RXMESH_TRACE("output_folder= {}", Arg.output_folder);
     RXMESH_TRACE("device_id= {}", Arg.device_id);
     RXMESH_TRACE("n= {}", Arg.n);
+    RXMESH_TRACE("frame_dt= {}", Arg.frame_dt);
+    RXMESH_TRACE("sim_dt= {}", Arg.sim_dt);
+    RXMESH_TRACE("end_sim_t= {}", Arg.end_sim_t);
 
-    return RUN_ALL_TESTS();
+
+    RXMeshDynamic rx(Arg.obj_file_name, "", 256, 3.5, 5);
+
+    tracking_rxmesh(rx);
+
+    return 0;
 }
