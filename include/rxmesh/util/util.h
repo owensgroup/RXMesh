@@ -12,31 +12,6 @@
 namespace rxmesh {
 
 /**
- * @brief Parse for an option. Maninly used to parse user input from CMD
- */
-inline char* get_cmd_option(char** begin, char** end, const std::string& option)
-{
-    // https://stackoverflow.com/a/868894/1608232
-    char** itr = std::find(begin, end, option);
-    if (itr != end && ++itr != end) {
-        return *itr;
-    }
-    return 0;
-}
-
-/**
- * @brief Check if an input string exists. Mainly used to check if input option
- * exists in CMD
- */
-inline bool cmd_option_exists(char**             begin,
-                              char**             end,
-                              const std::string& option)
-{
-    // https://stackoverflow.com/a/868894/1608232
-    return std::find(begin, end, option) != end;
-}
-
-/**
  * @brief Print current GPU memory usage
  */
 inline void print_device_memory_usage()
