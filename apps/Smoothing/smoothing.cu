@@ -1,3 +1,6 @@
+#include <CLI/CLI.hpp>
+#include <cstdlib>
+
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/diff/diff_scalar_problem.h"
@@ -9,7 +12,7 @@ struct arg
 {
     std::string obj_file_name = STRINGIFY(INPUT_DIR) "bunnyhead.obj";
     std::string output_folder = STRINGIFY(OUTPUT_DIR);
-    uint32_t    device_id     = 0;
+    int         device_id     = 0;
     bool        area          = false;
     double      learning_rate = 0.01;
     int         num_iter      = 100;
@@ -122,53 +125,37 @@ void smoothing(RXMeshStatic& rx)
 
 int main(int argc, char** argv)
 {
-    Log::init(spdlog::level::info);
-
     using T = float;
+
+    CLI::App app{"Smoothing - Gradient descent mesh smoothing"};
+
+    app.add_option("-i,--input", Arg.obj_file_name, "Input OBJ mesh file")
+        ->default_val(std::string(STRINGIFY(INPUT_DIR) "bunnyhead.obj"));
+
+    app.add_flag("--area", Arg.area, "Use area-based gradients instead of edge-based");
+
+    app.add_option("-n,--iter", Arg.num_iter, "Number of iterations")
+        ->default_val(100);
+
+    app.add_option("--lr", Arg.learning_rate, "Gradient descent learning rate")
+        ->default_val(0.01);
+
+    app.add_option("-o,--output", Arg.output_folder, "JSON file output folder")
+        ->default_val(std::string(STRINGIFY(OUTPUT_DIR)));
+
+    app.add_option("-d,--device_id", Arg.device_id, "GPU device ID")
+        ->default_val(0);
+
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError& e) {
+        return app.exit(e);
+    }
+
+    rx_init(Arg.device_id);
 
     Arg.argv = argv;
     Arg.argc = argc;
-
-
-    if (argc > 1) {
-        if (cmd_option_exists(argv, argc + argv, "-h")) {
-            // clang-format off
-            RXMESH_INFO("\nUsage: Param.exe < -option X>\n"
-                        " -h:          Display this massage and exit\n"                        
-                        " -input:      Input OBJ mesh file. Default is {} \n"
-                        " -area:       use area-based gradients. Default is {}\n"
-                        " -iter:       Number of iterations. Default is {} \n"
-                        " -lr:         Gradient descent learning rate. Default is {} \n"
-                        " -o:          JSON file output folder. Default is {} \n"
-                        " -device_id:  GPU device ID. Default is {}",
-            Arg.obj_file_name, (Arg.area? "true":"false"), Arg.num_iter, Arg.learning_rate, Arg.output_folder, Arg.device_id);
-            // clang-format on
-            exit(EXIT_SUCCESS);
-        }
-
-        if (cmd_option_exists(argv, argc + argv, "-area")) {
-            Arg.area = true;
-        }
-        if (cmd_option_exists(argv, argc + argv, "-input")) {
-            Arg.obj_file_name =
-                std::string(get_cmd_option(argv, argv + argc, "-input"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-lr")) {
-            Arg.learning_rate = atof(get_cmd_option(argv, argv + argc, "-lr"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-o")) {
-            Arg.output_folder =
-                std::string(get_cmd_option(argv, argv + argc, "-o"));
-        }
-
-        if (cmd_option_exists(argv, argc + argv, "-device_id")) {
-            Arg.device_id =
-                atoi(get_cmd_option(argv, argv + argc, "-device_id"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-iter")) {
-            Arg.num_iter = atoi(get_cmd_option(argv, argv + argc, "-iter"));
-        }
-    }
 
     RXMESH_INFO("input= {}", Arg.obj_file_name);
     RXMESH_INFO("area= {}", (Arg.area ? "true" : "false"));
@@ -177,11 +164,7 @@ int main(int argc, char** argv)
     RXMESH_INFO("output_folder= {}", Arg.output_folder);
     RXMESH_INFO("device_id= {}", Arg.device_id);
 
-
-    cuda_query(Arg.device_id);
-
     RXMeshStatic rx(Arg.obj_file_name);
-
 
     smoothing<T>(rx);
 
