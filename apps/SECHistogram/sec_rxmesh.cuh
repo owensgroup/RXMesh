@@ -10,7 +10,10 @@
 inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
                        const uint32_t         final_num_vertices)
 {
-    EXPECT_TRUE(rx.validate());
+    if (!rx.validate()) {
+        RXMESH_ERROR("Mesh validation failed");
+        return;
+    }
 
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;

@@ -10,5 +10,5 @@ set(SOURCE_LIST
 
 rxmesh_add_app(SECHistogram
   SOURCES ${SOURCE_LIST}
-  LIBS RXMesh gtest_main OpenMeshCore OpenMeshTools
+  LIBS RXMesh CLI11::CLI11 OpenMeshCore OpenMeshTools
 )
