@@ -655,6 +655,9 @@ void RXMeshStatic::add_edge_labels(FaceAttribute<int>& face_label,
     template std::shared_ptr<FaceAttribute<T>>                             \
     RXMeshStatic::add_face_attribute<T>(                                   \
         const std::vector<T>&, const std::string&, layoutT);               \
+    template std::shared_ptr<FaceAttribute<T>>                              \
+    RXMeshStatic::add_face_attribute_like<T>(const std::string&,           \
+                                             const FaceAttribute<T>&);     \
     template std::shared_ptr<EdgeAttribute<T>>                             \
     RXMeshStatic::add_edge_attribute<T>(                                   \
         const std::string&, uint32_t, locationT, layoutT);                 \
@@ -749,5 +752,76 @@ template EdgeHandle RXMeshStatic::get_owner_handle<EdgeHandle>(
     EdgeHandle) const;
 template FaceHandle RXMeshStatic::get_owner_handle<FaceHandle>(
     FaceHandle) const;
+
+// ---- Explicit instantiations for prepare_launch_box and calc_shared_memory ----
+template void RXMeshStatic::prepare_launch_box<128>(
+    const std::vector<Op>,
+    LaunchBox<128>&,
+    const void*,
+    const bool,
+    const bool,
+    const bool,
+    std::function<size_t(uint32_t, uint32_t, uint32_t)>) const;
+template void RXMeshStatic::prepare_launch_box<256>(
+    const std::vector<Op>,
+    LaunchBox<256>&,
+    const void*,
+    const bool,
+    const bool,
+    const bool,
+    std::function<size_t(uint32_t, uint32_t, uint32_t)>) const;
+template void RXMeshStatic::prepare_launch_box<512>(
+    const std::vector<Op>,
+    LaunchBox<512>&,
+    const void*,
+    const bool,
+    const bool,
+    const bool,
+    std::function<size_t(uint32_t, uint32_t, uint32_t)>) const;
+template void RXMeshStatic::prepare_launch_box<768>(
+    const std::vector<Op>,
+    LaunchBox<768>&,
+    const void*,
+    const bool,
+    const bool,
+    const bool,
+    std::function<size_t(uint32_t, uint32_t, uint32_t)>) const;
+template void RXMeshStatic::prepare_launch_box<1024>(
+    const std::vector<Op>,
+    LaunchBox<1024>&,
+    const void*,
+    const bool,
+    const bool,
+    const bool,
+    std::function<size_t(uint32_t, uint32_t, uint32_t)>) const;
+
+template size_t RXMeshStatic::calc_shared_memory<128>(
+    const Op,
+    const bool,
+    bool) const;
+template size_t RXMeshStatic::calc_shared_memory<256>(
+    const Op,
+    const bool,
+    bool) const;
+template size_t RXMeshStatic::calc_shared_memory<512>(
+    const Op,
+    const bool,
+    bool) const;
+template size_t RXMeshStatic::calc_shared_memory<768>(
+    const Op,
+    const bool,
+    bool) const;
+template size_t RXMeshStatic::calc_shared_memory<1024>(
+    const Op,
+    const bool,
+    bool) const;
+
+// ---- Explicit instantiations for get_region_label ----
+template std::shared_ptr<Attribute<int, VertexHandle>>
+RXMeshStatic::get_region_label<VertexHandle>();
+template std::shared_ptr<Attribute<int, EdgeHandle>>
+RXMeshStatic::get_region_label<EdgeHandle>();
+template std::shared_ptr<Attribute<int, FaceHandle>>
+RXMeshStatic::get_region_label<FaceHandle>();
 
 }  // namespace rxmesh
