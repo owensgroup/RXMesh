@@ -10,7 +10,10 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
                         const uint32_t         final_num_vertices,
                         const float            edge_reduce_ratio)
 {
-    EXPECT_TRUE(rx.validate());
+    if (!rx.validate()) {
+        RXMESH_ERROR("Mesh validation failed");
+        return;
+    }
 
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
@@ -229,7 +232,9 @@ inline void secp_rxmesh(rxmesh::RXMeshDynamic& rx,
 
     rx.update_host();
     coords->move(DEVICE, HOST);
-    EXPECT_TRUE(rx.validate());
+    if (!rx.validate()) {
+        RXMESH_ERROR("Mesh validation failed after SECPriority remeshing");
+    }
 
     report.add_member("num_passes", num_passes);
     report.add_member("max_smem_bytes_dyn", max_smem_bytes_dyn);

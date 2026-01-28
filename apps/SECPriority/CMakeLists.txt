@@ -19,5 +19,5 @@ CPMAddPackage(
 
 rxmesh_add_app(SECPriority
   SOURCES ${SOURCE_LIST}
-  LIBS RXMesh gtest_main cuco
+  LIBS RXMesh CLI11::CLI11 cuco
 )
