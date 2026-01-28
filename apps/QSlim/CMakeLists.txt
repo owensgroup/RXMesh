@@ -7,5 +7,5 @@ set(SOURCE_LIST
 
 rxmesh_add_app(QSlim
   SOURCES ${SOURCE_LIST}
-  LIBS RXMesh gtest_main
+  LIBS RXMesh CLI11::CLI11
 )

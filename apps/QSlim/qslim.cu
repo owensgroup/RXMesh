@@ -1,4 +1,6 @@
-#include "gtest/gtest.h"
+#include <CLI/CLI.hpp>
+#include <cstdlib>
+
 #include "rxmesh/util/log.h"
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/util.h"
@@ -16,12 +18,9 @@ struct arg
 
 #include "qslim_rxmesh.cuh"
 
-TEST(Apps, QSlim)
+int qslim()
 {
     using namespace rxmesh;
-
-    // Select device
-    cuda_query(Arg.device_id);
 
     RXMeshDynamic rx(Arg.obj_file_name, "", 256, 3.5, 1.5);
     // rx.save(STRINGIFY(OUTPUT_DIR) + extract_file_name(Arg.obj_file_name) +
@@ -31,60 +30,57 @@ TEST(Apps, QSlim)
     //                 STRINGIFY(OUTPUT_DIR) +
     //                     extract_file_name(Arg.obj_file_name) + "_patches");
 
-    ASSERT_TRUE(rx.is_edge_manifold());
+    if (!rx.is_edge_manifold()) {
+        RXMESH_ERROR("QSlim requires an edge-manifold mesh");
+        return EXIT_FAILURE;
+    }
 
-    ASSERT_TRUE(rx.is_closed());
+    if (!rx.is_closed()) {
+        RXMESH_ERROR("QSlim requires a closed mesh");
+        return EXIT_FAILURE;
+    }
 
     uint32_t final_num_vertices = Arg.target * rx.get_num_vertices();
 
     qslim_rxmesh(rx, final_num_vertices);
+
+    return 0;
 }
 
 
 int main(int argc, char** argv)
 {
     using namespace rxmesh;
-    Log::init();
 
-    ::testing::InitGoogleTest(&argc, argv);
+    CLI::App app{"QSlim - Quadric-based mesh simplification"};
+
+    app.add_option("-i,--input", Arg.obj_file_name, "Input OBJ mesh file")
+        ->default_val(std::string(STRINGIFY(INPUT_DIR) "torus.obj"));
+
+    app.add_option("-o,--output", Arg.output_folder, "JSON file output folder")
+        ->default_val(std::string(STRINGIFY(OUTPUT_DIR)));
+
+    app.add_option("-t,--target",
+                   Arg.target,
+                   "The fraction of output #vertices from the input")
+        ->default_val(0.1f);
+
+    app.add_option("-r,--reduce_ratio", Arg.reduce_ratio, "Reduction ratio")
+        ->default_val(0.1f);
+
+    app.add_option("-d,--device_id", Arg.device_id, "GPU device ID")
+        ->default_val(0u);
+
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError& e) {
+        return app.exit(e);
+    }
+
+    rx_init(Arg.device_id);
+
     Arg.argv = argv;
     Arg.argc = argc;
-
-
-    if (argc > 1) {
-        if (cmd_option_exists(argv, argc + argv, "-h")) {
-            // clang-format off
-            RXMESH_INFO("\nUsage: QSlim.exe < -option X>\n"
-                        " -h:          Display this massage and exit\n"
-                        " -input:      Input OBJ mesh file. Default is {} \n"
-                        " -target:     The fraction of output #vertices from the input. Default is {}\n"
-                        " -r:          Reduction ratio. Default is {}\n"
-                        " -o:          JSON file output folder. Default is {} \n"
-                        " -device_id:  GPU device ID. Default is {}",
-            Arg.obj_file_name,Arg.target, Arg.reduce_ratio, Arg.output_folder, Arg.device_id);
-            // clang-format on
-            exit(EXIT_SUCCESS);
-        }
-
-        if (cmd_option_exists(argv, argc + argv, "-input")) {
-            Arg.obj_file_name =
-                std::string(get_cmd_option(argv, argv + argc, "-input"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-o")) {
-            Arg.output_folder =
-                std::string(get_cmd_option(argv, argv + argc, "-o"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-device_id")) {
-            Arg.device_id =
-                atoi(get_cmd_option(argv, argv + argc, "-device_id"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-target")) {
-            Arg.target = atof(get_cmd_option(argv, argv + argc, "-target"));
-        }
-        if (cmd_option_exists(argv, argc + argv, "-r")) {
-            Arg.reduce_ratio = atof(get_cmd_option(argv, argv + argc, "-r"));
-        }
-    }
 
     RXMESH_TRACE("input= {}", Arg.obj_file_name);
     RXMESH_TRACE("output_folder= {}", Arg.output_folder);
@@ -92,5 +88,5 @@ int main(int argc, char** argv)
     RXMESH_TRACE("target= {}", Arg.target);
     RXMESH_TRACE("reduce_ratio= {}", Arg.reduce_ratio);
 
-    return RUN_ALL_TESTS();
+    return qslim();
 }

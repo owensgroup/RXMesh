@@ -64,7 +64,10 @@ void calc_edge_cost(const rxmesh::RXMeshDynamic&      rx,
 inline void qslim_rxmesh(rxmesh::RXMeshDynamic& rx,
                          const uint32_t         final_num_vertices)
 {
-    EXPECT_TRUE(rx.validate());
+    if (!rx.validate()) {
+        RXMESH_ERROR("Mesh validation failed");
+        return;
+    }
 
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
@@ -184,7 +187,9 @@ inline void qslim_rxmesh(rxmesh::RXMeshDynamic& rx,
 
             if (validate) {
                 rx.update_host();
-                EXPECT_TRUE(rx.validate());
+                if (!rx.validate()) {
+                    RXMESH_ERROR("Mesh validation failed during iteration");
+                }
             }
         }
     }
