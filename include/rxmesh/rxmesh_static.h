@@ -7,7 +7,6 @@
 #include <cuda_profiler_api.h>
 
 #include "rxmesh/attribute.h"
-#include "rxmesh/diff/diff_attribute.h"
 #include "rxmesh/handle.h"
 #include "rxmesh/kernels/for_each.cuh"
 #include "rxmesh/kernels/shmem_allocator.cuh"
@@ -1130,27 +1129,6 @@ class RXMeshStatic : public RXMesh
     }
 
     /**
-     * @brief Adding a new differentiable face attribute
-     * @tparam T the underlying type of the attribute
-     * @tparam Size the number of components per face
-     * @tparam WithHessian if hessian is required
-     * @param name of the attribute. Should not collide with other attributes
-     * names
-     * @param location where to allocate the attributes
-     */
-    template <class T, int Size, bool WithHessian>
-    std::shared_ptr<DiffFaceAttribute<T, Size, WithHessian>>
-    add_diff_face_attribute(const std::string& name,
-                            uint32_t           num_attributes = 1,
-                            locationT          location       = LOCATION_ALL,
-                            layoutT            layout         = SoA)
-    {
-        return m_attr_container
-            ->template add<DiffFaceAttribute<T, Size, WithHessian>>(
-                name.c_str(), num_attributes, location, layout, this);
-    }
-
-    /**
      * @brief Adding a new edge attribute
      * @tparam T type of the attribute
      * @param name of the attribute. Should not collide with other attributes
@@ -1190,28 +1168,7 @@ class RXMeshStatic : public RXMesh
                                      other.get_num_attributes(),
                                      other.get_allocated(),
                                      other.get_layout());
-    }
-
-    /**
-     * @brief Adding a new differentiable edge attribute
-     * @tparam T the underlying type of the attribute
-     * @tparam Size the number of components per edge
-     * @tparam WithHessian if hessian is required
-     * @param name of the attribute. Should not collide with other attributes
-     * names
-     * @param location where to allocate the attributes
-     */
-    template <class T, int Size, bool WithHessian>
-    std::shared_ptr<DiffEdgeAttribute<T, Size, WithHessian>>
-    add_diff_edge_attribute(const std::string& name,
-                            uint32_t           num_attributes = 1,
-                            locationT          location       = LOCATION_ALL,
-                            layoutT            layout         = SoA)
-    {
-        return m_attr_container
-            ->template add<DiffEdgeAttribute<T, Size, WithHessian>>(
-                name.c_str(), num_attributes, location, layout, this);
-    }
+    }   
 
     /**
      * @brief Adding a new vertex attribute
@@ -1253,28 +1210,6 @@ class RXMeshStatic : public RXMesh
                                        other.get_num_attributes(),
                                        other.get_allocated(),
                                        other.get_layout());
-    }
-
-    /**
-     * @brief Adding a new differentiable vertex attribute
-     * @tparam T the underlying type of the attribute
-     * @tparam Size the number of components per vertex, e.g., 3 for vertex
-     * coordinates
-     * @tparam WithHessian if hessian is required
-     * @param name of the attribute. Should not collide with other attributes
-     * names
-     * @param location where to allocate the attributes
-     */
-    template <class T, int Size, bool WithHessian>
-    std::shared_ptr<DiffVertexAttribute<T, Size, WithHessian>>
-    add_diff_vertex_attribute(const std::string& name,
-                              uint32_t           num_attributes = 1,
-                              locationT          location       = LOCATION_ALL,
-                              layoutT            layout         = SoA)
-    {
-        return m_attr_container
-            ->template add<DiffVertexAttribute<T, Size, WithHessian>>(
-                name.c_str(), num_attributes, location, layout, this);
     }
 
     /**
