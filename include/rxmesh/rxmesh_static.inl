@@ -48,7 +48,7 @@ std::shared_ptr<FaceAttribute<T>> RXMeshStatic::add_face_attribute(
     for (int p = 0; p < num_patches; ++p) {
         for (uint16_t f = 0; f < this->m_h_num_owned_f[p]; ++f) {
             const FaceHandle f_handle(static_cast<uint32_t>(p), f);
-            uint32_t global_f = m_h_patches_ltog_f[p][f];
+            uint32_t         global_f = m_h_patches_ltog_f[p][f];
             for (uint32_t a = 0; a < num_attributes; ++a) {
                 (*ret)(f_handle, a) = f_attributes[global_f][a];
             }
@@ -90,8 +90,8 @@ std::shared_ptr<FaceAttribute<T>> RXMeshStatic::add_face_attribute(
     for (int p = 0; p < num_patches; ++p) {
         for (uint16_t f = 0; f < this->m_h_num_owned_f[p]; ++f) {
             const FaceHandle f_handle(static_cast<uint32_t>(p), f);
-            uint32_t global_f = m_h_patches_ltog_f[p][f];
-            (*ret)(f_handle, 0) = f_attributes[global_f];
+            uint32_t         global_f = m_h_patches_ltog_f[p][f];
+            (*ret)(f_handle, 0)       = f_attributes[global_f];
         }
     }
 
@@ -151,8 +151,9 @@ std::shared_ptr<VertexAttribute<T>> RXMeshStatic::add_vertex_attribute(
     layoutT                            layout)
 {
     if (v_attributes.empty()) {
-        RXMESH_ERROR("RXMeshStatic::add_vertex_attribute() input attribute is "
-                     "empty");
+        RXMESH_ERROR(
+            "RXMeshStatic::add_vertex_attribute() input attribute is "
+            "empty");
     }
 
     if (v_attributes.size() != get_num_vertices()) {
@@ -175,7 +176,7 @@ std::shared_ptr<VertexAttribute<T>> RXMeshStatic::add_vertex_attribute(
     for (int p = 0; p < num_patches; ++p) {
         for (uint16_t v = 0; v < this->m_h_num_owned_v[p]; ++v) {
             const VertexHandle v_handle(static_cast<uint32_t>(p), v);
-            uint32_t global_v = m_h_patches_ltog_v[p][v];
+            uint32_t           global_v = m_h_patches_ltog_v[p][v];
             for (uint32_t a = 0; a < num_attributes; ++a) {
                 (*ret)(v_handle, a) = v_attributes[global_v][a];
             }
@@ -194,8 +195,9 @@ std::shared_ptr<VertexAttribute<T>> RXMeshStatic::add_vertex_attribute(
     layoutT               layout)
 {
     if (v_attributes.empty()) {
-        RXMESH_ERROR("RXMeshStatic::add_vertex_attribute() input attribute is "
-                     "empty");
+        RXMESH_ERROR(
+            "RXMeshStatic::add_vertex_attribute() input attribute is "
+            "empty");
     }
 
     if (v_attributes.size() != get_num_vertices()) {
@@ -218,8 +220,8 @@ std::shared_ptr<VertexAttribute<T>> RXMeshStatic::add_vertex_attribute(
     for (int p = 0; p < num_patches; ++p) {
         for (uint16_t v = 0; v < this->m_h_num_owned_v[p]; ++v) {
             const VertexHandle v_handle(static_cast<uint32_t>(p), v);
-            uint32_t global_v = m_h_patches_ltog_v[p][v];
-            (*ret)(v_handle, 0) = v_attributes[global_v];
+            uint32_t           global_v = m_h_patches_ltog_v[p][v];
+            (*ret)(v_handle, 0)         = v_attributes[global_v];
         }
     }
 
@@ -277,8 +279,8 @@ std::shared_ptr<Attribute<T, HandleT>> RXMeshStatic::add_attribute_like(
 
 template <typename T>
 void RXMeshStatic::get_boundary_vertices(VertexAttribute<T>& boundary_v,
-                                        bool                move_to_host,
-                                        cudaStream_t        stream) const
+                                         bool                move_to_host,
+                                         cudaStream_t        stream) const
 {
     if (!boundary_v.is_device_allocated()) {
         RXMESH_ERROR(
@@ -310,7 +312,8 @@ void RXMeshStatic::get_boundary_vertices(VertexAttribute<T>& boundary_v,
         false,
         false,
         [&](uint32_t v, uint32_t e, uint32_t f) {
-            return detail::mask_num_bytes(e) + ShmemAllocator::default_alignment;
+            return detail::mask_num_bytes(e) +
+                   ShmemAllocator::default_alignment;
         });
 
     detail::identify_boundary_vertices<blockThreads>
@@ -364,7 +367,7 @@ HandleT RXMeshStatic::get_owner_handle(const HandleT input) const
 
 template <typename T>
 void RXMeshStatic::export_obj(const std::string&        filename,
-                             const VertexAttribute<T>& coords) const
+                              const VertexAttribute<T>& coords) const
 {
     std::string  fn = filename;
     std::fstream file(fn, std::ios::out);
@@ -398,7 +401,7 @@ void RXMeshStatic::export_obj(const std::string&        filename,
 
 template <typename T>
 void RXMeshStatic::create_vertex_list(std::vector<glm::vec3>&   v_list,
-                                     const VertexAttribute<T>& coords) const
+                                      const VertexAttribute<T>& coords) const
 {
     v_list.resize(get_num_vertices());
     for_each_vertex(
@@ -442,12 +445,12 @@ std::shared_ptr<Attribute<int, HandleT>> RXMeshStatic::get_region_label()
 
 template <uint32_t blockThreads>
 void RXMeshStatic::prepare_launch_box(
-    const std::vector<Op>    op,
-    LaunchBox<blockThreads>& launch_box,
-    const void*              kernel,
-    const bool               oriented,
-    const bool               with_vertex_valence,
-    const bool               is_concurrent,
+    const std::vector<Op>                               op,
+    LaunchBox<blockThreads>&                            launch_box,
+    const void*                                         kernel,
+    const bool                                          oriented,
+    const bool                                          with_vertex_valence,
+    const bool                                          is_concurrent,
     std::function<size_t(uint32_t, uint32_t, uint32_t)> user_shmem) const
 {
 
@@ -455,19 +458,17 @@ void RXMeshStatic::prepare_launch_box(
     launch_box.smem_bytes_dyn = 0;
 
     for (auto o : op) {
-        size_t sh = this->template calc_shared_memory<blockThreads>(
-            o, oriented, false);
+        size_t sh =
+            this->template calc_shared_memory<blockThreads>(o, oriented, false);
         if (is_concurrent) {
             launch_box.smem_bytes_dyn += sh;
         } else {
-            launch_box.smem_bytes_dyn =
-                std::max(launch_box.smem_bytes_dyn, sh);
+            launch_box.smem_bytes_dyn = std::max(launch_box.smem_bytes_dyn, sh);
         }
     }
 
-    launch_box.smem_bytes_dyn += user_shmem(m_max_vertices_per_patch,
-                                            m_max_edges_per_patch,
-                                            m_max_faces_per_patch);
+    launch_box.smem_bytes_dyn += user_shmem(
+        m_max_vertices_per_patch, m_max_edges_per_patch, m_max_faces_per_patch);
 
     if (with_vertex_valence) {
         if (get_input_max_valence() > 256) {
@@ -503,8 +504,7 @@ size_t RXMeshStatic::calc_shared_memory(const Op   op,
                                         bool       use_capacity) const
 {
     uint32_t max_v(this->m_max_vertices_per_patch),
-        max_e(this->m_max_edges_per_patch),
-        max_f(this->m_max_faces_per_patch);
+        max_e(this->m_max_edges_per_patch), max_f(this->m_max_faces_per_patch);
 
     if (use_capacity) {
         max_v = get_per_patch_max_vertex_capacity();
@@ -520,8 +520,7 @@ size_t RXMeshStatic::calc_shared_memory(const Op   op,
     //         op_to_string(op));
     // }
 
-    if ((op == Op::EVDiamond || op == Op::EE) &&
-        !m_is_input_edge_manifold) {
+    if ((op == Op::EVDiamond || op == Op::EE) && !m_is_input_edge_manifold) {
         RXMESH_ERROR(
             "RXMeshStatic::calc_shared_memory() Op::EVDiamond and Op::EE "
             "only works on edge manifold mesh. The input mesh is not edge "
@@ -753,8 +752,8 @@ size_t RXMeshStatic::calc_shared_memory(const Op   op,
         // make up this averaging
 
         uint32_t fe_smem = 3 * max_f * sizeof(uint16_t);
-        uint32_t ef_smem = (std::max(max_e + 1, 3 * max_f) + (3 * max_f)) *
-                           sizeof(uint16_t);
+        uint32_t ef_smem =
+            (std::max(max_e + 1, 3 * max_f) + (3 * max_f)) * sizeof(uint16_t);
 
 
         // temp memory needed for block_mat_transpose to store the prefix
@@ -845,4 +844,3 @@ size_t RXMeshStatic::calc_shared_memory(const Op   op,
 }
 
 }  // namespace rxmesh
-

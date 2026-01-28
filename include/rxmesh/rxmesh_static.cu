@@ -655,7 +655,7 @@ void RXMeshStatic::add_edge_labels(FaceAttribute<int>& face_label,
     template std::shared_ptr<FaceAttribute<T>>                             \
     RXMeshStatic::add_face_attribute<T>(                                   \
         const std::vector<T>&, const std::string&, layoutT);               \
-    template std::shared_ptr<FaceAttribute<T>>                              \
+    template std::shared_ptr<FaceAttribute<T>>                             \
     RXMeshStatic::add_face_attribute_like<T>(const std::string&,           \
                                              const FaceAttribute<T>&);     \
     template std::shared_ptr<EdgeAttribute<T>>                             \
@@ -753,7 +753,8 @@ template EdgeHandle RXMeshStatic::get_owner_handle<EdgeHandle>(
 template FaceHandle RXMeshStatic::get_owner_handle<FaceHandle>(
     FaceHandle) const;
 
-// ---- Explicit instantiations for prepare_launch_box and calc_shared_memory ----
+// ---- Explicit instantiations for prepare_launch_box and calc_shared_memory
+// ----
 template void RXMeshStatic::prepare_launch_box<128>(
     const std::vector<Op>,
     LaunchBox<128>&,
@@ -795,26 +796,21 @@ template void RXMeshStatic::prepare_launch_box<1024>(
     const bool,
     std::function<size_t(uint32_t, uint32_t, uint32_t)>) const;
 
-template size_t RXMeshStatic::calc_shared_memory<128>(
-    const Op,
-    const bool,
-    bool) const;
-template size_t RXMeshStatic::calc_shared_memory<256>(
-    const Op,
-    const bool,
-    bool) const;
-template size_t RXMeshStatic::calc_shared_memory<512>(
-    const Op,
-    const bool,
-    bool) const;
-template size_t RXMeshStatic::calc_shared_memory<768>(
-    const Op,
-    const bool,
-    bool) const;
-template size_t RXMeshStatic::calc_shared_memory<1024>(
-    const Op,
-    const bool,
-    bool) const;
+template size_t RXMeshStatic::calc_shared_memory<128>(const Op,
+                                                      const bool,
+                                                      bool) const;
+template size_t RXMeshStatic::calc_shared_memory<256>(const Op,
+                                                      const bool,
+                                                      bool) const;
+template size_t RXMeshStatic::calc_shared_memory<512>(const Op,
+                                                      const bool,
+                                                      bool) const;
+template size_t RXMeshStatic::calc_shared_memory<768>(const Op,
+                                                      const bool,
+                                                      bool) const;
+template size_t RXMeshStatic::calc_shared_memory<1024>(const Op,
+                                                       const bool,
+                                                       bool) const;
 
 // ---- Explicit instantiations for get_region_label ----
 template std::shared_ptr<Attribute<int, VertexHandle>>
