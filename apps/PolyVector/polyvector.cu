@@ -2,10 +2,14 @@
 // https://igl.ethz.ch/projects/integrable/integrable-polyvector-fields.pdf
 // Major part of this code is taken from TinyAD
 
+#include <CLI/CLI.hpp>
+#include <cstdlib>
+
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/diff/diff_vector_problem.h"
 #include "rxmesh/diff/gauss_newton_solver.h"
+#include "rxmesh/util/log.h"
 
 #include "raw_field_io.h"
 
@@ -197,25 +201,40 @@ void inline compute_per_edge_transport_term(RXMeshStatic& rx,
 
 int main(int argc, char** argv)
 {
-    rx_init(0);
+    CLI::App app{"PolyVector - Integrable PolyVector Fields"};
 
     std::string base_mesh_name = STRINGIFY(INPUT_DIR) "cheburashka";
+    int         max_iters      = 60;
+    int         cg_max_iters   = 50;
+    int         device_id      = 0;
 
-    int max_iters = 60;
+    app.add_option("-i,--input",
+                   base_mesh_name,
+                   "Base mesh name (without .obj extension)")
+        ->default_val(std::string(STRINGIFY(INPUT_DIR) "cheburashka"));
 
-    int cg_max_iters = 50;
+    app.add_option("-m,--max_iters", max_iters, "Maximum number of iterations")
+        ->default_val(60);
 
-    if (argc >= 2) {
-        base_mesh_name = std::string(argv[1]);
+    app.add_option(
+           "--cg_max_iters", cg_max_iters, "Maximum number of CG iterations")
+        ->default_val(50);
+
+    app.add_option("-d,--device_id", device_id, "GPU device ID")
+        ->default_val(0);
+
+    try {
+        app.parse(argc, argv);
+    } catch (const CLI::ParseError& e) {
+        return app.exit(e);
     }
 
-    if (argc >= 3) {
-        max_iters = atoi(argv[2]);
-    }
+    rx_init(device_id);
 
-    if (argc >= 4) {
-        cg_max_iters = atoi(argv[3]);
-    }
+    RXMESH_INFO("base_mesh_name= {}", base_mesh_name);
+    RXMESH_INFO("max_iters= {}", max_iters);
+    RXMESH_INFO("cg_max_iters= {}", cg_max_iters);
+    RXMESH_INFO("device_id= {}", device_id);
 
     // cheburashka
     RXMeshStatic rx(base_mesh_name + ".obj");
@@ -600,4 +619,6 @@ int main(int argc, char** argv)
 
     solver.release();
     w_smooth.release();
+
+    return 0;
 }
