@@ -12,6 +12,7 @@ set(RXMESH_LIBRARY_SOURCES
     "${RXMESH_SOURCE_DIR}/include/rxmesh/rxmesh_static.cu"
     "${RXMESH_SOURCE_DIR}/include/rxmesh/rxmesh_dynamic.cu"
     "${RXMESH_SOURCE_DIR}/include/rxmesh/query.cu"
+    "${RXMESH_SOURCE_DIR}/include/rxmesh/attribute.cu"
     "${RXMESH_SOURCE_DIR}/include/rxmesh/patcher/patcher.cu"
     "${RXMESH_SOURCE_DIR}/include/rxmesh/util/git_sha1.cpp"
     "${RXMESH_SOURCE_DIR}/include/rxmesh/util/MshLoader.cpp"
