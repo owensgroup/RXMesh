@@ -9,7 +9,7 @@
 #include "rxmesh/util/bitmask_util.h"
 #include "rxmesh/util/macros.h"
 
-#include "rxmesh/lp_hashtable.cuh"
+#include "rxmesh/lp_hashtable.h"
 
 namespace rxmesh {
 
@@ -112,14 +112,7 @@ struct ALIGN(16) PatchInfo
     /**
      * @brief check if the patch is dirty (ew!)
      */
-    __device__ __inline__ bool is_dirty() const
-    {
-#ifdef __CUDA_ARCH__
-        return atomic_read(dirty) != 0;
-#else
-        return dirty[0] != 0;
-#endif
-    }
+    __device__ bool is_dirty() const;
 
     template <typename HandleT>
     __device__ __host__ HandleT find(const LPPair::KeyT key,

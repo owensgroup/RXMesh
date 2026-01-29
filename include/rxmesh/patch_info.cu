@@ -40,6 +40,15 @@ PatchInfo::count_num_owned(const uint32_t* owned_bitmask,
     return ret;
 }
 
+__device__ bool PatchInfo::is_dirty() const
+{
+#ifdef __CUDA_ARCH__
+    return atomic_read(dirty) != 0;
+#else
+    return dirty[0] != 0;
+#endif
+}
+
 template <typename HandleT>
 __device__ __host__ HandleT PatchInfo::find(const LPPair::KeyT key,
                                             const LPPair*      table,

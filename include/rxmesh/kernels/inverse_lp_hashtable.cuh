@@ -1,7 +1,7 @@
 #pragma once
 #include <cooperative_groups.h>
 
-#include "rxmesh/lp_hashtable.cuh"
+#include "rxmesh/lp_hashtable.h"
 
 
 namespace rxmesh {

@@ -1,6 +1,6 @@
 #include "gtest/gtest.h"
 
-#include "rxmesh/lp_hashtable.cuh"
+#include "rxmesh/lp_hashtable.h"
 #include "rxmesh/lp_pair.cuh"
 #include "rxmesh/util/util.h"
 
