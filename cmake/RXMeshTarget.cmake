@@ -14,6 +14,7 @@ set(RXMESH_LIBRARY_SOURCES
     "${RXMESH_SOURCE_DIR}/include/rxmesh/query.cu"
     "${RXMESH_SOURCE_DIR}/include/rxmesh/attribute.cu"
     "${RXMESH_SOURCE_DIR}/include/rxmesh/patch_stash.cu"
+    "${RXMESH_SOURCE_DIR}/include/rxmesh/hash_functions.cu"
     "${RXMESH_SOURCE_DIR}/include/rxmesh/lp_hashtable.cu"
     "${RXMESH_SOURCE_DIR}/include/rxmesh/patch_info.cu"
     "${RXMESH_SOURCE_DIR}/include/rxmesh/patch_lock.cu"

@@ -4,7 +4,7 @@
 #include <cmath>
 #include <cstdlib>
 
-#include "rxmesh/hash_functions.cuh"
+#include "rxmesh/hash_functions.h"
 #include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/kernels/util.cuh"
 #include "rxmesh/util/macros.h"

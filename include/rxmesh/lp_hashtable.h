@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "rxmesh/hash_functions.cuh"
+#include "rxmesh/hash_functions.h"
 #include "rxmesh/lp_pair.cuh"
 #include "rxmesh/util/macros.h"
 
