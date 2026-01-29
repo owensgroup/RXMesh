@@ -21,7 +21,7 @@
 #include <algorithm>
 #include <random>
 
-#include "rxmesh/hash_functions.cuh"
+#include "rxmesh/hash_functions.h"
 #include "rxmesh/kernels/util.cuh"
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/prime_numbers.h"
