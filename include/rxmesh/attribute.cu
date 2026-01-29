@@ -1,3 +1,7 @@
+#include <cstring>
+#include <memory>
+#include <vector>
+
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/attribute.h"
@@ -5,12 +9,9 @@
 #include "rxmesh/matrix/dense_matrix.h"
 #include "rxmesh/types.h"
 
-
 #include <glm/gtx/norm.hpp>
 
-#include <cstring>
-#include <memory>
-#include <vector>
+#include "thrust/complex.h"
 
 namespace rxmesh {
 
@@ -772,6 +773,12 @@ void AttributeContainer::remove(const char* name)
     RXMESH_ATTRIBUTE_INST_ALL_HANDLES(T)                   \
     RXMESH_ATTR_CONTAINER_ADD_INST_ALL_HANDLES(T)
 
+RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(Eigen::Matrix3f)
+RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(Eigen::Matrix2f)
+RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(Eigen::Matrix3d)
+RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(Eigen::Matrix2d)
+RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(thrust::complex<float>)
+RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(thrust::complex<double>)
 RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(bool)
 RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(unsigned short)
 RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(char)

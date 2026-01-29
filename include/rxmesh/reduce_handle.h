@@ -1,4 +1,5 @@
 #pragma once
+#include <cub/cub.cuh>
 
 #include "rxmesh/attribute.h"
 #include "rxmesh/kernels/reduce.cuh"

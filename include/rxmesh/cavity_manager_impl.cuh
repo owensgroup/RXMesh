@@ -1,3 +1,4 @@
+#include "rxmesh/kernels/collective.cuh"
 namespace rxmesh {
 
 template <uint32_t blockThreads, CavityOp cop>
