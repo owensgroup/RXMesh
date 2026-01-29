@@ -5,7 +5,7 @@
 #include "rxmesh/handle.h"
 #include "rxmesh/local.h"
 #include "rxmesh/patch_lock.h"
-#include "rxmesh/patch_stash.cuh"
+#include "rxmesh/patch_stash.h"
 #include "rxmesh/util/bitmask_util.h"
 #include "rxmesh/util/macros.h"
 
