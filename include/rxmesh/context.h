@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 #include "rxmesh/patch_info.h"
-#include "rxmesh/patch_scheduler.cuh"
+#include "rxmesh/patch_scheduler.h"
 #include "rxmesh/util/macros.h"
 
 namespace rxmesh {

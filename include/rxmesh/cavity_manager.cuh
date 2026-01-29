@@ -53,7 +53,7 @@ struct CavityManager
      * @param preserve_cavity set this to true if access cavity information
      * (topology/geometry) is needed during cavity fill-in
      * @param current_p used for debugging such that only one patch is
-     * processed. PROCESS_SINGLE_PATCH (top of patch_scheduler.cuh file) should
+     * processed. PROCESS_SINGLE_PATCH (top of patch_scheduler.h file) should
      * be defined in order to process only one patch
      * @return
      */

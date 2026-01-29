@@ -2,7 +2,7 @@
 
 #include <numeric>
 
-#include "rxmesh/patch_scheduler.cuh"
+#include "rxmesh/patch_scheduler.h"
 
 __global__ void schedule_kernel(uint32_t* d_status, rxmesh::PatchScheduler sch)
 {

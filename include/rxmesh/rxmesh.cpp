@@ -9,7 +9,7 @@
 
 #include "patcher/patcher.h"
 #include "rxmesh/context.h"
-#include "rxmesh/patch_scheduler.cuh"
+#include "rxmesh/patch_scheduler.h"
 #include "rxmesh/rxmesh.h"
 #include "rxmesh/util/bitmask_util.h"
 #include "rxmesh/util/util.h"
