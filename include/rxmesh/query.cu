@@ -100,6 +100,7 @@ __device__ void Query<blockThreads>::epilogue(
 // ---- Explicit instantiations
 template struct Query<128>;
 template struct Query<256>;
+template struct Query<320>;
 template struct Query<384>;
 template struct Query<512>;
 template struct Query<768>;
