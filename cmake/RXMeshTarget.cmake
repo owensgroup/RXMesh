@@ -15,6 +15,7 @@ set(RXMESH_LIBRARY_SOURCES
     "${RXMESH_SOURCE_DIR}/include/rxmesh/attribute.cu"
     "${RXMESH_SOURCE_DIR}/include/rxmesh/patch_stash.cu"
     "${RXMESH_SOURCE_DIR}/include/rxmesh/patch_scheduler.cu"
+    "${RXMESH_SOURCE_DIR}/include/rxmesh/reduce_handle.cu"
     "${RXMESH_SOURCE_DIR}/include/rxmesh/patcher/patcher.cu"
     "${RXMESH_SOURCE_DIR}/include/rxmesh/util/git_sha1.cpp"
     "${RXMESH_SOURCE_DIR}/include/rxmesh/util/MshLoader.cpp"
