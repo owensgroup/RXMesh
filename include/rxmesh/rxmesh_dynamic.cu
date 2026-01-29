@@ -2179,6 +2179,35 @@ __global__ static void reset(uint32_t* v,
 
 }  // namespace detail
 
+RXMeshDynamic::RXMeshDynamic(const std::string file_path,
+                             const std::string patcher_file,
+                             const uint32_t    patch_size,
+                             const float       capacity_factor,
+                             const float       patch_alloc_factor,
+                             const float       lp_hashtable_load_factor)
+    : RXMeshStatic(file_path,
+                   patcher_file,
+                   patch_size,
+                   capacity_factor,
+                   patch_alloc_factor,
+                   lp_hashtable_load_factor)
+{
+}
+
+RXMeshDynamic::RXMeshDynamic(std::vector<std::vector<uint32_t>>& fv,
+                             const std::string                   patcher_file,
+                             const uint32_t                      patch_size,
+                             const float capacity_factor,
+                             const float patch_alloc_factor,
+                             const float lp_hashtable_load_factor)
+    : RXMeshStatic(fv,
+                   patcher_file,
+                   patch_size,
+                   capacity_factor,
+                   patch_alloc_factor,
+                   lp_hashtable_load_factor)
+{
+}
 
 void RXMeshDynamic::save(std::string filename)
 {
@@ -2283,7 +2312,6 @@ void RXMeshDynamic::save(std::string filename)
 
     RXMesh::save(filename);
 }
-
 
 bool RXMeshDynamic::validate()
 {
@@ -3006,6 +3034,319 @@ void RXMeshDynamic::update_polyscope(std::string new_name)
 }
 
 
+bool RXMeshDynamic::is_queue_empty(cudaStream_t stream)
+{
+    return this->m_rxmesh_context.m_patch_scheduler.is_empty(stream);
+}
+
+void RXMeshDynamic::reset_scheduler()
+{
+    this->m_rxmesh_context.m_patch_scheduler.refill(get_num_patches());
+}
+
+template <uint32_t blockThreads>
+void RXMeshDynamic::prepare_launch_box(
+    const std::vector<Op>                               op,
+    LaunchBox<blockThreads>&                            launch_box,
+    const void*                                         kernel,
+    const bool                                          is_dyn,
+    const bool                                          oriented,
+    const bool                                          with_vertex_valence,
+    const bool                                          is_concurrent,
+    std::function<size_t(uint32_t, uint32_t, uint32_t)> user_shmem) const
+{
+    update_launch_box(op,
+                      launch_box,
+                      kernel,
+                      is_dyn,
+                      oriented,
+                      with_vertex_valence,
+                      is_concurrent,
+                      user_shmem);
+
+    RXMESH_TRACE(
+        "RXMeshDynamic::calc_shared_memory() launching {} blocks with "
+        "{} threads on the device",
+        launch_box.blocks,
+        blockThreads);
+
+
+    check_shared_memory(launch_box.smem_bytes_dyn,
+                        launch_box.smem_bytes_static,
+                        launch_box.num_registers_per_thread,
+                        launch_box.local_mem_per_thread,
+                        blockThreads,
+                        kernel);
+}
+
+template <uint32_t blockThreads>
+void RXMeshDynamic::update_launch_box(
+    const std::vector<Op>                               op,
+    LaunchBox<blockThreads>&                            launch_box,
+    const void*                                         kernel,
+    const bool                                          is_dyn,
+    const bool                                          oriented,
+    const bool                                          with_vertex_valence,
+    const bool                                          is_concurrent,
+    std::function<size_t(uint32_t, uint32_t, uint32_t)> user_shmem) const
+{
+    // TODO this has to be customized for different GPU arch
+    int max_shmem_bytes = 89 * 1024;
+    CUDA_ERROR(cudaFuncSetAttribute(
+        kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, max_shmem_bytes));
+
+    launch_box.blocks = this->m_num_patches;
+
+    // static query shared memory
+    size_t static_shmem = 0;
+    for (auto o : op) {
+        size_t sh = this->calc_shared_memory<blockThreads>(o, oriented, true);
+        if (is_concurrent) {
+            static_shmem += sh;
+        } else {
+            static_shmem = std::max(static_shmem, sh);
+        }
+    }
+
+    const uint16_t vertex_cap = get_per_patch_max_vertex_capacity();
+    const uint16_t edge_cap   = get_per_patch_max_edge_capacity();
+    const uint16_t face_cap   = get_per_patch_max_face_capacity();
+
+    if (is_dyn) {
+
+        // connectivity (FE and EV) shared memory
+        //$$ m_s_ev, m_s_fe
+        size_t connectivity_shmem = 0;
+        connectivity_shmem += 3 * face_cap * sizeof(uint16_t) +
+                              2 * edge_cap * sizeof(uint16_t) +
+                              2 * ShmemAllocator::default_alignment;
+
+        // cavity ID (which overlapped with the inverted hashtable)
+        //$$ m_s_cavity_id_v, m_s_cavity_id_e, m_s_cavity_id_f
+        size_t cavity_id_shmem = 0;
+        cavity_id_shmem += std::max(
+            vertex_cap * sizeof(uint16_t),
+            max_lp_hashtable_capacity<LocalVertexT>() * sizeof(LPPair));
+        cavity_id_shmem +=
+            std::max(edge_cap * sizeof(uint16_t),
+                     max_lp_hashtable_capacity<LocalEdgeT>() * sizeof(LPPair));
+        cavity_id_shmem +=
+            std::max(face_cap * sizeof(uint16_t),
+                     max_lp_hashtable_capacity<LocalFaceT>() * sizeof(LPPair));
+        cavity_id_shmem += 3 * ShmemAllocator::default_alignment;
+
+        // store cavity size (assume number of cavities is half the patch
+        // size)
+        const uint16_t half_face_cap = DIVIDE_UP(face_cap, 2);
+
+        // stores (and compute) the size (the prefix sum) of cavity sizes
+        //$$ m_s_cavity_size_prefix
+        size_t cavity_size_shmem = 0;
+        cavity_size_shmem +=
+            half_face_cap * sizeof(int) + ShmemAllocator::default_alignment;
+
+        // cavity boundary edges used to store the cavities (outer) edges
+        // in compressed/compact sparse format
+        size_t cavity_boundary_edges = 0;
+        cavity_boundary_edges +=
+            edge_cap * sizeof(uint16_t) + ShmemAllocator::default_alignment;
+
+        // cavity src element
+        //$$ m_s_cavity_creator
+        size_t cavity_creator_shmem = half_face_cap * sizeof(uint16_t) +
+                                      ShmemAllocator::default_alignment;
+
+        // cavity boundary edges (overlaps with cavity graph)
+        //$$ m_s_boudary_edges_cavity_id | m_s_cavity_graph |
+        // m_s_temp_inv_lp
+        size_t boudary_edges_cavity_id = 0;
+        boudary_edges_cavity_id +=
+            std::max(edge_cap, uint16_t(MAX_OVERLAP_CAVITIES * half_face_cap)) *
+                sizeof(uint16_t) +
+            ShmemAllocator::default_alignment;
+
+        // active, owned, migrate(for vertices only), src bitmask (for
+        // vertices and edges only), src connect (for vertices and edges
+        // only), ownership owned_cavity_bdry (for vertices only), ribbonize
+        // (for vertices only) added_to_lp, in_cavity, recover
+        size_t bitmasks_shmem = 0;
+        bitmasks_shmem += 10 * detail::mask_num_bytes(vertex_cap) +
+                          10 * ShmemAllocator::default_alignment;
+        bitmasks_shmem += 7 * detail::mask_num_bytes(edge_cap) +
+                          7 * ShmemAllocator::default_alignment;
+        bitmasks_shmem += 5 * detail::mask_num_bytes(face_cap) +
+                          5 * ShmemAllocator::default_alignment;
+
+        // active cavity bitmask
+        bitmasks_shmem += detail::mask_num_bytes(face_cap);
+
+        // the local offset of faces used in construct_cavities_edge_loop
+        //$$ m_s_face_local_offset
+        size_t face_offset_shmem =
+            face_cap * sizeof(uint8_t) + ShmemAllocator::default_alignment;
+
+        // shared memory is the max of 1. static query shared memory + the
+        // cavity ID shared memory (since we need to mark seed elements) 2.
+        // dynamic rxmesh shared memory which includes cavity ID shared
+        // memory and other things
+
+        // RXMESH_TRACE(
+        //     "RXMeshDynamic::update_launch_box() connectivity_shmem= "
+        //     "{}, cavity_id_shmem= {}, boudary_edges_cavity_id= {}, "
+        //     "cavity_size_shmem= {}, bitmasks_shmem= {}, "
+        //     "cavity_creator_shmem={}, static_shmem= {}",
+        //     connectivity_shmem,
+        //     cavity_id_shmem,
+        //     boudary_edges_cavity_id,
+        //     cavity_size_shmem,
+        //     bitmasks_shmem,
+        //     cavity_creator_shmem,
+        //     static_shmem);
+
+        launch_box.smem_bytes_dyn = std::max(
+            connectivity_shmem + cavity_id_shmem + boudary_edges_cavity_id +
+                cavity_size_shmem + cavity_boundary_edges + bitmasks_shmem +
+                cavity_creator_shmem + face_offset_shmem,
+            static_shmem + cavity_id_shmem + cavity_creator_shmem);
+    } else {
+        launch_box.smem_bytes_dyn = static_shmem;
+    }
+
+    launch_box.smem_bytes_dyn += user_shmem(vertex_cap, edge_cap, face_cap);
+
+    launch_box.smem_bytes_dyn = 80 * 1024;
+    if (with_vertex_valence) {
+        if (get_input_max_valence() > 256) {
+            RXMESH_ERROR(
+                "RXMeshDynamic::prepare_launch_box() input max valence if "
+                "greater than 256 and thus using uint8_t to store the "
+                "vertex valence will lead to overflow");
+        }
+        launch_box.smem_bytes_dyn +=
+            vertex_cap * sizeof(uint8_t) + ShmemAllocator::default_alignment;
+    }
+
+    check_shared_memory(launch_box.smem_bytes_dyn,
+                        launch_box.smem_bytes_static,
+                        launch_box.num_registers_per_thread,
+                        launch_box.local_mem_per_thread,
+                        blockThreads,
+                        kernel,
+                        false);
+}
+
+//  Explicit instantiations
+template void RXMeshDynamic::prepare_launch_box<128>(
+    const std::vector<Op>,
+    LaunchBox<128>&,
+    const void*,
+    const bool,
+    const bool,
+    const bool,
+    const bool,
+    std::function<size_t(uint32_t, uint32_t, uint32_t)>) const;
+template void RXMeshDynamic::prepare_launch_box<256>(
+    const std::vector<Op>,
+    LaunchBox<256>&,
+    const void*,
+    const bool,
+    const bool,
+    const bool,
+    const bool,
+    std::function<size_t(uint32_t, uint32_t, uint32_t)>) const;
+template void RXMeshDynamic::prepare_launch_box<384>(
+    const std::vector<Op>,
+    LaunchBox<384>&,
+    const void*,
+    const bool,
+    const bool,
+    const bool,
+    const bool,
+    std::function<size_t(uint32_t, uint32_t, uint32_t)>) const;
+
+template void RXMeshDynamic::prepare_launch_box<512>(
+    const std::vector<Op>,
+    LaunchBox<512>&,
+    const void*,
+    const bool,
+    const bool,
+    const bool,
+    const bool,
+    std::function<size_t(uint32_t, uint32_t, uint32_t)>) const;
+template void RXMeshDynamic::prepare_launch_box<768>(
+    const std::vector<Op>,
+    LaunchBox<768>&,
+    const void*,
+    const bool,
+    const bool,
+    const bool,
+    const bool,
+    std::function<size_t(uint32_t, uint32_t, uint32_t)>) const;
+template void RXMeshDynamic::prepare_launch_box<1024>(
+    const std::vector<Op>,
+    LaunchBox<1024>&,
+    const void*,
+    const bool,
+    const bool,
+    const bool,
+    const bool,
+    std::function<size_t(uint32_t, uint32_t, uint32_t)>) const;
+
+template void RXMeshDynamic::update_launch_box<128>(
+    const std::vector<Op>,
+    LaunchBox<128>&,
+    const void*,
+    const bool,
+    const bool,
+    const bool,
+    const bool,
+    std::function<size_t(uint32_t, uint32_t, uint32_t)>) const;
+template void RXMeshDynamic::update_launch_box<256>(
+    const std::vector<Op>,
+    LaunchBox<256>&,
+    const void*,
+    const bool,
+    const bool,
+    const bool,
+    const bool,
+    std::function<size_t(uint32_t, uint32_t, uint32_t)>) const;
+template void RXMeshDynamic::update_launch_box<384>(
+    const std::vector<Op>,
+    LaunchBox<384>&,
+    const void*,
+    const bool,
+    const bool,
+    const bool,
+    const bool,
+    std::function<size_t(uint32_t, uint32_t, uint32_t)>) const;
+template void RXMeshDynamic::update_launch_box<512>(
+    const std::vector<Op>,
+    LaunchBox<512>&,
+    const void*,
+    const bool,
+    const bool,
+    const bool,
+    const bool,
+    std::function<size_t(uint32_t, uint32_t, uint32_t)>) const;
+template void RXMeshDynamic::update_launch_box<768>(
+    const std::vector<Op>,
+    LaunchBox<768>&,
+    const void*,
+    const bool,
+    const bool,
+    const bool,
+    const bool,
+    std::function<size_t(uint32_t, uint32_t, uint32_t)>) const;
+template void RXMeshDynamic::update_launch_box<1024>(
+    const std::vector<Op>,
+    LaunchBox<1024>&,
+    const void*,
+    const bool,
+    const bool,
+    const bool,
+    const bool,
+    std::function<size_t(uint32_t, uint32_t, uint32_t)>) const;
+
 template __device__ void detail::slice<256>(Context&,
                                             cooperative_groups::thread_block&,
                                             PatchInfo&,
@@ -3061,4 +3402,5 @@ template __device__ void detail::bi_assignment_ggp<256>(
     Bitmask&,
     Bitmask&,
     int);
+
 }  // namespace rxmesh

@@ -643,7 +643,7 @@ void RXMeshStatic::add_edge_labels(FaceAttribute<int>& face_label,
 }
 
 
-// ---- Explicit instantiations for core types ----
+// Explicit instantiations
 
 #define RXMESH_STATIC_INSTANTIATE_SCALAR(T)                                \
     template std::shared_ptr<FaceAttribute<T>>                             \
@@ -753,8 +753,6 @@ template EdgeHandle RXMeshStatic::get_owner_handle<EdgeHandle>(
 template FaceHandle RXMeshStatic::get_owner_handle<FaceHandle>(
     FaceHandle) const;
 
-// ---- Explicit instantiations for prepare_launch_box and calc_shared_memory
-// ----
 template void RXMeshStatic::prepare_launch_box<128>(
     const std::vector<Op>,
     LaunchBox<128>&,
@@ -766,6 +764,14 @@ template void RXMeshStatic::prepare_launch_box<128>(
 template void RXMeshStatic::prepare_launch_box<256>(
     const std::vector<Op>,
     LaunchBox<256>&,
+    const void*,
+    const bool,
+    const bool,
+    const bool,
+    std::function<size_t(uint32_t, uint32_t, uint32_t)>) const;
+template void RXMeshStatic::prepare_launch_box<384>(
+    const std::vector<Op>,
+    LaunchBox<384>&,
     const void*,
     const bool,
     const bool,
