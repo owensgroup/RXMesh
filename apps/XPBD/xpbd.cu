@@ -1,7 +1,7 @@
 // Reference
 // https://github.com/taichi-dev/meshtaichi/blob/main/xpbd_cloth/solver.py
 
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 #include "rxmesh/rxmesh_static.h"
 
 #if USE_POLYSCOPE

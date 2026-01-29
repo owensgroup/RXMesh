@@ -4,7 +4,7 @@
 
 #include "rxmesh/context.h"
 #include "rxmesh/matrix/block_shape.h"
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 
 namespace rxmesh {
 

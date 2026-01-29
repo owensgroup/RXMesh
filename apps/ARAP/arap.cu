@@ -1,7 +1,7 @@
 #include "rxmesh/matrix/cholesky_solver.h"
 #include "rxmesh/matrix/gmg_solver.h"
 #include "rxmesh/matrix/sparse_matrix.h"
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/svd3_cuda.h"
 

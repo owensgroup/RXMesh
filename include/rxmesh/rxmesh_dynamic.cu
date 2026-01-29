@@ -7,7 +7,7 @@
 #include "rxmesh/kernels/for_each.cuh"
 #include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/kernels/shmem_allocator.cuh"
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 #include "rxmesh/rxmesh_dynamic.h"
 #include "rxmesh/util/bitmask_util.h"
 #include "rxmesh/util/macros.h"

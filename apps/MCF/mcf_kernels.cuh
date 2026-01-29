@@ -3,7 +3,7 @@
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
 #include "rxmesh/geometry_util.cuh"
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 
 #include "rxmesh/matrix/sparse_matrix.h"
 

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <assert.h>
 #include <stdint.h>
@@ -6,7 +6,7 @@
 #include "rxmesh/context.h"
 #include "rxmesh/iterator.cuh"
 #include "rxmesh/kernels/for_each.cuh"
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 #include "rxmesh/util/meta.h"
 
 #include "rxmesh/diff/hessian_projection.h"

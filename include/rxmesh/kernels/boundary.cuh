@@ -3,7 +3,7 @@
 #include "rxmesh/context.h"
 
 #include "rxmesh/bitmask.cuh"
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 
 namespace rxmesh {
 

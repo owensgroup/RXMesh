@@ -3,7 +3,7 @@
 
 #include "rxmesh/cavity_manager.cuh"
 #include "rxmesh/kernels/for_each.cuh"
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 #include "rxmesh/rxmesh_dynamic.h"
 
 using Config = uint32_t;

@@ -2,7 +2,7 @@
 #include <glm/gtc/constants.hpp>
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 
 /**
  * gaussian_curvature()

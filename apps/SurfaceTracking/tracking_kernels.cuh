@@ -1,7 +1,7 @@
 #pragma once
 #include "rxmesh/rxmesh_dynamic.h"
 
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 
 template <typename T>
 constexpr __inline__ __device__ T

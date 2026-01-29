@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <assert.h>
 #include <stdint.h>
@@ -6,7 +6,7 @@
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
 #include "rxmesh/iterator.cuh"
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 
 /**
  * @brief perform query of type of and store the output as well as the

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 #include "rxmesh/rxmesh_dynamic.h"
 
 #include "rxmesh/util/histogram.cuh"

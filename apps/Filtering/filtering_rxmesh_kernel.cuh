@@ -7,7 +7,7 @@
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
 #include "rxmesh/kernels/query_dispatcher.cuh"
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 
 /**
  * compute_vertex_normal()

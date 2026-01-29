@@ -1,7 +1,7 @@
 #pragma once
 
 #include "rxmesh/kernels/debug.cuh"
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 
 #include "link_condition.cuh"
 

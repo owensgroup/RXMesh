@@ -3,7 +3,7 @@
 #include "rxmesh/attribute.h"
 #include "rxmesh/matrix/dense_matrix.h"
 #include "rxmesh/matrix/sparse_matrix.h"
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 #include "rxmesh/rxmesh_static.h"
 
 #include <Eigen/Sparse>

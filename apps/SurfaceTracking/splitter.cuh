@@ -1,7 +1,7 @@
 #pragma once
 
 #include "rxmesh/cavity_manager.cuh"
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 
 enum class EdgeSplitPredicate
 {

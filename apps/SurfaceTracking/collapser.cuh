@@ -3,7 +3,7 @@
 #include <Eigen/Dense>
 
 #include "rxmesh/cavity_manager.cuh"
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 
 #include "rxmesh/geometry_util.cuh"
 

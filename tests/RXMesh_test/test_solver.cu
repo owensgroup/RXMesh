@@ -5,7 +5,7 @@
 #include "rxmesh/matrix/dense_matrix.h"
 #include "rxmesh/matrix/sparse_matrix.h"
 
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 
 
 #include "rxmesh/matrix/cg_mat_free_solver.h"

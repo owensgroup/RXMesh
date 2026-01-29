@@ -2,7 +2,7 @@
 
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 
 
 /**

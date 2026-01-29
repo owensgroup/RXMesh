@@ -1,7 +1,7 @@
 #pragma once
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 
 #include "rxmesh/matrix/min_deg_patch.cuh"
 #include "rxmesh/matrix/nd_patch.cuh"

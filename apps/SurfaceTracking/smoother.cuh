@@ -3,7 +3,7 @@
 
 #include <Eigen/Dense>
 
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 
 
 template <typename T, uint32_t blockThreads>

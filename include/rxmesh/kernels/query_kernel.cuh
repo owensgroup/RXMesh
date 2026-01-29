@@ -1,11 +1,11 @@
-﻿#pragma once
+#pragma once
 
 #include <assert.h>
 #include <stdint.h>
 
 #include "rxmesh/context.h"
 #include "rxmesh/iterator.cuh"
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 
 namespace rxmesh {
 namespace detail {

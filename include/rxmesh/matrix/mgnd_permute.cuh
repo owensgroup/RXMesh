@@ -1,7 +1,7 @@
 #pragma once
 
 #include "rxmesh/attribute.h"
-#include "rxmesh/query.cuh"
+#include "rxmesh/query.h"
 #include "rxmesh/rxmesh_static.h"
 
 #include <thrust/execution_policy.h>
