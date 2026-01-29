@@ -19,7 +19,7 @@ __global__ void memcopy(attrT*         d_dest,
 
 
 template <typename attrT>
-__global__ void memset(attrT* d_dest, const attrT val, const uint32_t length)
+__global__ void memsett(attrT* d_dest, const attrT val, const uint32_t length)
 {
     const uint32_t stride = blockDim.x * gridDim.x;
     uint32_t       i      = blockDim.x * blockIdx.x + threadIdx.x;

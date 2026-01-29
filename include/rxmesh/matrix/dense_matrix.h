@@ -10,6 +10,7 @@
 #include "rxmesh/types.h"
 
 #include "rxmesh/util/meta.h"
+#include "rxmesh/kernels/util.cuh"
 
 #include <Eigen/Dense>
 
@@ -175,7 +176,7 @@ struct DenseMatrix
         } else if (do_device) {
             const int    threads = 512;
             const IndexT nnz     = rows() * cols();
-            memset<<<DIVIDE_UP(nnz, threads), threads, 0, stream>>>(
+            memsett<<<DIVIDE_UP(nnz, threads), threads, 0, stream>>>(
                 m_d_val, val, nnz);
         } else if (do_host) {
             std::fill_n(m_h_val, rows() * cols(), val);

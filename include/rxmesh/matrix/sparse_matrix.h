@@ -294,7 +294,7 @@ struct SparseMatrix
                                        stream));
         } else if (do_device) {
             const int threads = 512;
-            memset<<<DIVIDE_UP(m_nnz, threads), threads, 0, stream>>>(
+            memsett<<<DIVIDE_UP(m_nnz, threads), threads, 0, stream>>>(
                 m_d_val, val, m_nnz);
         } else if (do_host) {
             std::fill_n(m_h_val, m_nnz, val);

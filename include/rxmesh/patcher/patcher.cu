@@ -947,13 +947,13 @@ void Patcher::run_lloyd(uint32_t* d_face_patch,
                               3 * sizeof(uint32_t),
                               cudaMemcpyHostToDevice));
 
-        rxmesh::memset<<<blocks_f, threads_f>>>(
+        rxmesh::memsett<<<blocks_f, threads_f>>>(
             d_face_patch, INVALID32, m_num_faces);
 
         rxmesh::memcopy<<<blocks_s, threads_s>>>(
             d_queue, d_seeds, m_num_patches);
 
-        rxmesh::memset<<<blocks_s, threads_s>>>(
+        rxmesh::memsett<<<blocks_s, threads_s>>>(
             d_patches_size, 0u, m_num_patches);
 
         write_initial_face_patch<<<blocks_s, threads_s>>>(
@@ -998,7 +998,7 @@ void Patcher::run_lloyd(uint32_t* d_face_patch,
         // Interior
         uint32_t threads_i   = 512;
         uint32_t shmem_bytes = max_patch_size * (sizeof(uint32_t));
-        rxmesh::memset<<<blocks_f, threads_f>>>(
+        rxmesh::memsett<<<blocks_f, threads_f>>>(
             d_queue, INVALID32, m_num_faces);
         interior<<<m_num_patches, threads_i, shmem_bytes>>>(m_num_patches,
                                                             d_patches_offset,
@@ -1078,7 +1078,7 @@ uint32_t Patcher::construct_patches_compressed_format(
                                     d_patches_size,
                                     d_patches_offset,
                                     m_num_patches);
-    rxmesh::memset<<<blocks_s, threads_s>>>(d_patches_size, 0u, m_num_patches);
+    rxmesh::memsett<<<blocks_s, threads_s>>>(d_patches_size, 0u, m_num_patches);
 
     construct_patches_compressed<<<blocks_f, threads_f>>>(m_num_faces,
                                                           d_face_patch,

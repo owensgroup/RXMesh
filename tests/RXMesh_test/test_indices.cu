@@ -24,7 +24,7 @@ void from_linear_to_handle(RXMeshStatic& rx)
     const int threads = 256;
     const int blocks  = DIVIDE_UP(size, threads);
 
-    rxmesh::memset<<<blocks, threads>>>(handles, HandleT(), size);
+    rxmesh::memsett<<<blocks, threads>>>(handles, HandleT(), size);
 
     auto ctx = rx.get_context();
         

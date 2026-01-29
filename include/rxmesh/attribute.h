@@ -118,27 +118,27 @@ class Attribute : public AttributeBase
      * corresponds to the template HandleT
      * @param p the patch id
      */
-    __host__ __device__ __forceinline__ uint32_t size(const uint32_t p) const;
+    __host__ __device__ __inline__ uint32_t size(const uint32_t p) const;
 
     /**
      * @brief get maximum number of elements in a patch. The element type
      * corresponds to the template HandleT
      * @param p the patch id
      */
-    __host__ __device__ __forceinline__ uint32_t
+    __host__ __device__ __inline__ uint32_t
     capacity(const uint32_t p) const;
 
     /**
      * @brief Get patch info for patch p
      */
-    __host__ __device__ __forceinline__ const PatchInfo& get_patch_info(
+    __host__ __device__ __inline__ const PatchInfo& get_patch_info(
         const uint32_t p) const;
 
 
-    __host__ __device__ __forceinline__ uint32_t pitch_x() const;
+    __host__ __device__ __inline__ uint32_t pitch_x() const;
 
 
-    __host__ __device__ __forceinline__ uint32_t
+    __host__ __device__ __inline__ uint32_t
     pitch_y(const uint32_t p) const;
 
     Attribute(const Attribute& rhs) = default;
@@ -158,27 +158,27 @@ class Attribute : public AttributeBase
     /**
      * @brief get the number of attributes per mesh element
      */
-    __host__ __device__ __forceinline__ uint32_t get_num_attributes() const;
+    __host__ __device__ __inline__ uint32_t get_num_attributes() const;
 
     /**
      * @brief Flag that indicates where the memory is allocated
      */
-    __host__ __device__ __forceinline__ locationT get_allocated() const;
+    __host__ __device__ __inline__ locationT get_allocated() const;
 
     /**
      * @brief return the memory layout
      */
-    __host__ __device__ __forceinline__ layoutT get_layout() const;
+    __host__ __device__ __inline__ layoutT get_layout() const;
 
     /**
      * @brief Check if attribute is allocated on device
      */
-    __host__ __device__ __forceinline__ bool is_device_allocated() const;
+    __host__ __device__ __inline__ bool is_device_allocated() const;
 
     /**
      * @brief Check if attribute is allocated on host
      */
-    __host__ __device__ __forceinline__ bool is_host_allocated() const;
+    __host__ __device__ __inline__ bool is_host_allocated() const;
 
     /**
      * @brief Reset attribute to certain value
@@ -230,7 +230,7 @@ class Attribute : public AttributeBase
      * @param attr the attribute id
      * @return const reference to the attribute
      */
-    __host__ __device__ __forceinline__ T& operator()(
+    __host__ __device__ __inline__ T& operator()(
         const HandleT  handle,
         const uint32_t attr = 0) const;
 
@@ -277,7 +277,7 @@ class Attribute : public AttributeBase
      * @param attr the attribute id
      * @return non-const reference to the attribute
      */
-    __host__ __device__ __forceinline__ T& operator()(const HandleT  handle,
+    __host__ __device__ __inline__ T& operator()(const HandleT  handle,
                                                       const uint32_t attr = 0);
 
     /**
@@ -288,7 +288,7 @@ class Attribute : public AttributeBase
      * @param attr the attribute id
      * @return const reference to the attribute
      */
-    __host__ __device__ __forceinline__ T& operator()(
+    __host__ __device__ __inline__ T& operator()(
         const uint32_t p_id,
         const uint16_t local_id,
         const uint32_t attr) const;
@@ -301,14 +301,14 @@ class Attribute : public AttributeBase
      * @param attr the attribute id
      * @return non-const reference to the attribute
      */
-    __host__ __device__ __forceinline__ T& operator()(const uint32_t p_id,
+    __host__ __device__ __inline__ T& operator()(const uint32_t p_id,
                                                       const uint16_t local_id,
                                                       const uint32_t attr);
 
     /**
      * @brief Check if the attribute is empty
      */
-    __host__ __device__ __forceinline__ bool is_empty() const;
+    __host__ __device__ __inline__ bool is_empty() const;
 
    protected:
     /**
