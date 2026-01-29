@@ -3,7 +3,9 @@
 #include <string>
 #include "rxmesh/util/macros.h"
 
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/fwd.hpp>
+#include <glm/glm.hpp>
 
 namespace rxmesh {
 

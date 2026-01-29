@@ -1,7 +1,7 @@
 #pragma once
 
 #include "rxmesh/attribute.h"
-#include "rxmesh/kernels/attribute.cuh"
+#include "rxmesh/kernels/reduce.cuh"
 
 #include "rxmesh/arg_ops.h"
 

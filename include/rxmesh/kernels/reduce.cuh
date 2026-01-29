@@ -190,23 +190,5 @@ __launch_bounds__(blockSize) __global__
     }
 }
 
-
-template <typename T, typename HandleT>
-__global__ void memset_attribute(const Attribute<T, HandleT> attr,
-                                 const T                     value,
-                                 const uint32_t              num_patches,
-                                 const uint32_t              num_attributes)
-{
-    uint32_t p_id = blockIdx.x;
-    if (p_id < num_patches) {
-        const uint16_t element_per_patch = attr.capacity(p_id);
-        for (uint16_t i = threadIdx.x; i < element_per_patch; i += blockDim.x) {
-            for (uint32_t j = 0; j < num_attributes; ++j) {
-                attr(p_id, i, j) = value;
-            }
-        }
-    }
-}
-
 }  // namespace detail
 }  // namespace rxmesh
