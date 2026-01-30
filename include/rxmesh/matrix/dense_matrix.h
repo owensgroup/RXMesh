@@ -9,8 +9,8 @@
 #include "rxmesh/rxmesh.h"
 #include "rxmesh/types.h"
 
-#include "rxmesh/util/meta.h"
 #include "rxmesh/kernels/util.cuh"
+#include "rxmesh/util/meta.h"
 
 #include <Eigen/Dense>
 
@@ -54,8 +54,19 @@ struct DenseMatrix
           m_cublas_handle(nullptr),
           m_user_managed(false)
     {
+#ifdef USE_CUDSS
+        m_cudss_matrix = nullptr;
+#endif
     }
 
+
+    __device__ __host__              DenseMatrix(const DenseMatrix&) = default;
+    __device__ __host__              DenseMatrix(DenseMatrix&&)      = default;
+    __device__ __host__ DenseMatrix& operator=(const DenseMatrix&)   = default;
+    __device__ __host__ DenseMatrix& operator=(DenseMatrix&&)        = default;
+    __host__ ~DenseMatrix()
+    {
+    }
 
     /**
      * @brief Allocating a dense matrix with a size tied to the number of
@@ -76,6 +87,9 @@ struct DenseMatrix
           m_cublas_handle(nullptr),
           m_user_managed(false)
     {
+#ifdef USE_CUDSS
+        m_cudss_matrix = nullptr;
+#endif
         allocate(location);
         init_cublas();
         init_cudss();
@@ -95,6 +109,9 @@ struct DenseMatrix
           m_cublas_handle(nullptr),
           m_user_managed(false)
     {
+#ifdef USE_CUDSS
+        m_cudss_matrix = nullptr;
+#endif
         allocate(location);
         init_cublas();
         init_cudss();
@@ -1140,29 +1157,34 @@ struct DenseMatrix
     {
         if (!m_user_managed) {
 
-            if (((location & HOST) == HOST) && ((m_allocated & HOST) == HOST)) {
+            if (((location & HOST) == HOST) && ((m_allocated & HOST) == HOST) &&
+                m_h_val) {
                 free(m_h_val);
                 m_h_val     = nullptr;
                 m_allocated = m_allocated & (~HOST);
             }
 
             if (((location & DEVICE) == DEVICE) &&
-                ((m_allocated & DEVICE) == DEVICE)) {
+                ((m_allocated & DEVICE) == DEVICE) && m_d_val) {
                 GPU_FREE(m_d_val);
+                m_d_val     = nullptr;
                 m_allocated = m_allocated & (~DEVICE);
             }
 
 #ifdef USE_CUDSS
-            if (std::is_floating_point_v<T> || std::is_same_v<T, cuComplex> ||
-                std::is_same_v<T, cuDoubleComplex>) {  // if it was allocated
+            if ((std::is_floating_point_v<T> || std::is_same_v<T, cuComplex> ||
+                 std::is_same_v<T, cuDoubleComplex>) &&
+                m_cudss_matrix) {
                 CUDSS_ERROR(cudssMatrixDestroy(m_cudss_matrix));
+                m_cudss_matrix = nullptr;
             }
 #endif
         }
 
-        if ((location & LOCATION_ALL) == LOCATION_ALL) {
+        if ((location & LOCATION_ALL) == LOCATION_ALL && m_dendescr) {
             if (m_dendescr) {
                 CUSPARSE_ERROR(cusparseDestroyDnMat(m_dendescr));
+                m_dendescr = nullptr;
             }
         }
     }

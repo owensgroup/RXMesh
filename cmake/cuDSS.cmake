@@ -9,11 +9,11 @@ function(rxmesh_enable_cudss target)
     if (cudss_FOUND)
         message(STATUS "Found cuDSS version ${cudss_VERSION}")
 
-        target_link_directories(${target} INTERFACE ${cudss_LIBRARY_DIR})
+        target_link_directories(${target} PUBLIC  ${cudss_LIBRARY_DIR})
 
         if (WIN32)
-            target_include_directories(${target} INTERFACE ${cudss_INCLUDE_DIR})
-            target_link_libraries(${target} INTERFACE cudss)
+            target_include_directories(${target} PUBLIC  ${cudss_INCLUDE_DIR})
+            target_link_libraries(${target} PUBLIC  cudss)
 
             # Copy cuDSS DLL to the binary directory
             add_custom_target(CopyCUDSSDLL)
@@ -33,10 +33,10 @@ function(rxmesh_enable_cudss target)
                 add_dependencies(CopyCUDSSDLL "CopyCUDSSDLL${CONFIG}")
             endforeach()
         else()
-            target_link_libraries(${target} INTERFACE cudss_static)
+            target_link_libraries(${target} PUBLIC  cudss_static)
         endif()
 
-        target_compile_definitions(${target} INTERFACE USE_CUDSS)
+        target_compile_definitions(${target} PUBLIC  USE_CUDSS)
     else (cudss_FOUND)
         message(WARNING "Can not find cuDSS")
         set(RX_USE_CUDSS "OFF" CACHE BOOL "")
