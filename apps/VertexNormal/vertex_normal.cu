@@ -84,7 +84,7 @@ void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rx,
         vn_time += timer.elapsed_millis();
     }
 
-    RXMESH_TRACE("vertex_normal_rxmesh() vertex normal kernel took {} (ms)",
+    RXMESH_INFO("vertex_normal_rxmesh() vertex normal kernel took {} (ms)",
                  vn_time / Arg.num_run);
 
     // Verify
@@ -173,10 +173,10 @@ int main(int argc, char** argv)
     Arg.argv = argv;
     Arg.argc = argc;
 
-    RXMESH_TRACE("input= {}", Arg.obj_file_name);
-    RXMESH_TRACE("output_folder= {}", Arg.output_folder);
-    RXMESH_TRACE("num_run= {}", Arg.num_run);
-    RXMESH_TRACE("device_id= {}", Arg.device_id);
+    RXMESH_INFO("input= {}", Arg.obj_file_name);
+    RXMESH_INFO("output_folder= {}", Arg.output_folder);
+    RXMESH_INFO("num_run= {}", Arg.num_run);
+    RXMESH_INFO("device_id= {}", Arg.device_id);
 
     return vertex_normal_main();
 }
