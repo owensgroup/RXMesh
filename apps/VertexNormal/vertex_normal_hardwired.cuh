@@ -160,8 +160,8 @@ inline void vertex_normal_hardwired(
     GPU_FREE(d_face);
 
 
-    RXMESH_TRACE("vertex_normal_hardwired() vertex normal kernel took {} (ms)",
-                 vn_time);
+    RXMESH_INFO("vertex_normal_hardwired() vertex normal kernel took {} (ms)",
+                vn_time);
 
     bool passed = compare(vertex_normal_gold.data(),
                           verts_normal_hardwired,
