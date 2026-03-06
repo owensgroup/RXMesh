@@ -60,14 +60,6 @@ struct DenseMatrix
     }
 
 
-    __device__ __host__              DenseMatrix(const DenseMatrix&) = default;
-    __device__ __host__              DenseMatrix(DenseMatrix&&)      = default;
-    __device__ __host__ DenseMatrix& operator=(const DenseMatrix&)   = default;
-    __device__ __host__ DenseMatrix& operator=(DenseMatrix&&)        = default;
-    __host__ ~DenseMatrix()
-    {
-    }
-
     /**
      * @brief Allocating a dense matrix with a size tied to the number of
      * elements in the mesh, i.e., num_rows should be either the number
