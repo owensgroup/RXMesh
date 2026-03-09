@@ -161,6 +161,7 @@ typename ReduceHandle<T, HandleT>::KeyValue ReduceHandle<T, HandleT>::arg_min(
     template class ReduceHandle<T, EdgeHandle>;   \
     template class ReduceHandle<T, FaceHandle>;
 
+RXMESH_REDUCE_HANDLE_INSTANTIATE(bool)
 RXMESH_REDUCE_HANDLE_INSTANTIATE(float)
 RXMESH_REDUCE_HANDLE_INSTANTIATE(double)
 RXMESH_REDUCE_HANDLE_INSTANTIATE(uint32_t)
