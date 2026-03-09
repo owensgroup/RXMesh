@@ -27,6 +27,7 @@ struct SparseMatrixConstantNNZRow : public SparseMatrix<T>
         this->m_num_rows = num_rows * this->m_block_shape.x;
         this->m_num_cols = num_cols * this->m_block_shape.y;
         this->m_nnz      = this->m_num_rows * RowNNZ;
+        this->update_max_nnz();
 
         int num_row_1 = this->m_num_rows + 1;
 
