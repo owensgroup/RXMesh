@@ -47,6 +47,7 @@ target_compile_features(RXMesh PUBLIC cxx_std_17)
 target_compile_definitions(RXMesh
     PUBLIC INPUT_DIR=${RXMESH_SOURCE_DIR}/input/
     PUBLIC OUTPUT_DIR=${RXMESH_SOURCE_DIR}/output/
+    PUBLIC EIGEN_ALLOW_UNALIGNED_SCALARS 
 )
 
 if(${RX_USE_POLYSCOPE})
