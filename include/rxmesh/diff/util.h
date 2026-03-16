@@ -62,12 +62,29 @@ __device__ __host__ __inline__ auto col_mat(
     const Eigen::MatrixBase<Derived>& _v0,
     const Eigen::MatrixBase<Derived>& _v1)
 {
-    using T = typename Derived::Scalar;
-    Eigen::Matrix<T, Derived::RowsAtCompileTime, 2 * Derived::ColsAtCompileTime>
-        M;
+    using T         = typename Derived::Scalar;
+    constexpr int R = Derived::RowsAtCompileTime;
+    constexpr int C = Derived::ColsAtCompileTime;
 
-    M << _v0, _v1;
+    Eigen::Matrix<T, R, 2 * C> M;
 
+    if constexpr (R != Eigen::Dynamic && C != Eigen::Dynamic) {
+        for (int r = 0; r < R; ++r) {
+            for (int c = 0; c < C; ++c) {
+                M(r, c)     = _v0(r, c);
+                M(r, c + C) = _v1(r, c);
+            }
+        }
+    } else {
+        const Eigen::Index rows = _v0.rows();
+        const Eigen::Index cols = _v0.cols();
+        for (Eigen::Index r = 0; r < rows; ++r) {
+            for (Eigen::Index c = 0; c < cols; ++c) {
+                M(r, c)        = _v0(r, c);
+                M(r, c + cols) = _v1(r, c);
+            }
+        }
+    }
     return M;
 }
 
