@@ -94,6 +94,12 @@ class Attribute : public AttributeBase
     /** @brief Total number of mesh elements (vertices, edges, or faces) */
     uint32_t size() const;
 
+
+    /**
+     * @brief get the total number of bytes used for allocation
+     */
+    size_t get_total_bytes() const;
+
     /**
      * @brief convert the attributes stored into a dense matrix where number of
      * rows represent the number of mesh elements of this attribute and number
@@ -125,8 +131,7 @@ class Attribute : public AttributeBase
      * corresponds to the template HandleT
      * @param p the patch id
      */
-    __host__ __device__ __inline__ uint32_t
-    capacity(const uint32_t p) const;
+    __host__ __device__ __inline__ uint32_t capacity(const uint32_t p) const;
 
     /**
      * @brief Get patch info for patch p
@@ -138,8 +143,7 @@ class Attribute : public AttributeBase
     __host__ __device__ __inline__ uint32_t pitch_x() const;
 
 
-    __host__ __device__ __inline__ uint32_t
-    pitch_y(const uint32_t p) const;
+    __host__ __device__ __inline__ uint32_t pitch_y(const uint32_t p) const;
 
     Attribute(const Attribute& rhs) = default;
 
@@ -149,11 +153,6 @@ class Attribute : public AttributeBase
      * @brief Get the name of the attribute
      */
     const char* get_name() const;
-
-    /**
-     * @brief return the amount of allocated memory in megabytes
-     */
-    double get_memory_mg() const;
 
     /**
      * @brief get the number of attributes per mesh element
@@ -230,9 +229,8 @@ class Attribute : public AttributeBase
      * @param attr the attribute id
      * @return const reference to the attribute
      */
-    __host__ __device__ __inline__ T& operator()(
-        const HandleT  handle,
-        const uint32_t attr = 0) const;
+    __host__ __device__ __inline__ T& operator()(const HandleT  handle,
+                                                 const uint32_t attr = 0) const;
 
     /**
      * @brief Accessing the attribute as a glm vector. This is used for read
@@ -278,7 +276,7 @@ class Attribute : public AttributeBase
      * @return non-const reference to the attribute
      */
     __host__ __device__ __inline__ T& operator()(const HandleT  handle,
-                                                      const uint32_t attr = 0);
+                                                 const uint32_t attr = 0);
 
     /**
      * @brief Access the attribute value using patch and local index in the
@@ -288,10 +286,9 @@ class Attribute : public AttributeBase
      * @param attr the attribute id
      * @return const reference to the attribute
      */
-    __host__ __device__ __inline__ T& operator()(
-        const uint32_t p_id,
-        const uint16_t local_id,
-        const uint32_t attr) const;
+    __host__ __device__ __inline__ T& operator()(const uint32_t p_id,
+                                                 const uint16_t local_id,
+                                                 const uint32_t attr) const;
 
     /**
      * @brief Access the attribute value using patch and local index in the
@@ -302,8 +299,8 @@ class Attribute : public AttributeBase
      * @return non-const reference to the attribute
      */
     __host__ __device__ __inline__ T& operator()(const uint32_t p_id,
-                                                      const uint16_t local_id,
-                                                      const uint32_t attr);
+                                                 const uint16_t local_id,
+                                                 const uint32_t attr);
 
     /**
      * @brief Check if the attribute is empty
@@ -316,18 +313,24 @@ class Attribute : public AttributeBase
      */
     void allocate(locationT location);
 
+    /**
+     * @brief allocate offset buffer (m_h_offset) and m_total_bytes
+     */
+    void allocate_offset();
+
     RXMeshStatic*    m_rxmesh;
     const PatchInfo* m_h_patches_info;
     const PatchInfo* m_d_patches_info;
     char*            m_name;
     uint32_t         m_num_attributes;
     locationT        m_allocated;
-    T**              m_h_attr;
-    T**              m_h_ptr_on_device;
-    T**              m_d_attr;
+    T*               m_h_data;
+    T*               m_d_data;
+    uint32_t*        m_h_offsets;
+    uint32_t*        m_d_offsets;
     uint32_t         m_max_num_patches;
     layoutT          m_layout;
-    double           m_memory_mega_bytes;
+    size_t           m_total_bytes;
 
     constexpr static uint32_t m_block_size = 256;
 };
@@ -362,6 +365,7 @@ class AttributeContainer
      * @brief Number of attribute managed by this container
      */
     size_t size();
+
 
     /**
      * @brief get a list of name of the attributes managed by this container

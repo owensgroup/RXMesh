@@ -380,11 +380,6 @@ inline void remesh_rxmesh(rxmesh::RXMeshDynamic& rx)
     report.add_member("max_vertex_valence", stats.max_vertex_valence);
     report.add_member("min_vertex_valence", stats.min_vertex_valence);
 
-    report.add_member("attributes_memory_mg",
-                      coords->get_memory_mg() + new_coords->get_memory_mg() +
-                          edge_status->get_memory_mg() +
-                          vertex_valence->get_memory_mg());
-
     RXMESH_INFO("Split Total Time {} (ms)",
                 timers.elapsed_millis("SplitTotal"));
     RXMESH_INFO("Collapse Total Time {} (ms)",

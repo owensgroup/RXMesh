@@ -187,8 +187,7 @@ inline void sec_rxmesh(rxmesh::RXMeshDynamic& rx,
     report.add_member("histogram_time", timers.elapsed_millis("Histo"));
     report.add_member("app_time", timers.elapsed_millis("App"));
     report.add_member("slice_time", timers.elapsed_millis("Slice"));
-    report.add_member("cleanup_time", timers.elapsed_millis("Cleanup"));
-    report.add_member("attributes_memory_mg", coords->get_memory_mg());
+    report.add_member("cleanup_time", timers.elapsed_millis("Cleanup"));    
     report.model_data(Arg.obj_file_name + "_after", rx, "model_after");
 
 #if USE_POLYSCOPE

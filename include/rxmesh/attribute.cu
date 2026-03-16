@@ -43,12 +43,13 @@ Attribute<T, HandleT>::Attribute()
       m_name(nullptr),
       m_num_attributes(0),
       m_allocated(LOCATION_NONE),
-      m_h_attr(nullptr),
-      m_h_ptr_on_device(nullptr),
-      m_d_attr(nullptr),
+      m_h_data(nullptr),
+      m_d_data(nullptr),
+      m_h_offsets(nullptr),
+      m_d_offsets(nullptr),
       m_max_num_patches(0),
       m_layout(AoS),
-      m_memory_mega_bytes(0)
+      m_total_bytes(0)
 {
     this->m_name    = (char*)malloc(sizeof(char) * 1);
     this->m_name[0] = '\0';
@@ -67,12 +68,13 @@ Attribute<T, HandleT>::Attribute(const char*    name,
       m_name(nullptr),
       m_num_attributes(num_attributes),
       m_allocated(LOCATION_NONE),
-      m_h_attr(nullptr),
-      m_h_ptr_on_device(nullptr),
-      m_d_attr(nullptr),
+      m_h_data(nullptr),
+      m_d_data(nullptr),
+      m_h_offsets(nullptr),
+      m_d_offsets(nullptr),
       m_max_num_patches(rxmesh->get_max_num_patches()),
       m_layout(layout),
-      m_memory_mega_bytes(0)
+      m_total_bytes(0)
 {
     if (name != nullptr) {
         this->m_name = (char*)malloc(sizeof(char) * (strlen(name) + 1));
@@ -140,6 +142,12 @@ uint32_t Attribute<T, HandleT>::size() const
     if constexpr (std::is_same_v<HandleT, FaceHandle>) {
         return m_rxmesh->get_num_faces();
     }
+}
+
+template <class T, typename HandleT>
+size_t Attribute<T, HandleT>::get_total_bytes() const
+{
+    return m_total_bytes;
 }
 
 template <class T, typename HandleT>
@@ -305,10 +313,12 @@ __host__ __device__ __forceinline__ T& Attribute<T, HandleT>::operator()(
 
 #ifdef __CUDA_ARCH__
     assert(local_id < capacity(p_id));
-    return m_d_attr[p_id][local_id * pitch_x() + attr * pitch_y(p_id)];
+    const uint32_t offset = m_d_offsets[p_id];
+    return m_d_data[offset + local_id * pitch_x() + attr * pitch_y(p_id)];
 #else
     assert(local_id < size(p_id));
-    return m_h_attr[p_id][local_id * pitch_x() + attr * pitch_y(p_id)];
+    const uint32_t offset = m_h_offsets[p_id];
+    return m_h_data[offset + local_id * pitch_x() + attr * pitch_y(p_id)];
 #endif
 }
 
@@ -323,10 +333,12 @@ __host__ __device__ __forceinline__ T& Attribute<T, HandleT>::operator()(
 
 #ifdef __CUDA_ARCH__
     assert(local_id < capacity(p_id));
-    return m_d_attr[p_id][local_id * pitch_x() + attr * pitch_y(p_id)];
+    const uint32_t offset = m_d_offsets[p_id];
+    return m_d_data[offset + local_id * pitch_x() + attr * pitch_y(p_id)];
 #else
     assert(local_id < size(p_id));
-    return m_h_attr[p_id][local_id * pitch_x() + attr * pitch_y(p_id)];
+    const uint32_t offset = m_h_offsets[p_id];
+    return m_h_data[offset + local_id * pitch_x() + attr * pitch_y(p_id)];
 #endif
 }
 
@@ -362,12 +374,6 @@ const char* Attribute<T, HandleT>::get_name() const
 }
 
 template <class T, typename HandleT>
-double Attribute<T, HandleT>::get_memory_mg() const
-{
-    return m_memory_mega_bytes;
-}
-
-template <class T, typename HandleT>
 void Attribute<T, HandleT>::reset(const T      value,
                                   locationT    location,
                                   cudaStream_t stream)
@@ -384,7 +390,7 @@ void Attribute<T, HandleT>::reset(const T      value,
         for (int p = 0; p < static_cast<int>(m_rxmesh->get_num_patches());
              ++p) {
             for (uint32_t e = 0; e < capacity(p); ++e) {
-                m_h_attr[p][e] = value;
+                m_h_data[m_h_offsets[p] + e] = value;
             }
         }
     }
@@ -424,23 +430,17 @@ void Attribute<T, HandleT>::move(locationT    source,
     }
 
     if (source == HOST && target == DEVICE) {
-        for (uint32_t p = 0; p < m_rxmesh->get_num_patches(); ++p) {
-            CUDA_ERROR(
-                cudaMemcpyAsync(m_h_ptr_on_device[p],
-                                m_h_attr[p],
-                                sizeof(T) * capacity(p) * m_num_attributes,
-                                cudaMemcpyHostToDevice,
-                                stream));
-        }
+        CUDA_ERROR(cudaMemcpyAsync(m_d_data,
+                                   m_h_data,
+                                   get_total_bytes(),
+                                   cudaMemcpyHostToDevice,
+                                   stream));
     } else if (source == DEVICE && target == HOST) {
-        for (uint32_t p = 0; p < m_rxmesh->get_num_patches(); ++p) {
-            CUDA_ERROR(
-                cudaMemcpyAsync(m_h_attr[p],
-                                m_h_ptr_on_device[p],
-                                sizeof(T) * capacity(p) * m_num_attributes,
-                                cudaMemcpyDeviceToHost,
-                                stream));
-        }
+        CUDA_ERROR(cudaMemcpyAsync(m_h_data,
+                                   m_d_data,
+                                   get_total_bytes(),
+                                   cudaMemcpyDeviceToHost,
+                                   stream));
     }
 }
 
@@ -448,19 +448,16 @@ template <class T, typename HandleT>
 void Attribute<T, HandleT>::release(locationT location)
 {
     if (((location & HOST) == HOST) && is_host_allocated()) {
-        for (uint32_t p = 0; p < m_rxmesh->get_max_num_patches(); ++p) {
-            free(m_h_attr[p]);
-        }
-        free(m_h_attr);
-        m_h_attr    = nullptr;
+        free(m_h_data);
+        m_h_data = nullptr;
+        free(m_h_offsets);
+        m_h_offsets = nullptr;
         m_allocated = m_allocated & (~HOST);
     }
 
     if (((location & DEVICE) == DEVICE) && is_device_allocated()) {
-        for (uint32_t p = 0; p < m_rxmesh->get_max_num_patches(); ++p) {
-            GPU_FREE(m_h_ptr_on_device[p]);
-        }
-        GPU_FREE(m_d_attr);
+        GPU_FREE(m_d_data);
+        GPU_FREE(m_d_offsets);
         m_allocated = m_allocated & (~DEVICE);
     }
 }
@@ -508,11 +505,7 @@ void Attribute<T, HandleT>::copy_from(Attribute<T, HandleT>& source,
             return;
         }
 
-        for (uint32_t p = 0; p < m_rxmesh->get_num_patches(); ++p) {
-            std::memcpy(m_h_attr[p],
-                        source.m_h_attr[p],
-                        sizeof(T) * capacity(p) * m_num_attributes);
-        }
+        std::memcpy(m_h_data, source.m_h_data, get_total_bytes());
     }
 
     if ((source_flag & DEVICE) == DEVICE && (dst_flag & DEVICE) == DEVICE) {
@@ -529,14 +522,11 @@ void Attribute<T, HandleT>::copy_from(Attribute<T, HandleT>& source,
             return;
         }
 
-        for (uint32_t p = 0; p < m_rxmesh->get_num_patches(); ++p) {
-            CUDA_ERROR(
-                cudaMemcpyAsync(m_h_ptr_on_device[p],
-                                source.m_h_ptr_on_device[p],
-                                sizeof(T) * capacity(p) * m_num_attributes,
-                                cudaMemcpyDeviceToDevice,
-                                stream));
-        }
+        CUDA_ERROR(cudaMemcpyAsync(m_d_data,
+                                   source.m_d_data,
+                                   get_total_bytes(),
+                                   cudaMemcpyDeviceToDevice,
+                                   stream));
     }
 
     if ((source_flag & DEVICE) == DEVICE && (dst_flag & HOST) == HOST) {
@@ -553,14 +543,11 @@ void Attribute<T, HandleT>::copy_from(Attribute<T, HandleT>& source,
             return;
         }
 
-        for (uint32_t p = 0; p < m_rxmesh->get_num_patches(); ++p) {
-            CUDA_ERROR(
-                cudaMemcpyAsync(m_h_attr[p],
-                                source.m_h_ptr_on_device[p],
-                                sizeof(T) * capacity(p) * m_num_attributes,
-                                cudaMemcpyDeviceToHost,
-                                stream));
-        }
+        CUDA_ERROR(cudaMemcpyAsync(m_h_data,
+                                   source.m_d_data,
+                                   get_total_bytes(),
+                                   cudaMemcpyDeviceToHost,
+                                   stream));
     }
 
     if ((source_flag & HOST) == HOST && (dst_flag & DEVICE) == DEVICE) {
@@ -577,14 +564,11 @@ void Attribute<T, HandleT>::copy_from(Attribute<T, HandleT>& source,
             return;
         }
 
-        for (uint32_t p = 0; p < m_rxmesh->get_num_patches(); ++p) {
-            CUDA_ERROR(
-                cudaMemcpyAsync(m_h_ptr_on_device[p],
-                                source.m_h_attr[p],
-                                sizeof(T) * capacity(p) * m_num_attributes,
-                                cudaMemcpyHostToDevice,
-                                stream));
-        }
+        CUDA_ERROR(cudaMemcpyAsync(m_d_data,
+                                   source.m_h_data,
+                                   get_total_bytes(),
+                                   cudaMemcpyHostToDevice,
+                                   stream));
     }
 }
 
@@ -652,12 +636,11 @@ void Attribute<T, HandleT>::allocate(locationT location)
         if ((location & HOST) == HOST) {
             release(HOST);
 
-            m_h_attr = static_cast<T**>(malloc(sizeof(T*) * m_max_num_patches));
+            // alloc offset buffer
+            allocate_offset();
 
-            for (uint32_t p = 0; p < m_max_num_patches; ++p) {
-                m_h_attr[p] = static_cast<T*>(
-                    malloc(sizeof(T) * capacity(p) * m_num_attributes));
-            }
+            // alloc data
+            m_h_data = static_cast<T*>(malloc(get_total_bytes()));
 
             m_allocated = m_allocated | HOST;
         }
@@ -665,31 +648,38 @@ void Attribute<T, HandleT>::allocate(locationT location)
         if ((location & DEVICE) == DEVICE) {
             release(DEVICE);
 
-            CUDA_ERROR(cudaMalloc((void**)&(m_d_attr),
-                                  sizeof(T*) * m_max_num_patches));
-            m_memory_mega_bytes +=
-                BYTES_TO_MEGABYTES(sizeof(T*) * m_max_num_patches);
+            allocate_offset();
 
-            m_h_ptr_on_device =
-                static_cast<T**>(malloc(sizeof(T*) * m_max_num_patches));
+            // alloc data
+            CUDA_ERROR(cudaMalloc((void**)&(m_d_data), get_total_bytes()));
 
-            for (uint32_t p = 0; p < m_max_num_patches; ++p) {
-                CUDA_ERROR(
-                    cudaMalloc((void**)&(m_h_ptr_on_device[p]),
-                               sizeof(T) * capacity(p) * m_num_attributes));
-
-                m_memory_mega_bytes += BYTES_TO_MEGABYTES(
-                    sizeof(T) * capacity(p) * m_num_attributes);
-            }
-            CUDA_ERROR(cudaMemcpy(m_d_attr,
-                                  m_h_ptr_on_device,
-                                  sizeof(T*) * m_max_num_patches,
+            // alloc and move offset buffer
+            CUDA_ERROR(cudaMalloc((void**)&(m_d_offsets),
+                                  sizeof(uint32_t) * (m_max_num_patches + 1)));
+            CUDA_ERROR(cudaMemcpy(m_d_offsets,
+                                  m_h_offsets,
+                                  sizeof(uint32_t) * (m_max_num_patches + 1),
                                   cudaMemcpyHostToDevice));
+
             m_allocated = m_allocated | DEVICE;
         }
     }
 }
 
+template <class T, typename HandleT>
+void Attribute<T, HandleT>::allocate_offset()
+{
+    if (!m_h_offsets) {
+        m_h_offsets = static_cast<uint32_t*>(
+            malloc(sizeof(uint32_t) * (m_max_num_patches + 1)));
+        m_h_offsets[0] = 0;
+        for (uint32_t p = 0; p < m_max_num_patches; ++p) {
+            m_h_offsets[p + 1] =
+                m_h_offsets[p] + capacity(p) * m_num_attributes;
+        }
+        m_total_bytes = sizeof(T) * m_h_offsets[m_max_num_patches];
+    }
+}
 
 size_t AttributeContainer::size()
 {
@@ -786,7 +776,7 @@ RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(int8_t)
 RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(uint8_t)
 RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(float)
 RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(double)
-//RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(int)
+// RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(int)
 RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(uint32_t)
 RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(int32_t)
 RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(uint64_t)
@@ -851,7 +841,7 @@ RXMESH_ATTR_GLM_EIGEN_INST_ALL(int8_t)
 RXMESH_ATTR_GLM_EIGEN_INST_ALL(uint8_t)
 RXMESH_ATTR_GLM_EIGEN_INST_ALL(float)
 RXMESH_ATTR_GLM_EIGEN_INST_ALL(double)
-//RXMESH_ATTR_GLM_EIGEN_INST_ALL(int)
+// RXMESH_ATTR_GLM_EIGEN_INST_ALL(int)
 RXMESH_ATTR_GLM_EIGEN_INST_ALL(uint32_t)
 RXMESH_ATTR_GLM_EIGEN_INST_ALL(int32_t)
 RXMESH_ATTR_GLM_EIGEN_INST_ALL(uint64_t)

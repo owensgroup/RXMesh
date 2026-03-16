@@ -766,13 +766,7 @@ inline void tracking_rxmesh(rxmesh::RXMeshDynamic& rx)
         "time_per_iter",
         float(timers.elapsed_millis("Total")) / float(total_num_iter));
     report.model_data(Arg.plane_name + "_after", rx, "model_after");
-
-    // report.add_member(
-    //     "attributes_memory_mg",
-    //     current_position->get_memory_mg() + edge_status->get_memory_mg() +
-    //         new_position->get_memory_mg() + vertex_rank->get_memory_mg() +
-    //         is_vertex_bd->get_memory_mg());
-
+        
     for (auto t : timers.m_total_time) {
         report.add_member(t.first, t.second);
     }
