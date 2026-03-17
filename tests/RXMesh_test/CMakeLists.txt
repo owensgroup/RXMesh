@@ -13,6 +13,7 @@ set(SOURCE_LIST
 	test_validate.cu
 	test_lp_pair.cu
 	test_dynamic.cu
+	test_triangle_refinement.cu
 	test_ev_diamond.cu
 	test_sparse_matrix.cu
 	test_patch_lock.cuh
@@ -32,7 +33,7 @@ set(SOURCE_LIST
 	test_tet.cu
 	test_indices.cu
 	test_jacobian.cu
-	test_multiple_meshes.cu
+	test_multiple_meshes.cu	
 )
 
 rxmesh_add_app(RXMesh_test
