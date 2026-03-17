@@ -14,7 +14,8 @@ __device__ __forceinline__ CavityManager<blockThreads, cop>::CavityManager(
       m_preserve_cavity(preserve_cavity),
       m_allow_touching_cavities(allow_touching_cavities)
 {
-    static_assert(cop == CavityOp::EV || cop == CavityOp::E);
+    static_assert(cop == CavityOp::EV || cop == CavityOp::E ||
+                  cop == CavityOp::FE);
 
     __shared__ uint32_t s_patch_id;
 
@@ -673,8 +674,8 @@ CavityManager<blockThreads, cop>::get_creator(const uint16_t cavity_id)
 
 template <uint32_t blockThreads, CavityOp cop>
 template <typename HandleT>
-__device__ __forceinline__ bool
-CavityManager<blockThreads, cop>::is_successful(HandleT seed)
+__device__ __forceinline__ bool CavityManager<blockThreads, cop>::is_successful(
+    HandleT seed)
 {
     if constexpr (cop == CavityOp::V || cop == CavityOp::VV ||
                   cop == CavityOp::VE || cop == CavityOp::VF) {
@@ -994,6 +995,12 @@ CavityManager<blockThreads, cop>::construct_cavity_graph(
     if constexpr (cop == CavityOp::E) {
         add_graph_edge_by_faces_through_edges();
     }
+
+    if constexpr (cop == CavityOp::FE) {
+        add_graph_edge_by_edges_through_faces();
+        block.sync();
+        add_graph_edge_by_faces_through_edges();
+    }
 }
 
 
@@ -1143,7 +1150,7 @@ CavityManager<blockThreads, cop>::calc_cavity_maximal_independent_set(
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ void
 CavityManager<blockThreads, cop>::add_edge_to_cavity_graph(const uint16_t c0,
-                                                            const uint16_t c1)
+                                                           const uint16_t c1)
 {
     auto add_edge = [&](const uint16_t from_c,
                         const uint16_t to_c) -> uint16_t {
@@ -1226,6 +1233,13 @@ __device__ __forceinline__ void CavityManager<blockThreads, cop>::propagate(
 
     if constexpr (cop == CavityOp::E) {
         mark_faces_through_edges();
+    }
+
+    if constexpr (cop == CavityOp::FE) {
+        mark_edges_through_faces();
+        block.sync();
+        mark_faces_through_edges();
+
     }
 }
 
@@ -1921,7 +1935,7 @@ CavityManager<blockThreads, cop>::get_cavity_edge(uint16_t c, uint16_t i) const
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ VertexHandle
 CavityManager<blockThreads, cop>::get_cavity_vertex(uint16_t c,
-                                                     uint16_t i) const
+                                                    uint16_t i) const
 {
     assert(c < m_s_num_cavities[0]);
     assert(i < get_cavity_size(c));
@@ -1979,7 +1993,7 @@ CavityManager<blockThreads, cop>::add_vertex()
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ DEdgeHandle
 CavityManager<blockThreads, cop>::add_edge(const VertexHandle src,
-                                            const VertexHandle dest)
+                                           const VertexHandle dest)
 {
     assert(src.patch_id() == m_patch_info.patch_id);
     assert(dest.patch_id() == m_patch_info.patch_id);
@@ -2022,8 +2036,8 @@ CavityManager<blockThreads, cop>::add_edge(const VertexHandle src,
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ FaceHandle
 CavityManager<blockThreads, cop>::add_face(const DEdgeHandle e0,
-                                            const DEdgeHandle e1,
-                                            const DEdgeHandle e2)
+                                           const DEdgeHandle e1,
+                                           const DEdgeHandle e2)
 {
     assert(e0.patch_id() == m_patch_info.patch_id);
     assert(e1.patch_id() == m_patch_info.patch_id);
@@ -2070,12 +2084,12 @@ CavityManager<blockThreads, cop>::add_face(const DEdgeHandle e0,
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ uint16_t
 CavityManager<blockThreads, cop>::add_element(Bitmask&       active_bitmask,
-                                               uint32_t*      num_elements,
-                                               const uint16_t capacity,
-                                               const Bitmask& in_cavity,
-                                               const Bitmask& owned,
-                                               bool           avoid_in_cavity,
-                                               bool avoid_not_owned_in_cavity)
+                                              uint32_t*      num_elements,
+                                              const uint16_t capacity,
+                                              const Bitmask& in_cavity,
+                                              const Bitmask& owned,
+                                              bool           avoid_in_cavity,
+                                              bool avoid_not_owned_in_cavity)
 {
     assert(capacity == in_cavity.size());
     assert(capacity == active_bitmask.size());
@@ -2518,8 +2532,7 @@ __device__ __forceinline__ void CavityManager<blockThreads, cop>::pre_migrate(
 }
 
 template <uint32_t blockThreads, CavityOp cop>
-__device__ __forceinline__ void
-CavityManager<blockThreads, cop>::pre_ribbonize(
+__device__ __forceinline__ void CavityManager<blockThreads, cop>::pre_ribbonize(
     cooperative_groups::thread_block& block)
 {
     for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
@@ -3324,9 +3337,9 @@ CavityManager<blockThreads, cop>::migrate_from_patch(
 
 
 template <uint32_t blockThreads, CavityOp cop>
-__device__ __forceinline__ void
-CavityManager<blockThreads, cop>::insert_inv_lp(const LPHashTable&  table,
-                                                 InverseLPHashTable& inv_lp)
+__device__ __forceinline__ void CavityManager<blockThreads, cop>::insert_inv_lp(
+    const LPHashTable&  table,
+    InverseLPHashTable& inv_lp)
 {
     int sz = m_s_temp_inv_lp_size[0];
     for (int v = threadIdx.x; v < int(sz); v += blockThreads) {
@@ -3610,8 +3623,8 @@ __device__ __forceinline__ void CavityManager<blockThreads, cop>::migrate_face(
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ uint16_t
 CavityManager<blockThreads, cop>::find_copy_vertex(uint16_t& local_id,
-                                                    uint32_t& patch,
-                                                    uint8_t&  patch_stash_id)
+                                                   uint32_t& patch,
+                                                   uint8_t&  patch_stash_id)
 {
     return find_copy<VertexHandle>(local_id, patch, patch_stash_id);
 }
@@ -3619,8 +3632,8 @@ CavityManager<blockThreads, cop>::find_copy_vertex(uint16_t& local_id,
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ uint16_t
 CavityManager<blockThreads, cop>::find_copy_edge(uint16_t& local_id,
-                                                  uint32_t& patch,
-                                                  uint8_t&  patch_stash_id)
+                                                 uint32_t& patch,
+                                                 uint8_t&  patch_stash_id)
 {
     return find_copy<EdgeHandle>(local_id, patch, patch_stash_id);
 }
@@ -3628,8 +3641,8 @@ CavityManager<blockThreads, cop>::find_copy_edge(uint16_t& local_id,
 template <uint32_t blockThreads, CavityOp cop>
 __device__ __forceinline__ uint16_t
 CavityManager<blockThreads, cop>::find_copy_face(uint16_t& local_id,
-                                                  uint32_t& patch,
-                                                  uint8_t&  patch_stash_id)
+                                                 uint32_t& patch,
+                                                 uint8_t&  patch_stash_id)
 {
     return find_copy<FaceHandle>(local_id, patch, patch_stash_id);
 }
@@ -3660,9 +3673,9 @@ template <uint32_t blockThreads, CavityOp cop>
 template <typename HandleT>
 __device__ __forceinline__ uint16_t
 CavityManager<blockThreads, cop>::find_copy(uint16_t&     q_local_id,
-                                             uint32_t&     q_patch,
-                                             uint8_t&      q_stash_id_in_p,
-                                             const LPPair* q_table)
+                                            uint32_t&     q_patch,
+                                            uint8_t&      q_stash_id_in_p,
+                                            const LPPair* q_table)
 {
 
     assert(!m_context.m_patches_info[q_patch].is_deleted(
@@ -4215,6 +4228,11 @@ __device__ __forceinline__ void CavityManager<blockThreads, cop>::epilogue(
 
             if constexpr (cop == CavityOp::E) {
                 recover_edges();
+                recover_faces_through_edges();
+            }
+            if constexpr (cop == CavityOp::FE) {                
+                recover_edges_through_faces();
+                block.sync();
                 recover_faces_through_edges();
             }
             block.sync();
