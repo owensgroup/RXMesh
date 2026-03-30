@@ -218,7 +218,7 @@ class Patcher
 
 
     /**
-     * @brief form initial face assigement, compute the compressed storage of 
+     * @brief form initial face assigement, compute the compressed storage of
      * the patches (i.e., populate m_patches_val and m_patches_offset)
      */
     void compute_inital_compressed_patches();
@@ -242,9 +242,7 @@ class Patcher
                                              std::vector<uint32_t>& component,
                                              uint32_t               num_seeds);
 
-    void extract_ribbons(const std::vector<std::vector<uint32_t>>& fv,
-                         const std::vector<uint32_t>&              ff_offset,
-                         const std::vector<uint32_t>&              ff_values);
+    void extract_ribbons(const std::vector<std::vector<uint32_t>>& fv);
 
     uint32_t construct_patches_compressed_format(uint32_t* d_face_patch,
                                                  void*  d_cub_temp_storage_scan,

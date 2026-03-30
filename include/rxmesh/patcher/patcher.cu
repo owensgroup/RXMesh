@@ -153,7 +153,7 @@ Patcher::Patcher(uint32_t                                        patch_size,
                           d_patches_val);
             }
         }
-        extract_ribbons(fv, ff_offset, ff_values);
+        extract_ribbons(fv);
         // bfs(ff_offset, ff_values);
         assign_patch(fv, edges_map);
     }
@@ -411,9 +411,8 @@ void Patcher::print_statistics()
         "Patcher: Parallel patches construction time = {} (ms) and {} "
         "(ms/lloyd_run)",
         m_patching_time_ms,
-        ((m_num_lloyd_run == 0) ?
-             0 :
-             m_patching_time_ms / float(m_num_lloyd_run)));
+        ((m_num_lloyd_run == 0) ? 0 :
+                                  m_patching_time_ms / float(m_num_lloyd_run)));
 
     // max-min patch size
     uint32_t max_patch_size(0), min_patch_size(m_num_faces), avg_patch_size(0);
@@ -638,136 +637,81 @@ void Patcher::bfs(const std::vector<uint32_t>& ff_offset,
     }
 }
 
-void Patcher::extract_ribbons(const std::vector<std::vector<uint32_t>>& fv,
-                              const std::vector<uint32_t>& ff_offset,
-                              const std::vector<uint32_t>& ff_values)
+void Patcher::extract_ribbons(const std::vector<std::vector<uint32_t>>& fv)
 {
     // Post process the patches by extracting the ribbons
-    // For patch P, we start first by identifying boundary faces; faces that has
-    // an edge on P's boundary. These faces are captured by querying the
-    // adjacent faces for each face in P. If any of these adjacent faces are not
-    // in the same patch, then this face is a boundary face. From these boundary
-    // faces we can extract boundary vertices. We also now know which patch is
-    // neighbor to P. Then we can use the boundary vertices to find the faces
-    // that are incident to these vertices on the neighbor patches
-    std::vector<uint32_t> frontier;
-    frontier.reserve(m_num_faces);
-
-    std::vector<uint32_t> bd_vertices;
-    bd_vertices.reserve(m_patch_size);
+    // For patch P, we loop over its faces. For each face F, we loop over its
+    // three vertices. For each such vertex V, we loop over its incident faces.
+    // For each such face N, if N's patch is not P, then we add it to the ribbon
+    // faces of P. We also make sure that the ribbon faces list for each patch
+    // does not have duplicates
 
     // build vertex incident faces
-    std::vector<std::vector<uint32_t>> vertex_incident_faces(
-        m_num_vertices, std::vector<uint32_t>(10));
-    for (uint32_t i = 0; i < vertex_incident_faces.size(); ++i) {
-        vertex_incident_faces[i].clear();
+    std::vector<std::vector<uint32_t>> vf(m_num_vertices,
+                                          std::vector<uint32_t>(10));
+
+    for (uint32_t i = 0; i < vf.size(); ++i) {
+        vf[i].clear();
     }
     for (uint32_t face = 0; face < m_num_faces; ++face) {
         for (uint32_t v = 0; v < fv[face].size(); ++v) {
-            vertex_incident_faces[fv[face][v]].push_back(face);
+            vf[fv[face][v]].push_back(face);
         }
     }
 
-    for (uint32_t cur_p = 0; cur_p < m_num_patches; ++cur_p) {
+    std::vector<uint32_t> ribbon;
+    ribbon.reserve(m_num_faces);
 
-        uint32_t p_start = (cur_p == 0) ? 0 : m_patches_offset[cur_p - 1];
-        uint32_t p_end   = m_patches_offset[cur_p];
+    m_ribbon_ext_offset[0] = 0;
 
-        bd_vertices.clear();
-        frontier.clear();
+    // for every patch
+    for (uint32_t p = 0; p < m_num_patches; ++p) {
 
+        uint32_t p_start = (p == 0) ? 0 : m_patches_offset[p - 1];
+        uint32_t p_end   = m_patches_offset[p];
 
-        //***** Pass One
-        // 1) build a frontier of the boundary faces by loop over all faces and
-        // add those that has an edge on the patch boundary
-        for (uint32_t fb = p_start; fb < p_end; ++fb) {
-            uint32_t face = m_patches_val[fb];
+        ribbon.clear();
 
-            bool     added = false;
-            uint32_t start = ff_offset[face];
-            uint32_t end   = ff_offset[face + 1];
+        // for every face in the patch
+        for (uint32_t f = p_start; f < p_end; ++f) {
+            uint32_t face = m_patches_val[f];
 
-            for (uint32_t g = start; g < end; ++g) {
-                uint32_t n       = ff_values[g];
-                uint32_t n_patch = get_face_patch_id(n);
+            // for every vertex in this face
+            for (uint32_t i = 0; i < fv[face].size(); ++i) {
+                uint32_t vertex = fv[face][i];
 
-                // n is boundary face if its patch is not the current patch we
-                // are processing
-                if (n_patch != cur_p) {
-                    if (!added) {
-                        frontier.push_back(face);
-                        added = true;
-                    }
+                // for every incident face to this vertex
+                for (uint32_t j = 0; j < vf[vertex].size(); ++j) {
+                    uint32_t n       = vf[vertex][j];
+                    uint32_t n_patch = get_face_patch_id(n);
 
-                    // find/add the boundary vertices; these are the vertices
-                    // that are shared between face and n
-
-                    // add the common vertices in fv[face] and fv[n]
-                    for (uint32_t i = 0; i < fv[face].size(); ++i) {
-                        auto it_vf =
-                            std::find(fv[n].begin(), fv[n].end(), fv[face][i]);
-                        if (it_vf != fv[n].end()) {
-                            bd_vertices.push_back(fv[face][i]);
+                    if (n_patch != p) {
+                        auto it = std::find(ribbon.begin(), ribbon.end(), n);
+                        if (it == ribbon.end()) {
+                            ribbon.push_back(n);
                         }
                     }
-
-                    // we don't break out of this loop because we want to get
-                    // all the boundary vertices
-                    // break;
                 }
             }
         }
 
-        // Sort boundary vertices so we can use binary_search
-        std::sort(bd_vertices.begin(), bd_vertices.end());
-        // remove duplicated vertices
-        inplace_remove_duplicates_sorted(bd_vertices);
+        uint32_t r_start = 0;
+
+        // add ribbon faces to m_ribbon_ext_val
+        if (p == 0) {
+            m_ribbon_ext_offset[p] = ribbon.size();
+        } else {
+            m_ribbon_ext_offset[p] = ribbon.size() + m_ribbon_ext_offset[p - 1];
+
+            r_start = m_ribbon_ext_offset[p - 1];
+        }
 
 
-        //***** Pass Two
-
-        // 3) for every vertex on the patch boundary, we add all the faces
-        // that are incident to it and not in the current patch
-
-        m_ribbon_ext_offset[cur_p] =
-            (cur_p == 0) ? 0 : m_ribbon_ext_offset[cur_p - 1];
-        uint32_t r_start = m_ribbon_ext_offset[cur_p];
-
-        for (uint32_t v = 0; v < bd_vertices.size(); ++v) {
-            uint32_t vert = bd_vertices[v];
-
-            for (uint32_t f = 0; f < vertex_incident_faces[vert].size(); ++f) {
-                uint32_t face = vertex_incident_faces[vert][f];
-                if (get_face_patch_id(face) != cur_p) {
-                    // make sure we have not added face before
-                    bool     added = false;
-                    uint32_t r_end = m_ribbon_ext_offset[cur_p];
-                    for (uint32_t r = r_start; r < r_end; ++r) {
-                        if (m_ribbon_ext_val[r] == face) {
-                            added = true;
-                            break;
-                        }
-                    }
-                    if (!added) {
-
-                        m_ribbon_ext_val[m_ribbon_ext_offset[cur_p]] = face;
-                        m_ribbon_ext_offset[cur_p]++;
-                        if (m_ribbon_ext_offset[cur_p] == m_num_faces) {
-                            // need to expand m_ribbon_ext_val. This occurs
-                            // mostly for small meshes with small patch size
-                            // such that the amount overlap between exterior
-                            // ribbon of different patches is larger than
-                            // m_num_faces
-                            uint32_t new_size = m_ribbon_ext_val.size() * 2;
-                            m_ribbon_ext_val.resize(new_size);
-                        }
-                        assert(m_ribbon_ext_offset[cur_p] <=
-                               m_ribbon_ext_val.size());
-                    }
-                }
-            }
+        for (uint32_t f = 0; f < ribbon.size(); ++f) {
+            m_ribbon_ext_val[r_start + f] = ribbon[f];
         }
     }
+
 
     m_ribbon_ext_val.resize(m_ribbon_ext_offset[m_num_patches - 1]);
 }
