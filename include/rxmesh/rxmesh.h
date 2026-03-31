@@ -419,14 +419,6 @@ class RXMesh
         }
     }
 
-    /**
-     * @brief return the amount of allocated memory for topology information in
-     * megabytes
-     */
-    double get_topology_memory_mg() const
-    {
-        return m_topo_memory_mega_bytes;
-    }
 
    protected:
     // Edge hash map that takes two vertices and return their edge id
@@ -554,7 +546,8 @@ class RXMesh
     uint16_t get_per_patch_max_face_capacity() const;
 
     void build_device();
-    void build_device_single_patch(const uint32_t patch_id,
+    void build_device_single_patch(const uint32_t patch_slot_index,
+                                   const uint32_t patch_id,
                                    const uint16_t p_num_vertices,
                                    const uint16_t p_num_edges,
                                    const uint16_t p_num_faces,
@@ -608,8 +601,6 @@ class RXMesh
     // the number of owned mesh elements per patch
     std::vector<uint16_t> m_h_num_owned_f, m_h_num_owned_e, m_h_num_owned_v;
 
-    // uint16_t m_max_not_owned_vertices, m_max_not_owned_edges,
-    //    m_max_not_owned_faces;
 
     uint16_t m_max_capacity_lp_v, m_max_capacity_lp_e, m_max_capacity_lp_f;
 
@@ -630,16 +621,31 @@ class RXMesh
 
     uint32_t *m_d_vertex_prefix, *m_d_edge_prefix, *m_d_face_prefix;
 
-    //Store the mapping from linear_id to Vertex/Edge/FaceHandle
+    // Store the mapping from linear_id to Vertex/Edge/FaceHandle
     VertexHandle *m_d_v_handles, *m_h_v_handles;
     EdgeHandle *  m_d_e_handles, *m_h_e_handles;
     FaceHandle *  m_d_f_handles, *m_h_f_handles;
 
     PatchInfo *m_d_patches_info, *m_h_patches_info;
 
-    float m_capacity_factor, m_lp_hashtable_load_factor, m_patch_alloc_factor;
+    // Contiguous topology/mask device buffers for all patch slots.
+    LocalVertexT* m_d_evs_all;
+    LocalEdgeT*   m_d_fes_all;
 
-    double m_topo_memory_mega_bytes;
+    uint32_t* m_d_active_mask_v_all;
+    uint32_t* m_d_active_mask_e_all;
+    uint32_t* m_d_active_mask_f_all;
+    uint32_t* m_d_owned_mask_v_all;
+    uint32_t* m_d_owned_mask_e_all;
+    uint32_t* m_d_owned_mask_f_all;
+
+    uint32_t m_ev_stride_elems;
+    uint32_t m_fe_stride_elems;
+    uint32_t m_mask_v_stride_words;
+    uint32_t m_mask_e_stride_words;
+    uint32_t m_mask_f_stride_words;
+
+    float m_capacity_factor, m_lp_hashtable_load_factor, m_patch_alloc_factor;
 
     uint32_t m_num_colors;
 

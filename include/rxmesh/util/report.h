@@ -314,8 +314,6 @@ struct Report
         add_member("per_patch_max_faces", rx.get_per_patch_max_faces(), subdoc);
         add_member("ribbon_overhead (%)", rx.get_ribbon_overhead(), subdoc);
 
-        add_member("topology_memory_mg", rx.get_topology_memory_mg(), subdoc);
-
         rapidjson::Value key(json_member_name.c_str(), subdoc.GetAllocator());
         m_doc.AddMember(key, subdoc, m_doc.GetAllocator());
     }
