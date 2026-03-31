@@ -191,6 +191,6 @@ TEST(RXMeshDynamic, TriangleRefinement)
     auto ps_mesh = rx.get_polyscope_mesh();
     ps_mesh->updateVertexPositions(coords);
 
-    polyscope::show();
+    //polyscope::show();
 #endif
 }

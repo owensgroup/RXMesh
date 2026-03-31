@@ -62,11 +62,15 @@ RXMesh::RXMesh(uint32_t patch_size)
       m_d_owned_mask_v_all(nullptr),
       m_d_owned_mask_e_all(nullptr),
       m_d_owned_mask_f_all(nullptr),
+      m_d_counts_all(nullptr),
+      m_d_dirty_all(nullptr),
       m_ev_stride_elems(0),
       m_fe_stride_elems(0),
       m_mask_v_stride_words(0),
       m_mask_e_stride_words(0),
-      m_mask_f_stride_words(0)
+      m_mask_f_stride_words(0),
+      m_counts_stride_elems(0),
+      m_dirty_stride_elems(0)
 
 
 {
@@ -270,8 +274,6 @@ RXMesh::~RXMesh()
                           cudaMemcpyDeviceToHost));
 
     for (uint32_t p = 0; p < get_num_patches(); ++p) {
-        GPU_FREE(m_h_patches_info[p].num_faces);
-        GPU_FREE(m_h_patches_info[p].dirty);
         m_h_patches_info[p].lp_v.free();
         m_h_patches_info[p].lp_e.free();
         m_h_patches_info[p].lp_f.free();
@@ -286,6 +288,8 @@ RXMesh::~RXMesh()
     GPU_FREE(m_d_owned_mask_v_all);
     GPU_FREE(m_d_owned_mask_e_all);
     GPU_FREE(m_d_owned_mask_f_all);
+    GPU_FREE(m_d_counts_all);
+    GPU_FREE(m_d_dirty_all);
     GPU_FREE(m_d_patches_info);
 
     free(m_h_patches_info);
@@ -1104,6 +1108,8 @@ void RXMesh::build_device()
 
     m_ev_stride_elems = static_cast<uint32_t>(p_edges_capacity) * 2u;
     m_fe_stride_elems = static_cast<uint32_t>(p_faces_capacity) * 3u;
+    m_counts_stride_elems = 3u;
+    m_dirty_stride_elems  = 1u;
 
     m_mask_v_stride_words = static_cast<uint32_t>(
         detail::mask_num_bytes(p_vertices_capacity) / sizeof(uint32_t));
@@ -1139,6 +1145,12 @@ void RXMesh::build_device()
     CUDA_ERROR(
         cudaMalloc((void**)&m_d_owned_mask_f_all,
                    max_num_patches * m_mask_f_stride_words * sizeof(uint32_t)));
+    CUDA_ERROR(cudaMalloc((void**)&m_d_counts_all,
+                          max_num_patches * m_counts_stride_elems *
+                              sizeof(uint16_t)));
+    CUDA_ERROR(cudaMalloc((void**)&m_d_dirty_all,
+                          max_num_patches * m_dirty_stride_elems *
+                              sizeof(int)));
     m_timers.stop("cudaMalloc");
 
 
@@ -1231,11 +1243,8 @@ void RXMesh::build_device_single_patch(const uint32_t patch_slot_index,
     h_patch_info.should_slice      = false;
 
 
-    uint16_t* d_counts;
-
-    m_timers.start("cudaMalloc");
-    CUDA_ERROR(cudaMalloc((void**)&d_counts, 6 * sizeof(uint16_t)));
-    m_timers.stop("cudaMalloc");
+    uint16_t* d_counts =
+        m_d_counts_all + patch_slot_index * m_counts_stride_elems;
 
 
     PatchInfo d_patch;
@@ -1298,9 +1307,7 @@ void RXMesh::build_device_single_patch(const uint32_t patch_slot_index,
         m_timers.stop("cudaMemcpy");
     }
 
-    m_timers.start("cudaMalloc");
-    CUDA_ERROR(cudaMalloc((void**)&d_patch.dirty, sizeof(int)));
-    m_timers.stop("cudaMalloc");
+    d_patch.dirty = m_d_dirty_all + patch_slot_index * m_dirty_stride_elems;
 
 
     CUDA_ERROR(cudaMemset(d_patch.dirty, 0, sizeof(int)));

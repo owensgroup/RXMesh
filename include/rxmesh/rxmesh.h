@@ -638,12 +638,16 @@ class RXMesh
     uint32_t* m_d_owned_mask_v_all;
     uint32_t* m_d_owned_mask_e_all;
     uint32_t* m_d_owned_mask_f_all;
+    uint16_t* m_d_counts_all;
+    int*      m_d_dirty_all;
 
     uint32_t m_ev_stride_elems;
     uint32_t m_fe_stride_elems;
     uint32_t m_mask_v_stride_words;
     uint32_t m_mask_e_stride_words;
     uint32_t m_mask_f_stride_words;
+    uint32_t m_counts_stride_elems;
+    uint32_t m_dirty_stride_elems;
 
     float m_capacity_factor, m_lp_hashtable_load_factor, m_patch_alloc_factor;
 
