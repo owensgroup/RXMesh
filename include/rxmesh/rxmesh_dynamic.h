@@ -614,8 +614,23 @@ class RXMeshDynamic : public RXMeshStatic
     RXMeshDynamic(const RXMeshDynamic&) = delete;
 
     /**
-     * @brief Constructor using path to obj file
-     * @param file_path path to an obj file
+     * @brief Constructor that initializes the mesh from an OBJ file.
+     * @param file_path Path to the input OBJ file.
+     * @param patcher_file (optional) Path to a patch file previously generated
+     * using save(). If provided, it restores the exact same patch assignment.
+     * This is mainly useful for debugging and reproducibility.
+     * @param patch_size (optional) Target size of each patch. This is used as
+     * input to the k-means clustering algorithm that partitions the mesh.
+     * @param capacity_factor (optional) Controls how much extra space each
+     * patch can hold. The maximum number of vertices/edges/faces per patch is:
+     * capacity_factor x (current number of elements in the patch). This allows
+     * patches to grow before they need to be split.
+     * @param patch_alloc_factor (optional) Controls the total number of patches
+     * that can be allocated. The maximum number of patches is:
+     * patch_alloc_factor x (initial number of patches from k-means)
+     * @param lp_hashtable_load_factor (optional)
+     * Load factor for the hash table used to store mappings from
+     * mesh elements (not owned by a patch) to their (patch_id, local_id).
      */
     explicit RXMeshDynamic(const std::string file_path,
                            const std::string patcher_file             = "",
@@ -624,9 +639,25 @@ class RXMeshDynamic : public RXMeshStatic
                            const float       patch_alloc_factor       = 5.0,
                            const float       lp_hashtable_load_factor = 0.5);
 
+
     /**
-     * @brief Constructor using triangles and vertices
+     * @brief  Constructor using triangles and vertices
      * @param fv Face incident vertices as read from an obj file
+     * @param patcher_file (optional) Path to a patch file previously generated
+     * using save(). If provided, it restores the exact same patch assignment.
+     * This is mainly useful for debugging and reproducibility.
+     * @param patch_size (optional) Target size of each patch. This is used as
+     * input to the k-means clustering algorithm that partitions the mesh.
+     * @param capacity_factor (optional) Controls how much extra space each
+     * patch can hold. The maximum number of vertices/edges/faces per patch is:
+     * capacity_factor x (current number of elements in the patch). This allows
+     * patches to grow before they need to be split.
+     * @param patch_alloc_factor (optional) Controls the total number of patches
+     * that can be allocated. The maximum number of patches is:
+     * patch_alloc_factor x (initial number of patches from k-means)
+     * @param lp_hashtable_load_factor (optional)
+     * Load factor for the hash table used to store mappings from
+     * mesh elements (not owned by a patch) to their (patch_id, local_id).
      */
     explicit RXMeshDynamic(std::vector<std::vector<uint32_t>>& fv,
                            const std::string patcher_file             = "",
