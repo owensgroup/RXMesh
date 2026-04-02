@@ -1,5 +1,9 @@
 include_guard(GLOBAL)
 
+if(NOT ${RX_USE_CUDSS})
+    return()
+endif()
+
 function(rxmesh_enable_cudss target)
     if(NOT TARGET "${target}")
         message(FATAL_ERROR "rxmesh_enable_cudss: target '${target}' does not exist")

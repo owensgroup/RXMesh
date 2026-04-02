@@ -96,13 +96,11 @@ target_compile_options(RXMesh PUBLIC
 )
 
 #SuiteSparse
-if(${RX_USE_SUITESPARSE})
-	include("${CMAKE_CURRENT_LIST_DIR}/suitesparse.cmake")
+if(${RX_USE_SUITESPARSE})	
 	target_compile_definitions(RXMesh PUBLIC USE_SUITESPARSE)
 endif()
 target_link_libraries(RXMesh PUBLIC glm::glm)
-if(${RX_USE_POLYSCOPE})
-    include("${CMAKE_CURRENT_LIST_DIR}/polyscope.cmake")
+if(${RX_USE_POLYSCOPE})    
 	target_link_libraries(RXMesh PUBLIC polyscope)
 endif()
 
@@ -118,7 +116,6 @@ endif()
 
 # cuDSS
 if(${RX_USE_CUDSS})
-    include("${CMAKE_CURRENT_LIST_DIR}/cuDSS.cmake")
     rxmesh_enable_cudss(RXMesh)
 endif()
 
