@@ -61,7 +61,7 @@ __global__ static void __launch_bounds__(blockThreads)
             if (v0 == v1 || v0 == v2 || v0 == v3 || v1 == v2 || v1 == v3 ||
                 v2 == v3) {
                 return;
-            }           
+            }
 
             constexpr T PII = 3.14159265358979323f;
 
@@ -118,7 +118,7 @@ __global__ static void __launch_bounds__(blockThreads)
 
                 if (alpha0 + beta0 < PII - std::numeric_limits<T>::epsilon() &&
                     alpha1 + beta1 < PII - std::numeric_limits<T>::epsilon()) {
-                    // cavity.create(eh);                    
+                    // cavity.create(eh);
                     e_flip.set(eh.local_id(), true);
                 }
             }
@@ -152,7 +152,7 @@ __global__ static void __launch_bounds__(blockThreads)
 
     // 3. create cavity for the surviving edges
     for_each_edge(cavity.patch_info(), [&](EdgeHandle eh) {
-        if (e_flip(eh.local_id())) {            
+        if (e_flip(eh.local_id())) {
             cavity.create(eh);
         }
     });
@@ -323,7 +323,7 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx,
 
     int id = 1;
 
-    
+
     auto render = [&]() {
 #if USE_POLYSCOPE
         polyscope::removeAllStructures();
@@ -342,7 +342,8 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx,
         oss << std::setw(3) << std::setfill('0') << id;
 
         id++;
-        polyscope::screenshot("flip_" + oss.str() + ".png");
+        polyscope::screenshot(std::string("flip_" + oss.str() + ".png"),
+                              polyscope::ScreenshotOptions());
 #endif
     };
 
@@ -371,7 +372,7 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx,
             rx.cleanup();
             timers.stop("Cleanup");
         }
-        //render();
+        // render();
         CUDA_ERROR(cudaMemcpy(
             &h_flipped, d_flipped, sizeof(int), cudaMemcpyDeviceToHost));
         // break;
@@ -409,15 +410,21 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx,
     coords->move(DEVICE, HOST);
 
     if (num_vertices != rx.get_num_vertices()) {
-        RXMESH_ERROR("Vertex count mismatch: expected {}, got {}", num_vertices, rx.get_num_vertices());
+        RXMESH_ERROR("Vertex count mismatch: expected {}, got {}",
+                     num_vertices,
+                     rx.get_num_vertices());
         return;
     }
     if (num_edges != rx.get_num_edges()) {
-        RXMESH_ERROR("Edge count mismatch: expected {}, got {}", num_edges, rx.get_num_edges());
+        RXMESH_ERROR("Edge count mismatch: expected {}, got {}",
+                     num_edges,
+                     rx.get_num_edges());
         return;
     }
     if (num_faces != rx.get_num_faces()) {
-        RXMESH_ERROR("Face count mismatch: expected {}, got {}", num_faces, rx.get_num_faces());
+        RXMESH_ERROR("Face count mismatch: expected {}, got {}",
+                     num_faces,
+                     rx.get_num_faces());
         return;
     }
 
@@ -430,13 +437,17 @@ inline void delaunay_rxmesh(rxmesh::RXMeshDynamic& rx,
     if (with_verify) {
         rx.export_obj(STRINGIFY(OUTPUT_DIR) "temp.obj", *coords);
         TriMesh tri_mesh;
-        if (!OpenMesh::IO::read_mesh(tri_mesh, STRINGIFY(OUTPUT_DIR) "temp.obj")) {
-            RXMESH_ERROR("Failed to read mesh from {}", STRINGIFY(OUTPUT_DIR) "temp.obj");
+        if (!OpenMesh::IO::read_mesh(tri_mesh,
+                                     STRINGIFY(OUTPUT_DIR) "temp.obj")) {
+            RXMESH_ERROR("Failed to read mesh from {}",
+                         STRINGIFY(OUTPUT_DIR) "temp.obj");
             return;
         }
         int num_non_del = count_non_delaunay_edges(tri_mesh);
         if (num_non_del != 0) {
-            RXMESH_ERROR("Mesh verification failed: found {} non-Delaunay edges", num_non_del);
+            RXMESH_ERROR(
+                "Mesh verification failed: found {} non-Delaunay edges",
+                num_non_del);
             return;
         }
         report.add_member("after_num_non_delaunay_edges", num_non_del);

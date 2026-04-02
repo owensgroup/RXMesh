@@ -193,7 +193,9 @@ void screen_shot(rxmesh::RXMeshDynamic&      rx,
     ps_mesh->setEnabled(true);
     rx.render_face_patch()->setEnabled(true);
 
-    polyscope::screenshot(app + "_" + std::to_string(ps_iddd) + ".png");
+    polyscope::screenshot(
+        std::string(app + "_" + std::to_string(ps_iddd) + ".png"),
+        polyscope::ScreenshotOptions());
     ps_iddd++;
 
     // polyscope::show();
