@@ -136,41 +136,6 @@ class RXMeshStatic : public RXMesh
                                          bool with_edge_patch   = true,
                                          bool with_face_patch   = true);
 
-    /**
-     * @brief add the face's patch and local ID scalar quantities to a polyscope
-     * instance (polyscope_mesh) for specific patch. polyscope_mesh should be
-     * the one returned from render_patch call with the same input patch (p)
-     * @param p patch id for which the face patch will be added
-     * @param polyscope_mesh the SurfaceMesh pointer returned by calling
-     * render_patch with the same input patch
-     */
-    void render_face_patch_and_local_id(const uint32_t          p,
-                                        polyscope::SurfaceMesh* polyscope_mesh);
-
-    /**
-     * @brief add the edge's patch and local ID scalar quantities to a polyscope
-     * instance (polyscope_mesh) for specific patch. polyscope_mesh should be
-     * the one returned from render_patch call with the same input patch (p)
-     * @param p patch id for which the face patch will be added
-     * @param polyscope_mesh the SurfaceMesh pointer returned by calling
-     * render_patch with the same input patch
-     */
-    void render_edge_patch_and_local_id(const uint32_t          p,
-                                        polyscope::SurfaceMesh* polyscope_mesh);
-
-    /**
-     * @brief add the vertex's patch and local ID scalar quantities to a
-     * polyscope instance (polyscope_mesh) for specific patch. polyscope_mesh
-     * should be the one returned from render_patch call with the same input
-     * patch (p)
-     * @param p patch id for which the face patch will be added
-     * @param polyscope_mesh the SurfaceMesh pointer returned by calling
-     * render_patch with the same input patch
-     */
-    void render_vertex_patch_and_local_id(
-        const uint32_t          p,
-        polyscope::SurfaceMesh* polyscope_mesh);
-
 
     /**
      * @brief add the face's patch scalar quantity to the polyscope instance
@@ -1193,18 +1158,58 @@ class RXMeshStatic : public RXMesh
     }
 
 #if USE_POLYSCOPE
+    /**
+     * @brief add the face's patch and local ID scalar quantities to a polyscope
+     * instance (polyscope_mesh) for specific patch. polyscope_mesh should be
+     * the one returned from render_patch call with the same input patch (p)
+     * @param p patch id for which the face patch will be added
+     * @param polyscope_mesh the SurfaceMesh pointer returned by calling
+     * render_patch with the same input patch
+     */
+    void render_face_patch_and_local_id(const uint32_t          p,
+                                        polyscope::SurfaceMesh* polyscope_mesh);
+
+    /**
+     * @brief add the edge's patch and local ID scalar quantities to a polyscope
+     * instance (polyscope_mesh) for specific patch. polyscope_mesh should be
+     * the one returned from render_patch call with the same input patch (p)
+     * @param p patch id for which the face patch will be added
+     * @param polyscope_mesh the SurfaceMesh pointer returned by calling
+     * render_patch with the same input patch
+     */
+    void render_edge_patch_and_local_id(
+        const std::vector<std::array<uint32_t, 3>>& fv,
+        const uint32_t                              p,
+        polyscope::SurfaceMesh*                     polyscope_mesh);
+
+    /**
+     * @brief add the vertex's patch and local ID scalar quantities to a
+     * polyscope instance (polyscope_mesh) for specific patch. polyscope_mesh
+     * should be the one returned from render_patch call with the same input
+     * patch (p)
+     * @param p patch id for which the face patch will be added
+     * @param polyscope_mesh the SurfaceMesh pointer returned by calling
+     * render_patch with the same input patch
+     */
+    void render_vertex_patch_and_local_id(
+        const uint32_t          p,
+        polyscope::SurfaceMesh* polyscope_mesh);
+
     void add_patch_to_polyscope(const uint32_t                        p,
                                 std::vector<std::array<uint32_t, 3>>& fv,
                                 bool with_ribbon);
 
 
     void update_polyscope_edge_map();
+    void update_polyscope_edge_permutation(
+        const std::vector<std::array<uint32_t, 3>>& fv);
 
     void register_polyscope();
 
     std::string             m_polyscope_mesh_name;
     polyscope::SurfaceMesh* m_polyscope_mesh;
     EdgeMapT                m_polyscope_edges_map;
+    std::vector<uint32_t>   m_polyscope_edge_permute;
 #endif
 
    public:

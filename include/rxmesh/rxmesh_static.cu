@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/rxmesh_static.inl"
@@ -32,6 +34,7 @@ RXMeshStatic::RXMeshStatic(const std::string file_path,
 
     std::string name = extract_file_name(file_path);
 #if USE_POLYSCOPE
+    m_polyscope_edge_permute.reserve(this->get_num_edges());
     name = polyscope::guessNiceNameFromPath(file_path);
 #endif
     add_vertex_coordinates(vertices, name);
@@ -183,14 +186,14 @@ polyscope::SurfaceMesh* RXMeshStatic::render_patch(const uint32_t p,
     auto ps = polyscope::registerSurfaceMesh(
         m_polyscope_mesh_name + "_patch_" + std::to_string(p),
         *m_input_vertex_coordinates,
-        fv,
-        m_polyscope_edges_map);
+        fv);
+
 
     if (with_vertex_patch) {
         render_vertex_patch_and_local_id(p, ps);
     }
     if (with_edge_patch) {
-        render_edge_patch_and_local_id(p, ps);
+        render_edge_patch_and_local_id(fv, p, ps);
     }
     if (with_face_patch) {
         render_face_patch_and_local_id(p, ps);
@@ -235,9 +238,14 @@ void RXMeshStatic::render_face_patch_and_local_id(
 }
 
 void RXMeshStatic::render_edge_patch_and_local_id(
-    const uint32_t          p,
-    polyscope::SurfaceMesh* polyscope_mesh)
+    const std::vector<std::array<uint32_t, 3>>& fv,
+    const uint32_t                              p,
+    polyscope::SurfaceMesh*                     polyscope_mesh)
 {
+    update_polyscope_edge_permutation(fv);
+
+    polyscope_mesh->setEdgePermutation(m_polyscope_edge_permute);
+
     std::string      p_name = "rx:EPatch" + std::to_string(p);
     std::string      l_name = "rx:ELocal" + std::to_string(p);
     std::vector<int> patch_id(get_num_edges(), -(int(p) + 1));
@@ -247,6 +255,12 @@ void RXMeshStatic::render_edge_patch_and_local_id(
         patch_id[linear_id(eh)] = eh.patch_id();
         local_id[linear_id(eh)] = eh.local_id();
     });
+
+    uint32_t max_edge_id = *std::max_element(m_polyscope_edge_permute.begin(),
+                                             m_polyscope_edge_permute.end());
+
+    patch_id.resize(max_edge_id + 1);
+    local_id.resize(max_edge_id + 1);
 
     std::pair<double, double> p_range(0.0, double(get_num_patches() - 1));
     polyscope_mesh->addEdgeScalarQuantity(p_name, patch_id)
@@ -427,10 +441,61 @@ void RXMeshStatic::update_polyscope_edge_map()
     }
 }
 
+void RXMeshStatic::update_polyscope_edge_permutation(
+    const std::vector<std::array<uint32_t, 3>>& fv)
+{
+    m_polyscope_edge_permute.clear();
+
+    // m_polyscope_edge_permute.resize(this->get_num_edges());
+    // int eid = 0;
+
+    std::vector<bool> visited(this->get_num_edges(), false);
+
+    for (const auto& face : fv) {
+        for (uint32_t i = 0; i < 3; ++i) {
+            const uint32_t a = face[i];
+            const uint32_t b = face[(i + 1) % 3];
+
+            auto key = detail::edge_key(a, b);
+
+            auto e_iter = m_polyscope_edges_map.find(key);
+
+            if (e_iter == m_polyscope_edges_map.end()) {
+                RXMESH_ERROR(
+                    "Something wrong happens during constructing edge map for "
+                    "polyscope. Missing edge key ({}, {}).",
+                    a,
+                    b);
+                return;
+            }
+
+            const uint32_t id = e_iter->second;
+
+            if (id >= this->get_num_edges()) {
+                RXMESH_ERROR(
+                    "Something wrong happens during constructing edge map for "
+                    "polyscope. Edge id {} out of bounds [0, {}).",
+                    id,
+                    this->get_num_edges());
+                return;
+            }
+
+            if (!visited[id]) {
+                visited[id] = true;
+                m_polyscope_edge_permute.push_back(id);
+                // m_polyscope_edge_permute[id] = eid;
+                // eid++;
+            }
+        }
+    }
+}
+
 void RXMeshStatic::register_polyscope()
 {
+    // populate m_polyscope_edges_map
     update_polyscope_edge_map();
 
+    // populate fv
     std::vector<std::array<uint32_t, 3>> fv;
     fv.reserve(get_num_faces());
 
@@ -438,11 +503,13 @@ void RXMeshStatic::register_polyscope()
         add_patch_to_polyscope(p, fv, false);
     }
 
-    m_polyscope_mesh =
-        polyscope::registerSurfaceMesh(m_polyscope_mesh_name,
-                                       *m_input_vertex_coordinates,
-                                       fv,
-                                       m_polyscope_edges_map);
+    //  populate m_polyscope_edge_permute
+    update_polyscope_edge_permutation(fv);
+
+    m_polyscope_mesh = polyscope::registerSurfaceMesh(
+        m_polyscope_mesh_name, *m_input_vertex_coordinates, fv);
+
+    m_polyscope_mesh->setEdgePermutation(m_polyscope_edge_permute);
 }
 #endif
 

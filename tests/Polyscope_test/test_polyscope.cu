@@ -9,7 +9,8 @@ int main(int argc, char** argv)
     polyscope::view::upDir = polyscope::UpDir::ZUp;
 
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj");
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "dragon.obj",
+                    STRINGIFY(INPUT_DIR) "dragon_patchesss");
 
 
     // Vertex Color
@@ -48,10 +49,30 @@ int main(int argc, char** argv)
 
     face_normals.move(DEVICE, HOST);
 
+    // Edge attibute
+    auto edge_dist = *rx.add_edge_attribute<float>("edge_dist", 1);
+    edge_dist.reset(-1.0f, HOST);
+
+    rx.run_query_kernel<Op::EV, 256>(
+        [=] __device__(EdgeHandle eh, VertexIterator & ev) mutable {
+            const vec3<float> c0 = vertex_pos.to_glm<3>(ev[0]);
+            const vec3<float> c1 = vertex_pos.to_glm<3>(ev[1]);
+
+            vec3<float> d = (c0 + c1) / 2.f;
+
+            edge_dist(eh) = glm::l2Norm(d);
+        });
+
+    edge_dist.move(DEVICE, HOST);
+
+
     auto ps_mesh = rx.get_polyscope_mesh();
     ps_mesh->setEdgeWidth(1.0);
     ps_mesh->addVertexColorQuantity("vColor", vertex_color);
     ps_mesh->addFaceVectorQuantity("fNormal", face_normals);
+    ps_mesh->addEdgeScalarQuantity("edge_dist", edge_dist);
+
+    rx.render_patch(1);
 
     polyscope::show();
 
