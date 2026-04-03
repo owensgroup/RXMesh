@@ -34,7 +34,7 @@ struct PhysicsParams
     T                time_step      = 0.01;  // h
     T                stiffness_coef = 4e4;
     T                tol            = 0.01;
-    T                dhat           = 0.2;
+    T                dhat           = 0.25;
     T                kappa          = 1e5;
     T                bending_stiff  = 1e8;  // k_b
     std::vector<int> export_steps;          // List of step IDs to export as OBJ
@@ -621,16 +621,16 @@ int main(int argc, char** argv)
             printf("Options:\n");
             printf("  --config <file>         Load scene from configuration file\n");
             printf("  --density <val>         Density (default: 1000)\n");
-            printf("  --cg_max_iter <val>     CG max num of iterations\n");
-            printf("  --newton_max_iter <val> Newton max num of iterations\n");
+            printf("  --cg_max_iter <val>     CG max num of iterations (default: 1000)\n");
+            printf("  --newton_max_iter <val> Newton max num of iterations (default: 10)\n");
             printf("  --young <val>           Young's modulus (default: 1e5)\n");
             printf("  --poisson <val>         Poisson ratio (default: 0.4)\n");
             printf("  --timestep <val>        Time step (default: 0.01)\n");            
             printf("  --stiffness <val>       Stiffness coefficient (default: 4e4)\n");
             printf("  --tol <val>             Tolerance (default: 0.01)\n");
-            printf("  --dhat <val>            Contact distance threshold (default: 0.1)\n");
+            printf("  --dhat <val>            Contact distance threshold (default: 0.25)\n");
             printf("  --kappa <val>           Contact stiffness (default: 1e5)\n");
-            printf("  --bending <val>         Bending stiffness (default: 1e3)\n");
+            printf("  --bending <val>         Bending stiffness (default: 1e8)\n");
             printf("  --steps <val>           Number of simulation steps (default: 5)\n");
             printf("  --help, -h              Show this help message\n");
             // clang-format on            
