@@ -19,7 +19,7 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx,
     uint32_t num_vertices = rx.get_num_vertices();
 
     auto coords = rx.get_input_vertex_coordinates();
-    //rx.export_obj("mcf_initial.obj", *rx.get_input_vertex_coordinates());
+    // rx.export_obj("mcf_initial.obj", *rx.get_input_vertex_coordinates());
 
     SparseMatrix<float> A_mat(rx);
     DenseMatrix<float>  B_mat(rx, num_vertices, 3, LOCATION_ALL);
@@ -133,10 +133,12 @@ void mcf_gmg(rxmesh::RXMeshStatic& rx,
         solver.render_hierarchy();
         solver.render_laplacian();
     }
-    polyscope::registerSurfaceMesh("old mesh",
-                                   rx.get_polyscope_mesh()->vertices,
-                                   rx.get_polyscope_mesh()->faces);
-    rx.get_polyscope_mesh()->updateVertexPositions(*coords);
+    auto* ps = rx.get_polyscope_mesh();
+    polyscope::registerSurfaceMesh(
+        "old mesh",
+        ps->vertexPositions.data,
+        std::make_tuple(ps->faceIndsEntries.data(), ps->nFaces(), 3));
+    ps->updateVertexPositions(*coords);
 
     polyscope::show();
 #endif

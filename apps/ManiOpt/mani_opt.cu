@@ -59,9 +59,14 @@ void add_mesh_to_polyscope(RXMeshStatic&       rx,
                            std::string         name)
 {
 #ifdef USE_POLYSCOPE
+    auto* ps = rx.get_polyscope_mesh();
+
     if (v.get_num_attributes() == 3) {
+
         auto ps_mesh = polyscope::registerSurfaceMesh(
-            name, v, rx.get_polyscope_mesh()->faces);
+            name,
+            v,
+            std::make_tuple(ps->faceIndsEntries.data(), ps->nFaces(), 3));
         ps_mesh->addVertexScalarQuantity("MeanCurv", curv);
         ps_mesh->setEnabled(false);
     } else {
@@ -74,7 +79,9 @@ void add_mesh_to_polyscope(RXMeshStatic&       rx,
         });
 
         auto ps_mesh = polyscope::registerSurfaceMesh(
-            name, v3, rx.get_polyscope_mesh()->faces);
+            name,
+            v3,
+            std::make_tuple(ps->faceIndsEntries.data(), ps->nFaces(), 3));
 
         ps_mesh->addVertexScalarQuantity("MeanCurv", curv);
         ps_mesh->setEnabled(false);

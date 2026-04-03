@@ -37,8 +37,12 @@ void add_mesh_to_polyscope(RXMeshStatic&       rx,
                            std::string         name)
 {
 #if USE_POLYSCOPE
+    auto* ps = rx.get_polyscope_mesh();
     if (v.get_num_attributes() == 3) {
-        polyscope::registerSurfaceMesh(name, v, rx.get_polyscope_mesh()->faces);
+        polyscope::registerSurfaceMesh(
+            name,
+            v,
+            std::make_tuple(ps->faceIndsEntries.data(), ps->nFaces(), 3));
     } else {
         auto v3 = *rx.add_vertex_attribute<T>(name, 3);
 
@@ -49,7 +53,9 @@ void add_mesh_to_polyscope(RXMeshStatic&       rx,
         });
 
         polyscope::registerSurfaceMesh(
-            name, v3, rx.get_polyscope_mesh()->faces);
+            name,
+            v3,
+            std::make_tuple(ps->faceIndsEntries.data(), ps->nFaces(), 3));
 
         rx.remove_attribute(name);
     }

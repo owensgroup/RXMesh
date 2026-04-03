@@ -59,13 +59,13 @@ void manual(RXMeshStatic& rx)
                             pos(uh, 0), pos(uh, 1), pos(uh, 2));
                         Eigen::Vector3<T> xw(
                             pos(wh, 0), pos(wh, 1), pos(wh, 2));
-                        
+
                         const Eigen::Vector3<T> e1 = xu - xv;
                         const Eigen::Vector3<T> e2 = xw - xv;
 
-                        const Eigen::Vector3<T> n  = e1.cross(e2);
+                        const Eigen::Vector3<T> n = e1.cross(e2);
 
-                        const T                 nn = n.norm();
+                        const T nn = n.norm();
 
                         if (nn <= eps) {
                             continue;
@@ -73,7 +73,7 @@ void manual(RXMeshStatic& rx)
 
                         const Eigen::Vector3<T> nhat = n / nn;
 
-                        
+
                         gv += T(0.5) * (xu - xw).cross(nhat);
                     }
 
@@ -120,7 +120,10 @@ void manual(RXMeshStatic& rx)
 
 #if USE_POLYSCOPE
     pos.move(DEVICE, HOST);
+    auto* ps_mesh = rx.get_polyscope_mesh();
     polyscope::registerSurfaceMesh(
-        "Manual", pos, rx.get_polyscope_mesh()->faces);
+        "Manual",
+        pos,
+        std::make_tuple(ps_mesh->faceIndsEntries.data(), ps_mesh->nFaces(), 3));
 #endif
 }

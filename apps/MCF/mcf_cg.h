@@ -111,10 +111,12 @@ void run_cg(rxmesh::RXMeshStatic& rx, bool pcg = false)
     coords->from_matrix(&X_mat);
 
 #if USE_POLYSCOPE
-    polyscope::registerSurfaceMesh("old mesh",
-                                   rx.get_polyscope_mesh()->vertices,
-                                   rx.get_polyscope_mesh()->faces);
-    rx.get_polyscope_mesh()->updateVertexPositions(*coords);
+    auto* ps = rx.get_polyscope_mesh();
+    polyscope::registerSurfaceMesh(
+        "old mesh",
+        ps->vertexPositions.data,
+        std::make_tuple(ps->faceIndsEntries.data(), ps->nFaces(), 3));
+    ps->updateVertexPositions(*coords);
     polyscope::show();
 #endif
 

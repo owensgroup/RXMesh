@@ -23,9 +23,9 @@ void run_cg_mat_free(rxmesh::RXMeshStatic& rx,
     report.device();
     report.system();
     report.model_data(Arg.obj_file_name, rx);
-    if (pcg){
+    if (pcg) {
         report.add_member("method", std::string("PCG_MAT_FREE"));
-    } else{
+    } else {
         report.add_member("method", std::string("CG_MAT_FREE"));
     }
     report.add_member("application", std::string("MCF"));
@@ -37,7 +37,8 @@ void run_cg_mat_free(rxmesh::RXMeshStatic& rx,
     report.add_member("blockThreads", blockThreads);
 
     if (!rx.is_closed()) {
-        RXMESH_ERROR("mcf_rxmesh only takes watertight/closed mesh without boundaries");
+        RXMESH_ERROR(
+            "mcf_rxmesh only takes watertight/closed mesh without boundaries");
         return;
     }
 
@@ -113,10 +114,12 @@ void run_cg_mat_free(rxmesh::RXMeshStatic& rx,
     // output to obj
     // rxmesh.export_obj("mcf_rxmesh.obj", *X);
 #if USE_POLYSCOPE
-    polyscope::registerSurfaceMesh("old mesh",
-                                   rx.get_polyscope_mesh()->vertices,
-                                   rx.get_polyscope_mesh()->faces);
-    rx.get_polyscope_mesh()->updateVertexPositions(*X);
+    auto* ps = rx.get_polyscope_mesh();
+    polyscope::registerSurfaceMesh(
+        "old mesh",
+        ps->vertexPositions.data,
+        std::make_tuple(ps->faceIndsEntries.data(), ps->nFaces(), 3));
+    ps->updateVertexPositions(*X);
 
     polyscope::show();
 #endif
