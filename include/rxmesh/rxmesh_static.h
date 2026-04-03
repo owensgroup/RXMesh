@@ -107,7 +107,7 @@ class RXMeshStatic : public RXMesh
      * are constructing RXMeshStatic with the constructor that takes the path to
      * mesh file
      */
-    void add_vertex_coordinates(std::vector<std::vector<float>>& vertices,
+    void add_vertex_coordinates(std::vector<std::vector<rx_coord_t>>& vertices,
                                 std::string mesh_name = "");
 
     virtual ~RXMeshStatic() = default;
@@ -812,7 +812,7 @@ class RXMeshStatic : public RXMesh
     /**
      * @brief return a shared pointer the input vertex position
      */
-    std::shared_ptr<VertexAttribute<float>> get_input_vertex_coordinates();
+    std::shared_ptr<VertexAttribute<rx_coord_t>> get_input_vertex_coordinates();
 
     /**
      * @brief return the number of regions (labels) in the mesh.
@@ -1218,8 +1218,8 @@ class RXMeshStatic : public RXMesh
 
 
    protected:
-    std::shared_ptr<AttributeContainer>     m_attr_container;
-    std::shared_ptr<VertexAttribute<float>> m_input_vertex_coordinates;
+    std::shared_ptr<AttributeContainer>          m_attr_container;
+    std::shared_ptr<VertexAttribute<rx_coord_t>> m_input_vertex_coordinates;
 
     std::shared_ptr<FaceAttribute<int>>   m_face_label;
     std::shared_ptr<EdgeAttribute<int>>   m_edge_label;

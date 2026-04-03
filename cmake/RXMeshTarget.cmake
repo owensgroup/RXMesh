@@ -54,6 +54,10 @@ if(${RX_USE_POLYSCOPE})
     target_compile_definitions(RXMesh PUBLIC USE_POLYSCOPE)
 endif()
 
+if(${RX_USE_DOUBLE})
+    target_compile_definitions(RXMesh PUBLIC RXMESH_USE_DOUBLE)
+endif()
+
 target_include_directories(RXMesh
     PUBLIC "${RXMESH_SOURCE_DIR}/include"
     PUBLIC "${rapidjson_SOURCE_DIR}/include"

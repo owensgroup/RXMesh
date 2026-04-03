@@ -7,6 +7,12 @@
 #include <glm/fwd.hpp>
 #include <glm/glm.hpp>
 
+#ifdef RXMESH_USE_DOUBLE
+using rx_coord_t = double;
+#else
+using rx_coord_t = float;
+#endif
+
 namespace rxmesh {
 
 template <typename T, int N>

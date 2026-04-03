@@ -15,8 +15,8 @@ RXMeshStatic::RXMeshStatic(const std::string file_path,
 {
     m_num_regions = 1;
 
-    std::vector<std::vector<uint32_t>> fv;
-    std::vector<std::vector<float>>    vertices;
+    std::vector<std::vector<uint32_t>>   fv;
+    std::vector<std::vector<rx_coord_t>> vertices;
     if (!import_obj(file_path, vertices, fv)) {
         RXMESH_ERROR(
             "RXMeshStatic::RXMeshStatic could not read the input file {}",
@@ -63,8 +63,8 @@ RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
 {
     m_num_regions = static_cast<int>(files_path.size());
 
-    std::vector<std::vector<uint32_t>> fv;
-    std::vector<std::vector<float>>    vertices;
+    std::vector<std::vector<uint32_t>>   fv;
+    std::vector<std::vector<rx_coord_t>> vertices;
 
     std::vector<int> region_num_faces;
     std::vector<int> region_num_vertices;
@@ -145,15 +145,14 @@ RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
     m_polyscope_mesh->addVertexScalarQuantity("rx:VLabel", *m_vertex_label);
 #endif
 }
-
 void RXMeshStatic::add_vertex_coordinates(
-    std::vector<std::vector<float>>& vertices,
-    std::string                      mesh_name)
+    std::vector<std::vector<rx_coord_t>>& vertices,
+    std::string                           mesh_name)
 {
     if (m_input_vertex_coordinates == nullptr) {
 
         m_input_vertex_coordinates =
-            this->add_vertex_attribute<float>(vertices, "rx:vertices");
+            this->add_vertex_attribute<rx_coord_t>(vertices, "rx:vertices");
 
 #if USE_POLYSCOPE
         polyscope::init();
@@ -531,7 +530,7 @@ void RXMeshStatic::remove_attribute(const std::string& name)
     m_attr_container->remove(name.c_str());
 }
 
-std::shared_ptr<VertexAttribute<float>>
+std::shared_ptr<VertexAttribute<rx_coord_t>>
 RXMeshStatic::get_input_vertex_coordinates()
 {
     if (!m_input_vertex_coordinates) {
