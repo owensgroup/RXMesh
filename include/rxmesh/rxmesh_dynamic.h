@@ -775,11 +775,14 @@ class RXMeshDynamic : public RXMeshStatic
 
         int max_shmem_bytes = 89 * 1024;
 
-        CUDA_ERROR(
-            cudaFuncSetAttribute((void*)detail::slice_patches<block_size>,
-                                 cudaFuncAttributeMaxDynamicSharedMemorySize,
-                                 max_shmem_bytes));
-
+        CUDA_ERROR(cudaFuncSetAttribute(
+            (void*)detail::slice_patches<block_size, AttributesT...>,
+            cudaFuncAttributeMaxDynamicSharedMemorySize,
+            max_shmem_bytes));
+        {
+            CUDA_ERROR(cudaDeviceSynchronize());
+            CUDA_ERROR(cudaGetLastError());
+        }
 
         const uint32_t grid_size = get_max_num_patches();
 
@@ -826,13 +829,14 @@ class RXMeshDynamic : public RXMeshStatic
         uint32_t num_reg_per_thread;
         size_t   local_mem_per_thread;
 
-        check_shared_memory(dyn_shmem,
-                            smem_bytes_static,
-                            num_reg_per_thread,
-                            local_mem_per_thread,
-                            block_size,
-                            (void*)detail::slice_patches<block_size>,
-                            false);
+        check_shared_memory(
+            dyn_shmem,
+            smem_bytes_static,
+            num_reg_per_thread,
+            local_mem_per_thread,
+            block_size,
+            (void*)detail::slice_patches<block_size, AttributesT...>,
+            false);
 
         detail::slice_patches<block_size><<<grid_size, block_size, dyn_shmem>>>(
             this->m_rxmesh_context, get_max_num_patches(), attributes...);
