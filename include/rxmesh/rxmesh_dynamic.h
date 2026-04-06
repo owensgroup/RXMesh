@@ -773,12 +773,8 @@ class RXMeshDynamic : public RXMeshStatic
 
         constexpr uint32_t block_size = 256;
 
-        int max_shmem_bytes = 89 * 1024;
-
-        CUDA_ERROR(cudaFuncSetAttribute(
-            (void*)detail::slice_patches<block_size, AttributesT...>,
-            cudaFuncAttributeMaxDynamicSharedMemorySize,
-            max_shmem_bytes));
+        set_max_dynamic_smem(
+            (void*)detail::slice_patches<block_size, AttributesT...>);
         {
             CUDA_ERROR(cudaDeviceSynchronize());
             CUDA_ERROR(cudaGetLastError());

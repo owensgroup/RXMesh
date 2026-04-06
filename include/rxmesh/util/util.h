@@ -12,6 +12,29 @@
 namespace rxmesh {
 
 /**
+ * @brief Set the maximum dynamic shared memory for a kernel to the device's
+ * opt-in limit minus the kernel's static shared memory usage. This avoids
+ * hardcoded values that can overflow when the same kernel template compiles
+ * with different static shared memory across translation units.
+ */
+inline void set_max_dynamic_smem(const void* kernel)
+{
+    int device_id;
+    CUDA_ERROR(cudaGetDevice(&device_id));
+    cudaDeviceProp devProp;
+    CUDA_ERROR(cudaGetDeviceProperties(&devProp, device_id));
+
+    cudaFuncAttributes func_attr;
+    CUDA_ERROR(cudaFuncGetAttributes(&func_attr, kernel));
+
+    int max_dynamic_smem = static_cast<int>(devProp.sharedMemPerBlockOptin) -
+                           static_cast<int>(func_attr.sharedSizeBytes);
+
+    CUDA_ERROR(cudaFuncSetAttribute(
+        kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, max_dynamic_smem));
+}
+
+/**
  * @brief Print current GPU memory usage
  */
 inline void print_device_memory_usage()
@@ -450,9 +473,9 @@ __host__ __inline__ cudaDataType_t cuda_type()
         RXMESH_ERROR(
             "Unsupported type. Sparse/Dense Matrix in RXMesh can support "
             "different data type but for the solver, only float, double, "
-            "cuComplex, and cuDoubleComplex are supported");    
-        //to silence compiler warning 
-        return CUDA_R_32F;    
+            "cuComplex, and cuDoubleComplex are supported");
+        // to silence compiler warning
+        return CUDA_R_32F;
     }
 }
 }  // namespace rxmesh

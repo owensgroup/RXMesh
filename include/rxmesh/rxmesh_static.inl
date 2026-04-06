@@ -296,11 +296,8 @@ void RXMeshStatic::get_boundary_vertices(VertexAttribute<T>& boundary_v,
 
     constexpr uint32_t blockThreads = 256;
 
-    int max_shmem_bytes = 89 * 1024;
-    CUDA_ERROR(cudaFuncSetAttribute(
-        (void*)detail::identify_boundary_vertices<blockThreads, T>,
-        cudaFuncAttributeMaxDynamicSharedMemorySize,
-        max_shmem_bytes));
+    set_max_dynamic_smem(
+        (void*)detail::identify_boundary_vertices<blockThreads, T>);
 
     LaunchBox<blockThreads> lb;
 

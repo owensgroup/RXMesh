@@ -3090,10 +3090,7 @@ void RXMeshDynamic::update_launch_box(
     const bool                                          is_concurrent,
     std::function<size_t(uint32_t, uint32_t, uint32_t)> user_shmem) const
 {
-    // TODO this has to be customized for different GPU arch
-    int max_shmem_bytes = 89 * 1024;
-    CUDA_ERROR(cudaFuncSetAttribute(
-        kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, max_shmem_bytes));
+    set_max_dynamic_smem(kernel);
 
     launch_box.blocks = this->m_num_patches;
 
