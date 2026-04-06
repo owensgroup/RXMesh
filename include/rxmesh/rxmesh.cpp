@@ -1107,8 +1107,9 @@ void RXMesh::build_device()
     const uint16_t p_faces_capacity    = get_per_patch_max_face_capacity();
 
     m_ev_stride_elems = static_cast<uint32_t>(p_edges_capacity) * 2u;
-    m_fe_stride_elems = static_cast<uint32_t>(p_faces_capacity) * 3u;
-    m_counts_stride_elems = 3u;
+    m_fe_stride_elems =
+        (static_cast<uint32_t>(p_faces_capacity) * 3u + 1u) & ~1u;
+    m_counts_stride_elems = 4u;
     m_dirty_stride_elems  = 1u;
 
     m_mask_v_stride_words = static_cast<uint32_t>(
