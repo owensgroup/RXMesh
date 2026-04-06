@@ -68,6 +68,7 @@ struct DiffScalarProblem
           objective(rx.add_attribute<T, ObjHandleT>("objective", VariableDim))
     {
         grad.reset(0, LOCATION_ALL);
+        objective->reset(static_cast<T>(0), LOCATION_ALL);
 
         if constexpr (WithHessian) {
             if (assmble_hessian) {
