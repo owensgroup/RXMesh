@@ -9,7 +9,7 @@ include(FetchContent)
 # polyscope
 FetchContent_Declare(polyscope
     GIT_REPOSITORY https://github.com/Ahdhn/polyscope.git
-    GIT_TAG        0c3dd68b9851417e6b2b976d347adc3250026122
+    GIT_TAG        d7bcbb426fc550c643736732bd017dd4120b6b61
 )
 FetchContent_MakeAvailable(polyscope)
 
