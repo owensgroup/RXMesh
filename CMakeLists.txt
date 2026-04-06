@@ -13,7 +13,7 @@ project(RXMesh
         VERSION 0.2.1 
         LANGUAGES C CXX CUDA)
 
-message(STATUS "CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
+message(STATUS "RXMesh: CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
 
 
 set(RX_USE_POLYSCOPE "ON" CACHE BOOL "Enable Ployscope for visualization")
@@ -23,12 +23,12 @@ set(RX_USE_SUITESPARSE "OFF" CACHE BOOL "Use SuiteSparse for benchmark")
 set(RX_USE_CUDSS "OFF" CACHE BOOL "Use cuDSS - CUDA Library for Direct Sparse Solvers")
 set(RX_USE_DOUBLE "OFF" CACHE BOOL "Use double precision for reading input vertex coordinates")
 
-message(STATUS "Polyscope is ${RX_USE_POLYSCOPE}")
-message(STATUS "Build RXMesh unit test is ${RX_BUILD_TESTS}")
-message(STATUS "Build RXMesh applications is ${RX_BUILD_APPS}")
-message(STATUS "SuiteSparse is ${RX_USE_SUITESPARSE}")
-message(STATUS "cuDSS is ${RX_USE_CUDSS}")
-message(STATUS "Double precision is ${RX_USE_DOUBLE}")
+message(STATUS "RXMesh: Polyscope is ${RX_USE_POLYSCOPE}")
+message(STATUS "RXMesh: Build RXMesh unit test is ${RX_BUILD_TESTS}")
+message(STATUS "RXMesh: Build RXMesh applications is ${RX_BUILD_APPS}")
+message(STATUS "RXMesh: SuiteSparse is ${RX_USE_SUITESPARSE}")
+message(STATUS "RXMesh: cuDSS is ${RX_USE_CUDSS}")
+message(STATUS "RXMesh: Double precision is ${RX_USE_DOUBLE}")
 
 
 set(CMAKE_CXX_STANDARD 17)

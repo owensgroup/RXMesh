@@ -63,5 +63,8 @@ function(rxmesh_add_app target)
   if(WIN32 AND ${RX_USE_CUDSS} AND TARGET CopyCUDSSDLL)
     add_dependencies(${target} CopyCUDSSDLL)
   endif()
+  
+  message(STATUS "RXMesh: Added ${target} target")
+  
 endfunction()
 

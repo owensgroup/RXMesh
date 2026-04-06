@@ -16,10 +16,10 @@ endif()
 # option(EIGEN_WITH_MKL "Use Eigen with MKL" OFF)
 
 if(EIGEN_ROOT)
-    message(STATUS "Third-party: creating target 'Eigen3::Eigen' for external path: ${EIGEN_ROOT}")
+    message(STATUS "RXMesh: Third-party: creating target 'Eigen3::Eigen' for external path: ${EIGEN_ROOT}")
     set(EIGEN_INCLUDE_DIRS ${EIGEN_ROOT})
 else()
-    message(STATUS "Third-party: creating target 'Eigen3::Eigen'")
+    message(STATUS "RXMesh: Third-party: creating target 'Eigen3::Eigen'")
 
     include(FetchContent)
     FetchContent_Declare(

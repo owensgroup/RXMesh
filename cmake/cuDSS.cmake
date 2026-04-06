@@ -6,12 +6,12 @@ endif()
 
 function(rxmesh_enable_cudss target)
     if(NOT TARGET "${target}")
-        message(FATAL_ERROR "rxmesh_enable_cudss: target '${target}' does not exist")
+        message(FATAL_ERROR "RXMesh: rxmesh_enable_cudss: target '${target}' does not exist")
     endif()
 
     find_package(cudss QUIET)
     if (cudss_FOUND)
-        message(STATUS "Found cuDSS version ${cudss_VERSION}")
+        message(STATUS "RXMesh: Found cuDSS version ${cudss_VERSION}")
 
         target_link_directories(${target} PUBLIC  ${cudss_LIBRARY_DIR})
 
@@ -42,7 +42,7 @@ function(rxmesh_enable_cudss target)
 
         target_compile_definitions(${target} PUBLIC  USE_CUDSS)
     else (cudss_FOUND)
-        message(WARNING "Can not find cuDSS")
+        message(WARNING "RXMesh: Can not find cuDSS")
         set(RX_USE_CUDSS "OFF" CACHE BOOL "")
     endif()
 endfunction()

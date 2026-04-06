@@ -8,7 +8,7 @@ if (${RX_USE_SUITESPARSE})
   find_package(BLAS QUIET COMPONENTS CBLAS)
 
   if (NOT BLAS_FOUND)
-    message(STATUS "No BLAS on the system – building OpenBLAS")
+    message(STATUS "RXMesh: No BLAS on the system – building OpenBLAS")
 
     FetchContent_Declare(
       openblas
@@ -35,7 +35,7 @@ if (${RX_USE_SUITESPARSE})
 	elseif(TARGET OpenBLAS::OpenBLAS)
 		set(_blas_target OpenBLAS::OpenBLAS) # MinGW / some Linux builds
 	else()
-		message(FATAL_ERROR "OpenBLAS was built but exported no usable target")
+		message(FATAL_ERROR "RXMesh: OpenBLAS was built but exported no usable target")
 	endif()
 
 	# 2)  Provide a canonical BLAS::BLAS, but only once
