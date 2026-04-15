@@ -9,11 +9,11 @@
 #include "rxmesh/diff/newton_solver.h"
 
 
-template <typename ProblemT>
-inline void add_term(ProblemT& problem)
-{
-    using namespace rxmesh;
+using namespace rxmesh;
 
+template <typename ProblemT>
+inline void add_smoothing_term(ProblemT& problem)
+{
     problem.template add_term<Op::EV>(
         [=] __device__(const auto& eh, const auto& iter, auto& objective) {
             assert(iter.size() == 2);
@@ -36,8 +36,6 @@ inline void add_term(ProblemT& problem)
 
 TEST(Diff, SmoothingNewton)
 {
-    using namespace rxmesh;
-
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "bunnyhead.obj");
     // RXMeshStatic rx(rxmesh_args.obj_file_name);
 
@@ -53,7 +51,7 @@ TEST(Diff, SmoothingNewton)
 
     problem.objective->copy_from(v_input_pos, DEVICE, DEVICE);
 
-    add_term(problem);
+    add_smoothing_term(problem);
 
 
     using HessMatT = typename ProblemT::HessMatT;
@@ -111,4 +109,99 @@ TEST(Diff, SmoothingNewton)
             EXPECT_NEAR((*problem.objective)(vh, 0), f, 1e-3);
         }
     });
+}
+
+template <typename VAttr>
+void copy_x(RXMeshStatic& rx, const VAttr& pos, VAttr& val)
+{
+    rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) mutable {
+        // val(vh, 0) = fabs(pos(vh, 0));
+        val(vh, 0) = pos(vh, 0) * pos(vh, 0);
+    });
+}
+
+template <typename VAttr, typename DenseMatT>
+void verify_while_loop_x(RXMeshStatic&    rx,
+                         const VAttr&     pos,
+                         const VAttr&     obj,
+                         const DenseMatT& grad,
+                         float            tol)
+{
+    rx.for_each_vertex(HOST, [=](const VertexHandle& vh) {
+        float expected_sqrt = fabs(pos(vh, 0));
+        if (expected_sqrt > tol) {
+
+            float expected_grad = 1.0f / (2.0f * expected_sqrt);
+
+            ASSERT_NEAR(obj(vh, 0), expected_sqrt, tol);
+            ASSERT_NEAR(grad(vh, 0), expected_grad, tol);
+        }
+    });
+}
+
+
+template <typename ProblemT>
+inline void add_while_loop_term(ProblemT& problem, float tol)
+{
+
+    problem.template add_term<Op::V>(
+        [=] __device__(const auto& vh, auto& objective) mutable {
+            using ActiveT = ACTIVE_TYPE(vh);
+
+            tol = tol;
+
+            Eigen::Vector<ActiveT, 1> xx = iter_val<ActiveT, 1>(vh, objective);
+
+            ActiveT a = xx(0);
+
+            if constexpr (is_scalar_v<ActiveT>) {
+
+                // x_new = 0.5 * (x + a / x)
+                if (a.val() > tol) {
+                    do {
+                        xx(0) = 0.5 * (xx(0) + a / xx(0));
+                    } while (fabs(xx(0).val() * xx(0).val() - a.val()) > tol);
+                } else {
+                    xx(0) = ActiveT(0.0);
+                }
+
+                // hijacking the objective for storing the sqrt value.
+                objective(vh, 0) = xx(0).val();
+            }
+
+
+            return xx(0);
+        });
+}
+
+TEST(Diff, WhileLoop)
+{
+
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere1.obj");
+    // RXMeshStatic rx(rxmesh_args.obj_file_name);
+
+    using T = float;
+
+    constexpr int VariableDim = 1;
+
+    using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle, false>;
+
+    ProblemT problem(rx, false);
+
+    auto v_input_pos = *rx.get_input_vertex_coordinates();
+
+    copy_x(rx, v_input_pos, *problem.objective);
+
+    T tol = std::numeric_limits<T>::epsilon();
+
+    add_while_loop_term(problem, tol);
+
+
+    problem.eval_terms();
+
+    problem.objective->move(DEVICE, HOST);
+    problem.grad.move(DEVICE, HOST);
+
+    verify_while_loop_x(
+        rx, v_input_pos, *problem.objective, problem.grad, 0.001);
 }
