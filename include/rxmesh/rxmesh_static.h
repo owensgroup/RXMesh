@@ -514,9 +514,9 @@ class RXMeshStatic : public RXMesh
      * @param stream the stream to launch the kernel on
      */
     template <Op op, uint32_t blockThreads, typename LambdaT>
-    void run_query_kernel(const LambdaT user_lambda,
-                          const bool    oriented = false,
-                          cudaStream_t  stream   = NULL) const
+    void for_each(const LambdaT user_lambda,
+                  const bool    oriented = false,
+                  cudaStream_t  stream   = NULL) const
     {
         LaunchBox<blockThreads> lb;
 
@@ -526,7 +526,7 @@ class RXMeshStatic : public RXMesh
             (void*)detail::query_kernel<blockThreads, op, LambdaT>,
             oriented);
 
-        run_query_kernel<op>(lb, user_lambda, oriented, stream);
+        for_each<op>(lb, user_lambda, oriented, stream);
     }
 
     /**
@@ -547,10 +547,10 @@ class RXMeshStatic : public RXMesh
      * @param stream the stream to launch the kernel on
      */
     template <Op op, uint32_t blockThreads, typename LambdaT>
-    void run_query_kernel(LaunchBox<blockThreads> lb,
-                          const LambdaT           user_lambda,
-                          const bool              oriented = false,
-                          cudaStream_t            stream   = NULL) const
+    void for_each(LaunchBox<blockThreads> lb,
+                  const LambdaT           user_lambda,
+                  const bool              oriented = false,
+                  cudaStream_t            stream   = NULL) const
     {
         detail::query_kernel<blockThreads, op>
             <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn, stream>>>(

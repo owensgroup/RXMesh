@@ -124,7 +124,7 @@ void mass_spring(RXMeshStatic& rx, Scenario scenario, int max_time_steps)
 #endif
 
     // calc rest length
-    rx.run_query_kernel<Op::EV, blockThreads>(
+    rx.for_each<Op::EV, blockThreads>(
         [=] __device__(const EdgeHandle& eh, const VertexIterator& iter) {
             Eigen::Vector3<T> a = x.to_eigen<3>(iter[0]);
             Eigen::Vector3<T> b = x.to_eigen<3>(iter[1]);

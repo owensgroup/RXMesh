@@ -19,7 +19,7 @@ void compute_mean_curv(RXMeshStatic& rx, VertexAttribute<T>& curv)
     v_amix.reset(T(0), rxmesh::DEVICE);
 
 
-    rx.run_query_kernel<Op::FV, 256>(
+    rx.for_each<Op::FV, 256>(
         [=] __device__(FaceHandle face_id, VertexIterator & fv) {
             const vec3<T> p0 = x.to_glm<3>(fv[0]);
             const vec3<T> p1 = x.to_glm<3>(fv[1]);

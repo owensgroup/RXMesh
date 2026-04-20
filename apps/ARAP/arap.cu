@@ -22,7 +22,7 @@ void calc_edge_weights_mat(const RXMeshStatic&       rx,
                            const VertexAttribute<T>& ref_vertex_pos,
                            SparseMatrix<T>&          weight_matrix)
 {
-    rx.run_query_kernel<Op::EVDiamond, 256>(
+    rx.for_each<Op::EVDiamond, 256>(
         [=] __device__(const EdgeHandle      edge_id,
                        const VertexIterator& vv) mutable {
             // the edge goes from p-r while the q and s are the opposite
@@ -68,8 +68,8 @@ void calculate_rotation_matrix(const RXMeshStatic&       rx,
                                const SparseMatrix<T>&    weight_matrix,
                                VertexAttribute<T>&       rotations)
 {
-    rx.run_query_kernel<Op::VV, 256>([=] __device__(const VertexHandle    v_id,
-                                                    const VertexIterator& vv) {
+    rx.for_each<Op::VV, 256>([=] __device__(const VertexHandle    v_id,
+                                            const VertexIterator& vv) {
         Eigen::Matrix3f S = Eigen::Matrix3f::Zero();
 
         for (int j = 0; j < vv.size(); j++) {
@@ -125,9 +125,8 @@ void calculate_b(const RXMeshStatic&                  rx,
                  const VertexAttribute<ConstraintsT>& constraints,
                  DenseMatrix<T>&                      b_mat)
 {
-    rx.run_query_kernel<Op::VV, 256>([=] __device__(
-                                         const VertexHandle    v_id,
-                                         const VertexIterator& vv) mutable {
+    rx.for_each<Op::VV, 256>([=] __device__(const VertexHandle    v_id,
+                                            const VertexIterator& vv) mutable {
         if (constraints(v_id) == Free) {
             // variable to store ith entry of b_mat
             Eigen::Vector3f bi(0.0f, 0.0f, 0.0f);
@@ -190,23 +189,22 @@ void calculate_system_matrix(const RXMeshStatic&                  rx,
                              const VertexAttribute<ConstraintsT>& constraints,
                              SparseMatrix<T>&                     laplace_mat)
 {
-    rx.run_query_kernel<Op::VV, 256>(
-        [=] __device__(const VertexHandle    v_id,
-                       const VertexIterator& vv) mutable {
-            if (constraints(v_id) == Free) {
-                for (int i = 0; i < vv.size(); i++) {
-                    laplace_mat(v_id, v_id) += weight_matrix(v_id, vv[i]);
-                    if (constraints(vv[i]) == Free) {
-                        laplace_mat(v_id, vv[i]) -= weight_matrix(v_id, vv[i]);
-                    }
+    rx.for_each<Op::VV, 256>([=] __device__(const VertexHandle    v_id,
+                                            const VertexIterator& vv) mutable {
+        if (constraints(v_id) == Free) {
+            for (int i = 0; i < vv.size(); i++) {
+                laplace_mat(v_id, v_id) += weight_matrix(v_id, vv[i]);
+                if (constraints(vv[i]) == Free) {
+                    laplace_mat(v_id, vv[i]) -= weight_matrix(v_id, vv[i]);
                 }
-            } else {
-                for (int i = 0; i < vv.size(); i++) {
-                    laplace_mat(v_id, vv[i]) = 0;
-                }
-                laplace_mat(v_id, v_id) = 1;
             }
-        });
+        } else {
+            for (int i = 0; i < vv.size(); i++) {
+                laplace_mat(v_id, vv[i]) = 0;
+            }
+            laplace_mat(v_id, v_id) = 1;
+        }
+    });
 }
 
 template <typename T>
@@ -400,7 +398,6 @@ int main(int argc, char** argv)
 
     auto ps_callback = [&]() {
 #if USE_POLYSCOPE
-
         ImGui::SameLine();
         if (ImGui::Button("Step")) {
             take_step();

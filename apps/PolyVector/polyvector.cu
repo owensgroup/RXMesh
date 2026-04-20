@@ -41,7 +41,7 @@ void inline viz_curl(RXMeshStatic& rx,
 
     auto ctx = rx.get_context();
 
-    rx.run_query_kernel<Op::EF, 256>(
+    rx.for_each<Op::EF, 256>(
         [=] __device__(const EdgeHandle& eh, FaceIterator& iter) mutable {
             FaceHandle f(iter[0]), g(iter[1]);
 
@@ -68,7 +68,7 @@ void inline viz_curl(RXMeshStatic& rx,
             ecurl(eh) = sqr(c_f_0 - c_g_0) + sqr(c_f_2 - c_g_2);
         });
 
-    rx.run_query_kernel<Op::EV, 256>(
+    rx.for_each<Op::EV, 256>(
         [=] __device__(const EdgeHandle& eh, const VertexIterator& vv) mutable {
             T curl = ecurl(eh);
 
@@ -77,20 +77,19 @@ void inline viz_curl(RXMeshStatic& rx,
             ::atomicAdd(&vcolor(vv[1]), curl);
         });
 
-    rx.run_query_kernel<Op::VV, 256>(
-        [=] __device__(const VertexHandle&   vh,
-                       const VertexIterator& vv) mutable {
-            T curl = vcolor(vh);
+    rx.for_each<Op::VV, 256>([=] __device__(const VertexHandle&   vh,
+                                            const VertexIterator& vv) mutable {
+        T curl = vcolor(vh);
 
-            curl /= vv.size();
+        curl /= vv.size();
 
-            // curl = (log(curl) - log(curl_min)) / (log(curl_max) -
-            // log(curl_min));
-            //
-            // curl = min(max(curl, 0.0), 1.0);
+        // curl = (log(curl) - log(curl_min)) / (log(curl_max) -
+        // log(curl_min));
+        //
+        // curl = min(max(curl, 0.0), 1.0);
 
-            vcolor(vh) = curl;
-        });
+        vcolor(vh) = curl;
+    });
 
     rx.for_each_face(HOST, [&](const FaceHandle fh) {
         T ax = x(fh, 0);
@@ -128,7 +127,7 @@ void inline compute_local_basis(RXMeshStatic& rx,
                                 FAttrT&       b1,
                                 FAttrT&       b2)
 {
-    rx.run_query_kernel<Op::FV, 256>(
+    rx.for_each<Op::FV, 256>(
         [=] __device__(const FaceHandle& fh, const VertexIterator& vv) mutable {
             Eigen::Vector3<T> x0 = v.template to_eigen<3>(vv[0]);
             Eigen::Vector3<T> x1 = v.template to_eigen<3>(vv[1]);
@@ -158,7 +157,7 @@ void inline compute_per_edge_transport_term(RXMeshStatic& rx,
 {
     // compute the edge normalized edge length and (hijack) store it in e_f_conj
     // and e_g_conj, so we can use it in the next step
-    rx.run_query_kernel<Op::EV, 256>(
+    rx.for_each<Op::EV, 256>(
         [=] __device__(const EdgeHandle& eh, const VertexIterator& vv) mutable {
             Eigen::Vector3<T> x0 = v.template to_eigen<3>(vv[0]);
             Eigen::Vector3<T> x2 = v.template to_eigen<3>(vv[1]);
@@ -170,7 +169,7 @@ void inline compute_per_edge_transport_term(RXMeshStatic& rx,
 
     auto ctx = rx.get_context();
 
-    rx.run_query_kernel<Op::EF, 256>(
+    rx.for_each<Op::EF, 256>(
         [=] __device__(const EdgeHandle& eh, FaceIterator& iter) mutable {
             FaceHandle f(iter[0]), g(iter[1]);
 

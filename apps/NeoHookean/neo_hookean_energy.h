@@ -80,7 +80,7 @@ T neo_hookean_step_size(RXMeshStatic&    rx,
 
     constexpr uint32_t blockThreads = 256;
 
-    rx.run_query_kernel<Op::FV, blockThreads>(
+    rx.for_each<Op::FV, blockThreads>(
         [=] __device__(const FaceHandle&     fh,
                        const VertexIterator& iter) mutable {
             const Eigen::Vector3<T> x0 = x.to_eigen<3>(iter[0]);

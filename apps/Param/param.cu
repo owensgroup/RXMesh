@@ -110,7 +110,7 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
     constexpr uint32_t blockThreads = 256;
 
     // 1) compute rest shape
-    rx.run_query_kernel<Op::FV, blockThreads>(
+    rx.for_each<Op::FV, blockThreads>(
         [=] __device__(const FaceHandle& fh, const VertexIterator& iter) {
             const VertexHandle v0 = iter[0];
             const VertexHandle v1 = iter[1];

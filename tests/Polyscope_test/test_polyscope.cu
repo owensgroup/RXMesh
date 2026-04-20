@@ -30,7 +30,7 @@ int main(int argc, char** argv)
     face_normals.reset(0, LOCATION_ALL);
 
 
-    rx.run_query_kernel<Op::FV, 256>(
+    rx.for_each<Op::FV, 256>(
         [=] __device__(FaceHandle face_id, VertexIterator & fv) mutable {
             // get the face's three vertices coordinates
             const vec3<float> c0 = vertex_pos.to_glm<3>(fv[0]);
@@ -53,7 +53,7 @@ int main(int argc, char** argv)
     auto edge_dist = *rx.add_edge_attribute<float>("edge_dist", 1);
     edge_dist.reset(-1.0f, HOST);
 
-    rx.run_query_kernel<Op::EV, 256>(
+    rx.for_each<Op::EV, 256>(
         [=] __device__(EdgeHandle eh, VertexIterator & ev) mutable {
             const vec3<float> c0 = vertex_pos.to_glm<3>(ev[0]);
             const vec3<float> c1 = vertex_pos.to_glm<3>(ev[1]);

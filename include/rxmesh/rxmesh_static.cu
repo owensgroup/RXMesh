@@ -697,15 +697,14 @@ void RXMeshStatic::create_face_list(std::vector<glm::uvec3>& f_list) const
 void RXMeshStatic::add_edge_labels(FaceAttribute<int>& face_label,
                                    EdgeAttribute<int>& edge_label)
 {
-    run_query_kernel<Op::FE, 256>(
-        [face_label, edge_label] __device__(const FaceHandle   fh,
-                                            const EdgeIterator iter) {
-            int label = face_label(fh);
+    for_each<Op::FE, 256>([face_label, edge_label] __device__(
+                              const FaceHandle fh, const EdgeIterator iter) {
+        int label = face_label(fh);
 
-            edge_label(iter[0]) = label;
-            edge_label(iter[1]) = label;
-            edge_label(iter[2]) = label;
-        });
+        edge_label(iter[0]) = label;
+        edge_label(iter[1]) = label;
+        edge_label(iter[2]) = label;
+    });
 }
 
 

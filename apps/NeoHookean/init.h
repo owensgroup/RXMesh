@@ -13,7 +13,7 @@ void init_volume_inverse_b(RXMeshStatic& rx,
 {
     using T = typename VAttrT::Type;
 
-    rx.run_query_kernel<Op::FV, 256>(
+    rx.for_each<Op::FV, 256>(
         [x, volume, inv_b] __device__(const FaceHandle      f,
                                       const VertexIterator& vv) mutable {
             Eigen::Vector3<T> x0 = x.template to_eigen<3>(vv[0]);
@@ -42,7 +42,7 @@ void init_volume_inverse_b(RXMeshStatic& rx,
 template <typename FAttrT>
 void init_face_vertices(RXMeshStatic& rx, FAttrT& face_vertices)
 {
-    rx.run_query_kernel<Op::FV, 256>(
+    rx.for_each<Op::FV, 256>(
         [face_vertices] __device__(const FaceHandle      fh,
                                    const VertexIterator& fv) mutable {
             // Store the 3 vertex handles for this face

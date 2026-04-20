@@ -197,7 +197,7 @@ void init_bending(RXMeshStatic& rx,
 
     constexpr uint32_t blockThreads = 256;
 
-    rx.run_query_kernel<Op::EVDiamond, blockThreads>(
+    rx.for_each<Op::EVDiamond, blockThreads>(
         [=] __device__(const EdgeHandle&     eh,
                        const VertexIterator& iter) mutable {
             // Check if all vertices are valid (not boundary edge)

@@ -37,7 +37,7 @@ void manual(RXMeshStatic& rx)
         grad.reset(0, DEVICE);
 
         if (Arg.area) {
-            rx.run_query_kernel<Op::VV, blockThreads>(
+            rx.for_each<Op::VV, blockThreads>(
                 [=] __device__(const VertexHandle&   vh,
                                const VertexIterator& iter) mutable {
                     const int k = iter.size();
@@ -83,7 +83,7 @@ void manual(RXMeshStatic& rx)
                 },
                 true);
         } else {
-            rx.run_query_kernel<Op::VV, blockThreads>(
+            rx.for_each<Op::VV, blockThreads>(
                 [=] __device__(const VertexHandle&   vh,
                                const VertexIterator& iter) mutable {
                     for (int v = 0; v < iter.size(); ++v) {

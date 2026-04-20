@@ -22,7 +22,7 @@ void add_ev_diamond_interaction(RXMeshStatic& rx, ProblemT& problem)
 
     auto vv_pairs = problem.vv_pairs;
 
-    rx.run_query_kernel<Op::EVDiamond, 256>(
+    rx.for_each<Op::EVDiamond, 256>(
         [=] __device__(const EdgeHandle      eh,
                        const VertexIterator& iter) mutable {
             if (iter[1].is_valid() && iter[3].is_valid()) {
@@ -67,7 +67,7 @@ void add_vf_pairs_to_vv_pairs(
         });
 
     // 2) stage the new VV interaction vertices in vv_pairs
-    rx.run_query_kernel<Op::FV, blockThreads>(
+    rx.for_each<Op::FV, blockThreads>(
         [=] __device__(const FaceHandle      fh,
                        const VertexIterator& iter) mutable {
             VertexHandle interact_v = face_interact_vertex(fh);

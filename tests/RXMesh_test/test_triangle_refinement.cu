@@ -93,7 +93,7 @@ void compute_avg_area(RXMeshDynamic&          rx,
                       VertexAttribute<float>& coords,
                       DenseMatrix<float>&     avg_area)
 {
-    rx.run_query_kernel<Op::FV, 256>(
+    rx.for_each<Op::FV, 256>(
         [coords, avg_area] __device__(const FaceHandle     fh,
                                       const VertexIterator iter) mutable {
             Eigen::Vector3f x0 = coords.to_eigen<3>(iter[0]);
@@ -120,7 +120,7 @@ void add_to_polyscope(RXMeshDynamic&          rx,
 #if USE_POLYSCOPE
 
     auto to_refine = *rx.add_face_attribute<int>("to_refine", 1);
-    rx.run_query_kernel<Op::FV, 256>(
+    rx.for_each<Op::FV, 256>(
         [coords, to_refine, avg_area] __device__(const FaceHandle     fh,
                                                  const VertexIterator iter) {
             Eigen::Vector3f x0 = coords.to_eigen<3>(iter[0]);
@@ -191,6 +191,6 @@ TEST(RXMeshDynamic, TriangleRefinement)
     auto ps_mesh = rx.get_polyscope_mesh();
     ps_mesh->updateVertexPositions(coords);
 
-    //polyscope::show();
+    // polyscope::show();
 #endif
 }
