@@ -19,24 +19,24 @@ namespace rxmesh {
  * specifying the which type of mesh elements it is specified on, number of
  * variables). This is used to store the all energies inside DiffScalarProblem
  */
-template <typename T, typename ObjHandleT>
+template <typename T, typename OptVarHandleT>
 struct ScalarTerm
 {
-    virtual void eval_active(Attribute<T, ObjHandleT>&    obj,
+    virtual void eval_active(Attribute<T, OptVarHandleT>& opt_var,
                              FaceAttribute<VertexHandle>* face_interact_vertex,
                              cudaStream_t                 stream) = 0;
 
     virtual void eval_active_grad_only(
-        Attribute<T, ObjHandleT>&    obj,
+        Attribute<T, OptVarHandleT>& opt_var,
         FaceAttribute<VertexHandle>* face_interact_vertex,
         cudaStream_t                 stream) = 0;
 
-    virtual void eval_passive(Attribute<T, ObjHandleT>&    obj,
+    virtual void eval_passive(Attribute<T, OptVarHandleT>& opt_var,
                               FaceAttribute<VertexHandle>* face_interact_vertex,
                               cudaStream_t                 stream) = 0;
 
     virtual void eval_active_matvec(
-        Attribute<T, ObjHandleT>&              obj,
+        Attribute<T, OptVarHandleT>&           opt_var,
         const DenseMatrix<T, Eigen::RowMajor>& input,
         DenseMatrix<T, Eigen::RowMajor>&       output,
         cudaStream_t                           stream) = 0;
@@ -52,7 +52,7 @@ struct ScalarTerm
  * local query operations, e.g., FV
  */
 template <typename LossHandleT,
-          typename ObjHandleT,
+          typename OptVarHandleT,
           uint32_t blockThreads,
           Op       op,
           typename ScalarT,
@@ -60,7 +60,7 @@ template <typename LossHandleT,
           int  VariableDim,
           typename LambdaT>
 struct TemplatedScalarTerm
-    : public ScalarTerm<typename ScalarT::PassiveType, ObjHandleT>
+    : public ScalarTerm<typename ScalarT::PassiveType, OptVarHandleT>
 {
     using T = typename ScalarT::PassiveType;
 
@@ -90,7 +90,7 @@ struct TemplatedScalarTerm
             lb_active,
             (void*)detail::diff_scalar_kernel_active<blockThreads,
                                                      LossHandleT,
-                                                     ObjHandleT,
+                                                     OptVarHandleT,
                                                      op,
                                                      ScalarT,
                                                      ProjectHess,
@@ -103,7 +103,7 @@ struct TemplatedScalarTerm
             lb_passive,
             (void*)detail::diff_scalar_kernel_passive<blockThreads,
                                                       LossHandleT,
-                                                      ObjHandleT,
+                                                      OptVarHandleT,
                                                       op,
                                                       ScalarT,
                                                       LambdaT>,
@@ -115,7 +115,7 @@ struct TemplatedScalarTerm
             lb_active_matvec,
             (void*)detail::hess_matvec_scalar_kernel<blockThreads,
                                                      LossHandleT,
-                                                     ObjHandleT,
+                                                     OptVarHandleT,
                                                      op,
                                                      ScalarT,
                                                      ProjectHess,
@@ -128,7 +128,7 @@ struct TemplatedScalarTerm
             lb_active_grad_only,
             (void*)detail::diff_scalar_kernel_active<blockThreads,
                                                      LossHandleT,
-                                                     ObjHandleT,
+                                                     OptVarHandleT,
                                                      op,
                                                      ScalarGradOnlyT,
                                                      ProjectHess,
@@ -140,7 +140,7 @@ struct TemplatedScalarTerm
     /**
      * @brief Evaluate the energy term using active/differentiable type
      */
-    void eval_active(Attribute<T, ObjHandleT>&    obj,
+    void eval_active(Attribute<T, OptVarHandleT>& opt_var,
                      FaceAttribute<VertexHandle>* face_interact_vertex,
                      cudaStream_t                 stream)
     {
@@ -154,7 +154,7 @@ struct TemplatedScalarTerm
         rx.run_kernel(lb_active,
                       detail::diff_scalar_kernel_active<blockThreads,
                                                         LossHandleT,
-                                                        ObjHandleT,
+                                                        OptVarHandleT,
                                                         op,
                                                         ScalarT,
                                                         ProjectHess,
@@ -164,7 +164,7 @@ struct TemplatedScalarTerm
                       *grad,
                       *hess,
                       *loss,
-                      obj,
+                      opt_var,
                       oreinted,
                       term);
     }
@@ -175,14 +175,14 @@ struct TemplatedScalarTerm
      * 1st derivative only
      */
     void eval_active_grad_only(
-        Attribute<T, ObjHandleT>&    obj,
+        Attribute<T, OptVarHandleT>& opt_var,
         FaceAttribute<VertexHandle>* face_interact_vertex,
         cudaStream_t                 stream)
     {
         rx.run_kernel(lb_active_grad_only,
                       detail::diff_scalar_kernel_active<blockThreads,
                                                         LossHandleT,
-                                                        ObjHandleT,
+                                                        OptVarHandleT,
                                                         op,
                                                         ScalarGradOnlyT,
                                                         ProjectHess,
@@ -192,7 +192,7 @@ struct TemplatedScalarTerm
                       *grad,
                       *hess,
                       *loss,
-                      obj,
+                      opt_var,
                       oreinted,
                       term);
     }
@@ -202,7 +202,7 @@ struct TemplatedScalarTerm
      * @brief Evaluate the energy term using active/differentiable type but
      * without constructing the Hessian. Instead, we do matvec with the Hessian
      */
-    void eval_active_matvec(Attribute<T, ObjHandleT>&              obj,
+    void eval_active_matvec(Attribute<T, OptVarHandleT>&           opt_var,
                             const DenseMatrix<T, Eigen::RowMajor>& input,
                             DenseMatrix<T, Eigen::RowMajor>&       output,
                             cudaStream_t                           stream)
@@ -225,7 +225,7 @@ struct TemplatedScalarTerm
         rx.run_kernel(lb_active,
                       detail::hess_matvec_scalar_kernel<blockThreads,
                                                         LossHandleT,
-                                                        ObjHandleT,
+                                                        OptVarHandleT,
                                                         op,
                                                         ScalarT,
                                                         ProjectHess,
@@ -234,7 +234,7 @@ struct TemplatedScalarTerm
                       stream,
                       input,
                       output,
-                      obj,
+                      opt_var,
                       oreinted,
                       term);
     }
@@ -242,20 +242,20 @@ struct TemplatedScalarTerm
     /**
      * @brief Evaluate the energy term using non-active/non-differentiable type
      */
-    void eval_passive(Attribute<T, ObjHandleT>&    obj,
+    void eval_passive(Attribute<T, OptVarHandleT>& opt_var,
                       FaceAttribute<VertexHandle>* face_interact_vertex,
                       cudaStream_t                 stream)
     {
         rx.run_kernel(lb_passive,
                       detail::diff_scalar_kernel_passive<blockThreads,
                                                          LossHandleT,
-                                                         ObjHandleT,
+                                                         OptVarHandleT,
                                                          op,
                                                          ScalarT,
                                                          LambdaT>,
                       stream,
                       *loss,
-                      obj,
+                      opt_var,
                       oreinted,
                       term);
     }
@@ -301,7 +301,7 @@ struct TemplatedScalarTerm
  * pairs of mesh elements
  */
 template <typename LossHandleT,
-          typename ObjHandleT,
+          typename OptVarHandleT,
           uint32_t blockThreads,
           typename HandleT0,
           typename HandleT1,
@@ -311,7 +311,7 @@ template <typename LossHandleT,
           int  VariableDim,
           typename LambdaT>
 struct TemplatedScalarTermPairs
-    : public ScalarTerm<typename ScalarT::PassiveType, ObjHandleT>
+    : public ScalarTerm<typename ScalarT::PassiveType, OptVarHandleT>
 {
     using T = typename ScalarT::PassiveType;
 
@@ -373,7 +373,7 @@ struct TemplatedScalarTermPairs
     /**
      * @brief Evaluate the energy term using active/differentiable type
      */
-    void eval_active(Attribute<T, ObjHandleT>&    obj,
+    void eval_active(Attribute<T, OptVarHandleT>& opt_var,
                      FaceAttribute<VertexHandle>* face_interact_vertex,
                      cudaStream_t                 stream)
     {
@@ -405,7 +405,7 @@ struct TemplatedScalarTermPairs
                 *grad,
                 *hess,
                 *loss,
-                obj,
+                opt_var,
                 *face_interact_vertex,
                 term);
         } else {
@@ -414,7 +414,7 @@ struct TemplatedScalarTermPairs
 
             detail::diff_scalar_kernel_active_pair<blockThreads,
                                                    LossHandleT,
-                                                   ObjHandleT,
+                                                   OptVarHandleT,
                                                    HandleT0,
                                                    HandleT1,
                                                    HessMatT,
@@ -423,7 +423,7 @@ struct TemplatedScalarTermPairs
                                                    VariableDim,
                                                    LambdaT>
                 <<<blocks, blockThreads, 0, stream>>>(
-                    pairs, *grad, *hess, *loss, obj, term);
+                    pairs, *grad, *hess, *loss, opt_var, term);
         }
     }
 
@@ -433,7 +433,7 @@ struct TemplatedScalarTermPairs
      * 1st derivative only
      */
     void eval_active_grad_only(
-        Attribute<T, ObjHandleT>&    obj,
+        Attribute<T, OptVarHandleT>& opt_var,
         FaceAttribute<VertexHandle>* face_interact_vertex,
         cudaStream_t                 stream)
     {
@@ -459,7 +459,7 @@ struct TemplatedScalarTermPairs
                 *grad,
                 *hess,
                 *loss,
-                obj,
+                opt_var,
                 *face_interact_vertex,
                 term);
         } else {
@@ -468,7 +468,7 @@ struct TemplatedScalarTermPairs
 
             detail::diff_scalar_kernel_active_pair<blockThreads,
                                                    LossHandleT,
-                                                   ObjHandleT,
+                                                   OptVarHandleT,
                                                    HandleT0,
                                                    HandleT1,
                                                    HessMatT,
@@ -477,7 +477,7 @@ struct TemplatedScalarTermPairs
                                                    VariableDim,
                                                    LambdaT>
                 <<<blocks, blockThreads, 0, stream>>>(
-                    pairs, *grad, *hess, *loss, obj, term);
+                    pairs, *grad, *hess, *loss, opt_var, term);
         }
     }
 
@@ -486,7 +486,7 @@ struct TemplatedScalarTermPairs
      * @brief Evaluate the energy term using active/differentiable type but
      * without constructing the Hessian. Instead, we do matvec with the Hessian
      */
-    void eval_active_matvec(Attribute<T, ObjHandleT>&              obj,
+    void eval_active_matvec(Attribute<T, OptVarHandleT>&           opt_var,
                             const DenseMatrix<T, Eigen::RowMajor>& input,
                             DenseMatrix<T, Eigen::RowMajor>&       output,
                             cudaStream_t                           stream)
@@ -519,7 +519,7 @@ struct TemplatedScalarTermPairs
     /**
      * @brief Evaluate the energy term using non-active/non-differentiable type
      */
-    void eval_passive(Attribute<T, ObjHandleT>&    obj,
+    void eval_passive(Attribute<T, OptVarHandleT>& opt_var,
                       FaceAttribute<VertexHandle>* face_interact_vertex,
                       cudaStream_t                 stream)
     {
@@ -535,7 +535,7 @@ struct TemplatedScalarTermPairs
                                                            LambdaT>,
                 stream,
                 *loss,
-                obj,
+                opt_var,
                 *face_interact_vertex,
                 term);
 
@@ -551,13 +551,14 @@ struct TemplatedScalarTermPairs
 
             detail::diff_scalar_kernel_passive_pair<blockThreads,
                                                     LossHandleT,
-                                                    ObjHandleT,
+                                                    OptVarHandleT,
                                                     HandleT0,
                                                     HandleT1,
                                                     HessMatT,
                                                     ScalarT,
                                                     LambdaT>
-                <<<blocks, blockThreads, 0, stream>>>(pairs, *loss, obj, term);
+                <<<blocks, blockThreads, 0, stream>>>(
+                    pairs, *loss, opt_var, term);
         }
     }
 

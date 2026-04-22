@@ -16,16 +16,16 @@ namespace rxmesh {
 /**
  * @brief Definition of differentiation problem
  * @tparam T the underlying (passive) type of the problem, e.g., float or double
- * @tparam ObjHandleT the type of the mesh element with respect to which the
+ * @tparam OptVarHandleT the type of the mesh element with respect to which the
  * differentiation is being performed (e.g., VertexHandle for mesh
  * parametrization)
  * @tparam VariableDim the dimensions of the active variable defined on each
  * mesh element under consideration (e.g., 2 for mesh parametrization)
  */
-template <typename T, int VariableDim, typename ObjHandleT, bool WithHess>
+template <typename T, int VariableDim, typename OptVarHandleT, bool WithHess>
 struct DiffScalarProblem
 {
-    // TODO use ObjHandleT to define the Hessian matrix sparsity
+    // TODO use OptVarHandleT to define the Hessian matrix sparsity
     // right now, we always assume VV sparsity pattern but we can derive
     // different sparsity, e.g., FF
     using HessMatT  = HessianSparseMatrix<T, VariableDim>;
@@ -37,12 +37,12 @@ struct DiffScalarProblem
 
     bool ev_diamond_interaction_added = false;
 
-    RXMeshStatic&                                           rx;
-    DenseMatT                                               grad;
-    std::unique_ptr<HessMatT>                               hess;
-    std::unique_ptr<HessMatT>                               hess_new;
-    std::shared_ptr<Attribute<T, ObjHandleT>>               objective;
-    std::vector<std::shared_ptr<ScalarTerm<T, ObjHandleT>>> terms;
+    RXMeshStatic&                                              rx;
+    DenseMatT                                                  grad;
+    std::unique_ptr<HessMatT>                                  hess;
+    std::unique_ptr<HessMatT>                                  hess_new;
+    std::shared_ptr<Attribute<T, OptVarHandleT>>               opt_var;
+    std::vector<std::shared_ptr<ScalarTerm<T, OptVarHandleT>>> terms;
     std::shared_ptr<FaceAttribute<VertexHandle>> face_interact_vertex;
 
     // TODO we might need other types of candidate pairs
@@ -62,13 +62,13 @@ struct DiffScalarProblem
         : rx(rx),
           ev_diamond_interaction_added(false),
           grad(DenseMatT(rx,
-                         rx.get_num_elements<ObjHandleT>(),
+                         rx.get_num_elements<OptVarHandleT>(),
                          VariableDim,
                          LOCATION_ALL)),
-          objective(rx.add_attribute<T, ObjHandleT>("objective", VariableDim))
+          opt_var(rx.add_attribute<T, OptVarHandleT>("opt_var", VariableDim))
     {
         grad.reset(0, LOCATION_ALL);
-        objective->reset(static_cast<T>(0), LOCATION_ALL);
+        opt_var->reset(static_cast<T>(0), LOCATION_ALL);
 
         if constexpr (WithHessian) {
             if (assmble_hessian) {
@@ -138,7 +138,7 @@ struct DiffScalarProblem
         if constexpr (op == Op::VV || op == Op::VE || op == Op::VF ||
                       op == Op::V) {
             auto new_term = std::make_shared<TemplatedScalarTerm<VertexHandle,
-                                                                 ObjHandleT,
+                                                                 OptVarHandleT,
                                                                  blockThreads,
                                                                  op,
                                                                  ScalarT,
@@ -147,13 +147,14 @@ struct DiffScalarProblem
                                                                  LambdaT>>(
                 rx, t, oreinted, &grad, hess.get());
             terms.push_back(
-                std::dynamic_pointer_cast<ScalarTerm<T, ObjHandleT>>(new_term));
+                std::dynamic_pointer_cast<ScalarTerm<T, OptVarHandleT>>(
+                    new_term));
         }
 
         if constexpr (op == Op::EV || op == Op::EE || op == Op::EF ||
                       op == Op::E || op == Op::EVDiamond) {
             auto new_term = std::make_shared<TemplatedScalarTerm<EdgeHandle,
-                                                                 ObjHandleT,
+                                                                 OptVarHandleT,
                                                                  blockThreads,
                                                                  op,
                                                                  ScalarT,
@@ -162,7 +163,8 @@ struct DiffScalarProblem
                                                                  LambdaT>>(
                 rx, t, oreinted, &grad, hess.get());
             terms.push_back(
-                std::dynamic_pointer_cast<ScalarTerm<T, ObjHandleT>>(new_term));
+                std::dynamic_pointer_cast<ScalarTerm<T, OptVarHandleT>>(
+                    new_term));
             if (op == Op::EVDiamond && WithHess && hess) {
                 if (!ev_diamond_interaction_added) {
                     detail::add_ev_diamond_interaction(rx, *this);
@@ -174,7 +176,7 @@ struct DiffScalarProblem
         if constexpr (op == Op::FV || op == Op::FE || op == Op::FF ||
                       op == Op::F) {
             auto new_term = std::make_shared<TemplatedScalarTerm<FaceHandle,
-                                                                 ObjHandleT,
+                                                                 OptVarHandleT,
                                                                  blockThreads,
                                                                  op,
                                                                  ScalarT,
@@ -183,7 +185,8 @@ struct DiffScalarProblem
                                                                  LambdaT>>(
                 rx, t, oreinted, &grad, hess.get());
             terms.push_back(
-                std::dynamic_pointer_cast<ScalarTerm<T, ObjHandleT>>(new_term));
+                std::dynamic_pointer_cast<ScalarTerm<T, OptVarHandleT>>(
+                    new_term));
         }
     }
 
@@ -212,7 +215,7 @@ struct DiffScalarProblem
 
             auto new_term =
                 std::make_shared<TemplatedScalarTermPairs<VertexHandle,
-                                                          ObjHandleT,
+                                                          OptVarHandleT,
                                                           blockThreads,
                                                           VertexHandle,
                                                           VertexHandle,
@@ -224,7 +227,8 @@ struct DiffScalarProblem
                     rx, t, &grad, hess.get(), vv_pairs);
 
             terms.push_back(
-                std::dynamic_pointer_cast<ScalarTerm<T, ObjHandleT>>(new_term));
+                std::dynamic_pointer_cast<ScalarTerm<T, OptVarHandleT>>(
+                    new_term));
         }
 
         if constexpr (op == Op::VF) {
@@ -239,7 +243,7 @@ struct DiffScalarProblem
 
             auto new_term =
                 std::make_shared<TemplatedScalarTermPairs<VertexHandle,
-                                                          ObjHandleT,
+                                                          OptVarHandleT,
                                                           blockThreads,
                                                           VertexHandle,
                                                           FaceHandle,
@@ -251,7 +255,8 @@ struct DiffScalarProblem
                     rx, t, &grad, hess.get(), vf_pairs);
 
             terms.push_back(
-                std::dynamic_pointer_cast<ScalarTerm<T, ObjHandleT>>(new_term));
+                std::dynamic_pointer_cast<ScalarTerm<T, OptVarHandleT>>(
+                    new_term));
         }
     }
 
@@ -291,8 +296,8 @@ struct DiffScalarProblem
             vv_pairs.reset(vv_prv_num_pairs, vv_prv_num_index);
         }
 #ifndef NDEBUG
-        //hess->check_repeated_indices();
-        //hess_new->check_repeated_indices();
+        // hess->check_repeated_indices();
+        // hess_new->check_repeated_indices();
 #endif
     }
 
@@ -308,8 +313,7 @@ struct DiffScalarProblem
         }
 
         for (size_t i = 0; i < terms.size(); ++i) {
-            terms[i]->eval_active(
-                *objective, face_interact_vertex.get(), stream);
+            terms[i]->eval_active(*opt_var, face_interact_vertex.get(), stream);
         }
     }
 
@@ -323,7 +327,7 @@ struct DiffScalarProblem
 
         for (size_t i = 0; i < terms.size(); ++i) {
             terms[i]->eval_active_grad_only(
-                *objective, face_interact_vertex.get(), stream);
+                *opt_var, face_interact_vertex.get(), stream);
         }
     }
 
@@ -337,7 +341,7 @@ struct DiffScalarProblem
         output.reset(0, DEVICE, stream);
 
         for (size_t i = 0; i < terms.size(); ++i) {
-            terms[i]->eval_active_matvec(*objective, input, output, stream);
+            terms[i]->eval_active_matvec(*opt_var, input, output, stream);
         }
     }
 
@@ -359,16 +363,16 @@ struct DiffScalarProblem
     /**
      * @brief evaluate all terms in
      */
-    void eval_terms_passive(Attribute<T, ObjHandleT>* obj    = nullptr,
-                            cudaStream_t              stream = NULL)
+    void eval_terms_passive(Attribute<T, OptVarHandleT>* opt_var_in = nullptr,
+                            cudaStream_t                 stream     = NULL)
     {
         for (size_t i = 0; i < terms.size(); ++i) {
-            if (obj) {
+            if (opt_var_in) {
                 terms[i]->eval_passive(
-                    *obj, face_interact_vertex.get(), stream);
+                    *opt_var_in, face_interact_vertex.get(), stream);
             } else {
                 terms[i]->eval_passive(
-                    *objective, face_interact_vertex.get(), stream);
+                    *opt_var, face_interact_vertex.get(), stream);
             }
         }
     }
@@ -376,14 +380,14 @@ struct DiffScalarProblem
     /**
      * @brief evaluate all terms
      */
-    void eval_terms_grad_only(Attribute<T, ObjHandleT>* obj,
-                              cudaStream_t              stream = NULL)
+    void eval_terms_grad_only(Attribute<T, OptVarHandleT>* opt_var_in,
+                              cudaStream_t                 stream = NULL)
     {
         grad.reset(0, DEVICE, stream);
 
         for (size_t i = 0; i < terms.size(); ++i) {
             terms[i]->eval_active_grad_only(
-                *obj, face_interact_vertex.get(), stream);
+                *opt_var_in, face_interact_vertex.get(), stream);
         }
     }
 

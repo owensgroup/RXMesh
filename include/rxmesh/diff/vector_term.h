@@ -17,16 +17,16 @@ namespace rxmesh {
  * specifying the which type of mesh elements it is specified on, number of
  * variables). This is used to store the all energies inside DiffScalarProblem
  */
-template <typename T, typename ObjHandleT>
+template <typename T, typename OptVarHandleT>
 struct VectorTerm
 {
     virtual void eval_active(int                              term_id,
-                             Attribute<T, ObjHandleT>&        obj,
+                             Attribute<T, OptVarHandleT>&     opt_var,
                              DenseMatrix<T, Eigen::RowMajor>& residual,
                              JacobianSparseMatrix<T>&         jac,
                              cudaStream_t                     stream) = 0;
 
-    virtual void eval_passive(Attribute<T, ObjHandleT>&        obj,
+    virtual void eval_passive(Attribute<T, OptVarHandleT>&     opt_var,
                               DenseMatrix<T, Eigen::RowMajor>& residual,
                               cudaStream_t                     stream) = 0;
 };
@@ -37,7 +37,7 @@ struct VectorTerm
  * local query operations, e.g., FV
  */
 template <typename LossHandleT,
-          typename ObjHandleT,
+          typename OptVarHandleT,
           uint32_t blockThreads,
           Op       op,
           typename ScalarT,
@@ -45,7 +45,7 @@ template <typename LossHandleT,
           int VariableDim,
           typename LambdaT>
 struct TemplatedVectorTerm
-    : public VectorTerm<typename ScalarT::PassiveType, ObjHandleT>
+    : public VectorTerm<typename ScalarT::PassiveType, OptVarHandleT>
 {
     using T = typename ScalarT::PassiveType;
 
@@ -58,7 +58,7 @@ struct TemplatedVectorTerm
             lb_active,
             (void*)detail::diff_vector_kernel_active<blockThreads,
                                                      LossHandleT,
-                                                     ObjHandleT,
+                                                     OptVarHandleT,
                                                      op,
                                                      InputDim,
                                                      ScalarT,
@@ -71,7 +71,7 @@ struct TemplatedVectorTerm
             lb_passive,
             (void*)detail::diff_vector_kernel_passive<blockThreads,
                                                       LossHandleT,
-                                                      ObjHandleT,
+                                                      OptVarHandleT,
                                                       op,
                                                       InputDim,
                                                       ScalarT,
@@ -83,7 +83,7 @@ struct TemplatedVectorTerm
      * @brief Evaluate the energy term using active/differentiable type
      */
     void eval_active(int                              term_id,
-                     Attribute<T, ObjHandleT>&        obj,
+                     Attribute<T, OptVarHandleT>&     opt_var,
                      DenseMatrix<T, Eigen::RowMajor>& residual,
                      JacobianSparseMatrix<T>&         jac,
                      cudaStream_t                     stream)
@@ -91,7 +91,7 @@ struct TemplatedVectorTerm
         rx.run_kernel(lb_active,
                       detail::diff_vector_kernel_active<blockThreads,
                                                         LossHandleT,
-                                                        ObjHandleT,
+                                                        OptVarHandleT,
                                                         op,
                                                         InputDim,
                                                         ScalarT,
@@ -101,7 +101,7 @@ struct TemplatedVectorTerm
                       term_id,
                       jac,
                       residual,
-                      obj,
+                      opt_var,
                       oreinted,
                       term);
     }
@@ -110,21 +110,21 @@ struct TemplatedVectorTerm
     /**
      * @brief Evaluate the energy term using non-active/non-differentiable type
      */
-    void eval_passive(Attribute<T, ObjHandleT>&        obj,
+    void eval_passive(Attribute<T, OptVarHandleT>&     opt_var,
                       DenseMatrix<T, Eigen::RowMajor>& residual,
                       cudaStream_t                     stream)
     {
         rx.run_kernel(lb_passive,
                       detail::diff_vector_kernel_passive<blockThreads,
                                                          LossHandleT,
-                                                         ObjHandleT,
+                                                         OptVarHandleT,
                                                          op,
                                                          InputDim,
                                                          ScalarT,
                                                          LambdaT>,
                       stream,
                       residual,
-                      obj,
+                      opt_var,
                       oreinted,
                       term);
     }

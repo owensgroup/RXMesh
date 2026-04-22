@@ -14,18 +14,18 @@
 
 namespace rxmesh {
 
-template <typename T, int VariableDim, typename ObjHandleT, typename SolverT>
+template <typename T, int VariableDim, typename OptVarHandleT, typename SolverT>
 struct NetwtonSolver
 {
 
-    using DiffProblemT = DiffScalarProblem<T, VariableDim, ObjHandleT, true>;
+    using DiffProblemT = DiffScalarProblem<T, VariableDim, OptVarHandleT, true>;
     using HessMatT     = typename DiffProblemT::HessMatT;
     using DenseMatT    = typename DiffProblemT::DenseMatT;
 
-    DiffProblemT&                             problem;
-    DenseMatT                                 dir;
-    std::shared_ptr<Attribute<T, ObjHandleT>> temp_objective;
-    SolverT*                                  solver;
+    DiffProblemT&                                problem;
+    DenseMatT                                    dir;
+    std::shared_ptr<Attribute<T, OptVarHandleT>> temp_opt_var;
+    SolverT*                                     solver;
 
     float solve_time;
 
@@ -35,8 +35,7 @@ struct NetwtonSolver
     NetwtonSolver(DiffProblemT& p, SolverT* s)
         : problem(p),
           dir(DenseMatT(p.rx, p.grad.rows(), p.grad.cols(), LOCATION_ALL)),
-          temp_objective(
-              p.rx.add_attribute_like("temp_objective", *p.objective)),
+          temp_opt_var(p.rx.add_attribute_like("temp_opt_var", *p.opt_var)),
           solver(s),
           solve_time(0)
     {
@@ -51,7 +50,7 @@ struct NetwtonSolver
                 };
         }
     }
- 
+
 
     /**
      * @brief solve to get Newton direction
@@ -166,7 +165,7 @@ struct NetwtonSolver
     /**
      * @brief line search
      */
-    using Callback = std::function<void(Attribute<T, ObjHandleT>)>;
+    using Callback = std::function<void(Attribute<T, OptVarHandleT>)>;
 
     inline bool line_search(const T      s_max        = 1.0,
                             const T      shrink       = 0.8,
@@ -175,16 +174,16 @@ struct NetwtonSolver
                             Callback     cb           = {},
                             cudaStream_t stream       = NULL)
     {
-        // we are going to keep trying to update temp_objective until we reach
+        // we are going to keep trying to update temp_opt_var until we reach
         // solution we are satisfied with, then we will copy it to sol. If no
         // good solution found, then sol will not be updated.
 
         assert(dir.rows() == problem.grad.rows());
         assert(dir.cols() == problem.grad.cols());
-        assert(problem.objective->rows() == problem.grad.rows());
-        assert(problem.objective->cols() == problem.grad.cols());
-        assert(problem.objective->rows() == temp_objective->rows());
-        assert(problem.objective->cols() == temp_objective->cols());
+        assert(problem.opt_var->rows() == problem.grad.rows());
+        assert(problem.opt_var->cols() == problem.grad.cols());
+        assert(problem.opt_var->rows() == temp_opt_var->rows());
+        assert(problem.opt_var->cols() == temp_opt_var->cols());
 
         assert(s_max > 0.0);
 
@@ -199,23 +198,24 @@ struct NetwtonSolver
         for (int i = 0; i < max_iters; ++i) {
 
             // update solution
-            problem.rx.template for_each<ObjHandleT>(
+            problem.rx.template for_each<OptVarHandleT>(
                 DEVICE,
-                [s     = s,
-                 dir   = dir,
-                 t_obj = *temp_objective,
-                 obj   = *problem.objective] __device__(const ObjHandleT& h) {
-                    for (int j = 0; j < t_obj.get_num_attributes(); ++j) {
-                        t_obj(h, j) = obj(h, j) + s * dir(h, j);
+                [s         = s,
+                 dir       = dir,
+                 t_opt_var = *temp_opt_var,
+                 opt_var =
+                     *problem.opt_var] __device__(const OptVarHandleT& h) {
+                    for (int j = 0; j < t_opt_var.get_num_attributes(); ++j) {
+                        t_opt_var(h, j) = opt_var(h, j) + s * dir(h, j);
                     }
                 });
 
 
-            // eval new obj func
+            // eval terms with the new opt_var
             if (cb) {
-                cb(*temp_objective);
+                cb(*temp_opt_var);
             }
-            problem.eval_terms_passive(temp_objective.get(), stream);
+            problem.eval_terms_passive(temp_opt_var.get(), stream);
 
             // get the new value of the objective function
             T f_new = problem.get_current_loss(stream);
@@ -235,12 +235,13 @@ struct NetwtonSolver
         }
 
         if (update) {
-            problem.rx.template for_each<ObjHandleT>(
+            problem.rx.template for_each<OptVarHandleT>(
                 DEVICE,
-                [t_obj = *temp_objective,
-                 obj   = *problem.objective] __device__(const ObjHandleT& h) {
-                    for (int j = 0; j < t_obj.get_num_attributes(); ++j) {
-                        obj(h, j) = t_obj(h, j);
+                [t_opt_var = *temp_opt_var,
+                 opt_var =
+                     *problem.opt_var] __device__(const OptVarHandleT& h) {
+                    for (int j = 0; j < t_opt_var.get_num_attributes(); ++j) {
+                        opt_var(h, j) = t_opt_var(h, j);
                     }
                 });
             return true;
@@ -260,7 +261,7 @@ struct NetwtonSolver
      * 0/false otherwise.
      */
     template <typename bcT>
-    inline void apply_bc(Attribute<bcT, ObjHandleT>& bc)
+    inline void apply_bc(Attribute<bcT, OptVarHandleT>& bc)
     {
         auto g   = problem.grad;
         auto H   = *problem.hess;
@@ -268,9 +269,9 @@ struct NetwtonSolver
 
         auto& ctx = problem.rx.get_context();
 
-        problem.rx.template for_each<ObjHandleT>(
+        problem.rx.template for_each<OptVarHandleT>(
             DEVICE,
-            [bc, g, H, dim, ctx] __device__(const ObjHandleT& h) mutable {
+            [bc, g, H, dim, ctx] __device__(const OptVarHandleT& h) mutable {
                 if (int(bc(h)) == 1) {
 
                     int h_row_id = ctx.linear_id(h) * dim;

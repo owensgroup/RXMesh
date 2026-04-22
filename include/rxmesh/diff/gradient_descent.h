@@ -4,13 +4,14 @@
 
 namespace rxmesh {
 
-template <typename T, int VariableDim, typename ObjHandleT>
+template <typename T, int VariableDim, typename OptVarHandleT>
 struct GradientDescent
 {
 
-    using DiffProblemT = DiffScalarProblem<T, VariableDim, ObjHandleT, false>;
-    using HessMatT     = typename DiffProblemT::HessMatT;
-    using DenseMatT    = typename DiffProblemT::DenseMatT;
+    using DiffProblemT =
+        DiffScalarProblem<T, VariableDim, OptVarHandleT, false>;
+    using HessMatT  = typename DiffProblemT::HessMatT;
+    using DenseMatT = typename DiffProblemT::DenseMatT;
 
     DiffProblemT& problem;
     double        m_learning_rate;
@@ -23,14 +24,14 @@ struct GradientDescent
 
     inline void take_step(cudaStream_t stream = NULL)
     {
-        auto&  grad = problem.grad;
-        auto&  obj  = *(problem.objective);
-        double lr   = m_learning_rate;
+        auto&  grad    = problem.grad;
+        auto&  opt_var = *(problem.opt_var);
+        double lr      = m_learning_rate;
 
-        problem.rx.template for_each<ObjHandleT>(
-            DEVICE, [grad, obj, lr] __device__(const ObjHandleT& h) {
+        problem.rx.template for_each<OptVarHandleT>(
+            DEVICE, [grad, opt_var, lr] __device__(const OptVarHandleT& h) {
                 for (int i = 0; i < VariableDim; ++i) {
-                    obj(h, i) -= lr * grad(h, i);
+                    opt_var(h, i) -= lr * grad(h, i);
                 }
             });
     }

@@ -12,11 +12,11 @@
 
 namespace rxmesh {
 
-template <typename T, int VariableDim, typename ObjHandleT, typename SolverT>
+template <typename T, int VariableDim, typename OptVarHandleT, typename SolverT>
 struct GaussNetwtonSolver
 {
 
-    using DiffProblemT = DiffVectorProblem<T, VariableDim, ObjHandleT>;
+    using DiffProblemT = DiffVectorProblem<T, VariableDim, OptVarHandleT>;
     using SpMatT       = SparseMatrix<T>;
     using DenseMatT    = typename DiffProblemT::DenseMatT;
     using IndexT       = typename SpMatT::IndexT;

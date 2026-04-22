@@ -7,21 +7,22 @@
 namespace rxmesh {
 
 
-template <typename T, int VariableDim, typename ObjHandleT>
+template <typename T, int VariableDim, typename OptVarHandleT>
 struct LBFGSSolver
 {
 
-    using DiffProblemT = DiffScalarProblem<T, VariableDim, ObjHandleT, false>;
-    using DenseMatT    = typename DiffProblemT::DenseMatT;
+    using DiffProblemT =
+        DiffScalarProblem<T, VariableDim, OptVarHandleT, false>;
+    using DenseMatT = typename DiffProblemT::DenseMatT;
 
-    DiffProblemT&                             problem;
-    int                                       m;  // history size
-    int                                       k;  // iteration count
-    std::vector<DenseMatT>                    s_list;
-    std::vector<DenseMatT>                    y_list;
-    std::vector<T>                            rho_list;
-    DenseMatT                                 dir, q, r;
-    std::shared_ptr<Attribute<T, ObjHandleT>> temp_objective;
+    DiffProblemT&                                problem;
+    int                                          m;  // history size
+    int                                          k;  // iteration count
+    std::vector<DenseMatT>                       s_list;
+    std::vector<DenseMatT>                       y_list;
+    std::vector<T>                               rho_list;
+    DenseMatT                                    dir, q, r;
+    std::shared_ptr<Attribute<T, OptVarHandleT>> temp_opt_var;
 
     LBFGSSolver(DiffProblemT& p, int history_size)
         : problem(p),
@@ -30,8 +31,7 @@ struct LBFGSSolver
           dir(DenseMatT(p.rx, p.grad.rows(), p.grad.cols(), LOCATION_ALL)),
           q(DenseMatT(p.rx, p.grad.rows(), p.grad.cols(), LOCATION_ALL)),
           r(DenseMatT(p.rx, p.grad.rows(), p.grad.cols(), LOCATION_ALL)),
-          temp_objective(
-              p.rx.add_attribute_like("temp_objective", *p.objective))
+          temp_opt_var(p.rx.add_attribute_like("temp_opt_var", *p.opt_var))
     {
 
         dir.reset(0, LOCATION_ALL);
@@ -51,7 +51,7 @@ struct LBFGSSolver
             y_list[i].reset(0, LOCATION_ALL);
         }
     }
-     
+
 
     inline void compute_direction(cudaStream_t stream = NULL)
     {
@@ -96,20 +96,20 @@ struct LBFGSSolver
 
     inline void update_history(cudaStream_t stream = NULL)
     {
-        // update history is called after temp_objective (x_{k+1}) is being
-        // updated in line_search and before updating problem.objective (x_k)
+        // update history is called after temp_opt_var (x_{k+1}) is being
+        // updated in line_search and before updating problem.opt_var (x_k)
 
         int idx = k % m;
 
         // s_k = x_{k+1} - x_k
-        // s_k = temp_objective - problem.objective
+        // s_k = temp_opt_var - problem.opt_var
         s_list[idx].reset(0, DEVICE);
-        problem.rx.template for_each<ObjHandleT>(
+        problem.rx.template for_each<OptVarHandleT>(
             DEVICE,
             [s    = s_list[idx],
-             temp = *temp_objective,
+             temp = *temp_opt_var,
              prev =
-                 *problem.objective] __device__(const ObjHandleT& h) mutable {
+                 *problem.opt_var] __device__(const OptVarHandleT& h) mutable {
                 for (int j = 0; j < s.cols(); ++j) {
                     s(h, j) = temp(h, j) - prev(h, j);
                 }
@@ -122,7 +122,7 @@ struct LBFGSSolver
         y_list[idx].multiply(T(-1.f), stream);
 
         // update grad_{k+1}
-        problem.eval_terms_grad_only(temp_objective.get(), stream);
+        problem.eval_terms_grad_only(temp_opt_var.get(), stream);
 
         // y_k = grad_{k+1} - grad_k
         y_list[idx].axpy(problem.grad, T(1.0), stream);
@@ -143,10 +143,10 @@ struct LBFGSSolver
     {
         assert(dir.rows() == problem.grad.rows());
         assert(dir.cols() == problem.grad.cols());
-        assert(problem.objective->rows() == problem.grad.rows());
-        assert(problem.objective->cols() == problem.grad.cols());
-        assert(problem.objective->rows() == temp_objective->rows());
-        assert(problem.objective->cols() == temp_objective->cols());
+        assert(problem.opt_var->rows() == problem.grad.rows());
+        assert(problem.opt_var->cols() == problem.grad.cols());
+        assert(problem.opt_var->rows() == temp_opt_var->rows());
+        assert(problem.opt_var->cols() == temp_opt_var->cols());
         assert(s_max > 0.0);
 
         T s = s_max;
@@ -157,18 +157,19 @@ struct LBFGSSolver
 
 
         for (int i = 0; i < max_iters; ++i) {
-            problem.rx.template for_each<ObjHandleT>(
+            problem.rx.template for_each<OptVarHandleT>(
                 DEVICE,
                 [s,
-                 dir   = dir,
-                 t_obj = *temp_objective,
-                 obj   = *problem.objective] __device__(const ObjHandleT& h) {
-                    for (int j = 0; j < t_obj.get_num_attributes(); ++j) {
-                        t_obj(h, j) = obj(h, j) + s * dir(h, j);
+                 dir       = dir,
+                 t_opt_var = *temp_opt_var,
+                 opt_var =
+                     *problem.opt_var] __device__(const OptVarHandleT& h) {
+                    for (int j = 0; j < t_opt_var.get_num_attributes(); ++j) {
+                        t_opt_var(h, j) = opt_var(h, j) + s * dir(h, j);
                     }
                 });
 
-            problem.eval_terms_passive(temp_objective.get(), stream);
+            problem.eval_terms_passive(temp_opt_var.get(), stream);
             T f_new = problem.get_current_loss(stream);
 
             if (armijo_condition(
@@ -182,12 +183,13 @@ struct LBFGSSolver
 
         if (update) {
             update_history(stream);
-            problem.rx.template for_each<ObjHandleT>(
+            problem.rx.template for_each<OptVarHandleT>(
                 DEVICE,
-                [t_obj = *temp_objective,
-                 obj   = *problem.objective] __device__(const ObjHandleT& h) {
-                    for (int j = 0; j < t_obj.get_num_attributes(); ++j) {
-                        obj(h, j) = t_obj(h, j);
+                [t_opt_var = *temp_opt_var,
+                 opt_var =
+                     *problem.opt_var] __device__(const OptVarHandleT& h) {
+                    for (int j = 0; j < t_opt_var.get_num_attributes(); ++j) {
+                        opt_var(h, j) = t_opt_var(h, j);
                     }
                 });
             ++k;

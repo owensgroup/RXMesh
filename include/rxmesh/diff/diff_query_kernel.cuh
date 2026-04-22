@@ -26,7 +26,7 @@ namespace detail {
 // ============= Scalar Mat-vec
 template <uint32_t blockThreads,
           typename LossHandleT,
-          typename ObjHandleT,
+          typename OptVarHandleT,
           Op op,
           typename ScalarT,
           bool ProjectHess,
@@ -35,11 +35,11 @@ template <uint32_t blockThreads,
 __global__ static void hess_matvec_scalar_kernel(
     const Context context,
     const DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor>
-                                                                input_vector,
-    DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor> output_vector,
-    const Attribute<typename ScalarT::PassiveType, ObjHandleT>  objective,
-    const bool                                                  oriented,
-    LambdaT                                                     user_func)
+                                                                  input_vector,
+    DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor>   output_vector,
+    const Attribute<typename ScalarT::PassiveType, OptVarHandleT> opt_var,
+    const bool                                                    oriented,
+    LambdaT                                                       user_func)
 {
 
     using IteratorT = typename IteratorType<op>::type;
@@ -52,10 +52,10 @@ __global__ static void hess_matvec_scalar_kernel(
 
     auto block = cooperative_groups::this_thread_block();
 
-    auto get_indices = [&](const ObjHandleT& row,
-                           const ObjHandleT& col,
-                           const int         local_i,
-                           const int         local_j) {
+    auto get_indices = [&](const OptVarHandleT& row,
+                           const OptVarHandleT& col,
+                           const int            local_i,
+                           const int            local_j) {
         // this mimics how we calculate the strides in the sparse matrix
         const int r_id = context.linear_id(row) * VariableDim + local_i;
 
@@ -68,10 +68,10 @@ __global__ static void hess_matvec_scalar_kernel(
     if constexpr (op == Op::V || op == Op::E || op == Op::F) {
 
         for_each<op, blockThreads>(context, [&](const LossHandleT& fh) {
-            // eval the objective function
+            // eval the user function
             DiffHandle<ScalarT, LossHandleT> diff_handle(fh);
 
-            ScalarT res = user_func(diff_handle, objective);
+            ScalarT res = user_func(diff_handle, opt_var);
 
             // project Hessian to PD matrix
             if constexpr (ProjectHess) {
@@ -96,10 +96,10 @@ __global__ static void hess_matvec_scalar_kernel(
     } else {
         // Binary query
         auto eval = [&](const LossHandleT& fh, const IteratorT& iter) {
-            // eval the objective function
+            // eval the user function
             DiffHandle<ScalarT, LossHandleT> diff_handle(fh);
 
-            ScalarT res = user_func(diff_handle, iter, objective);
+            ScalarT res = user_func(diff_handle, iter, opt_var);
 
 
             // project Hessian to PD matrix
@@ -150,16 +150,16 @@ __global__ static void hess_matvec_scalar_kernel(
 // ============= Scalar Passive
 template <uint32_t blockThreads,
           typename LossHandleT,
-          typename ObjHandleT,
+          typename OptVarHandleT,
           Op op,
           typename ScalarT,
           typename LambdaT>
 __global__ static void diff_scalar_kernel_passive(
-    const Context                                         context,
-    Attribute<typename ScalarT::PassiveType, LossHandleT> loss,
-    Attribute<typename ScalarT::PassiveType, ObjHandleT>  objective,
-    const bool                                            oriented,
-    LambdaT                                               user_func)
+    const Context                                           context,
+    Attribute<typename ScalarT::PassiveType, LossHandleT>   loss,
+    Attribute<typename ScalarT::PassiveType, OptVarHandleT> opt_var,
+    const bool                                              oriented,
+    LambdaT                                                 user_func)
 {
 
     using IteratorT = typename IteratorType<op>::type;
@@ -174,7 +174,7 @@ __global__ static void diff_scalar_kernel_passive(
         for_each<op, blockThreads>(context, [&](const LossHandleT& fh) {
             DiffHandle<PassiveT, LossHandleT> diff_handle(fh);
 
-            PassiveT res = user_func(diff_handle, objective);
+            PassiveT res = user_func(diff_handle, opt_var);
 
             loss(fh) = res;
         });
@@ -183,7 +183,7 @@ __global__ static void diff_scalar_kernel_passive(
         auto eval = [&](const LossHandleT& fh, const IteratorT& iter) {
             DiffHandle<PassiveT, LossHandleT> diff_handle(fh);
 
-            PassiveT res = user_func(diff_handle, iter, objective);
+            PassiveT res = user_func(diff_handle, iter, opt_var);
 
             loss(fh) = res;
         };
@@ -199,7 +199,7 @@ __global__ static void diff_scalar_kernel_passive(
 // ============= Scalar Active
 template <uint32_t blockThreads,
           typename LossHandleT,
-          typename ObjHandleT,
+          typename OptVarHandleT,
           Op op,
           typename ScalarT,
           bool ProjectHess,
@@ -210,7 +210,7 @@ __global__ static void diff_scalar_kernel_active(
     DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor>     grad,
     HessianSparseMatrix<typename ScalarT::PassiveType, VariableDim> hess,
     Attribute<typename ScalarT::PassiveType, LossHandleT>           loss,
-    Attribute<typename ScalarT::PassiveType, ObjHandleT>            objective,
+    Attribute<typename ScalarT::PassiveType, OptVarHandleT>         opt_var,
     const bool                                                      oriented,
     LambdaT                                                         user_func)
 {
@@ -229,10 +229,10 @@ __global__ static void diff_scalar_kernel_active(
     if constexpr (op == Op::V || op == Op::E || op == Op::F) {
 
         for_each<op, blockThreads>(context, [&](const LossHandleT& fh) {
-            // eval the objective function
+            // eval the user function
             DiffHandle<ScalarT, LossHandleT> diff_handle(fh);
 
-            ScalarT res = user_func(diff_handle, objective);
+            ScalarT res = user_func(diff_handle, opt_var);
 
             // function
             loss(fh) = res.val();
@@ -264,10 +264,10 @@ __global__ static void diff_scalar_kernel_active(
     } else {
         // Binary query
         auto eval = [&](const LossHandleT& fh, const IteratorT& iter) {
-            // eval the objective function
+            // eval the user function
             DiffHandle<ScalarT, LossHandleT> diff_handle(fh);
 
-            ScalarT res = user_func(diff_handle, iter, objective);
+            ScalarT res = user_func(diff_handle, iter, opt_var);
 
             // function
             loss(fh) = res.val();
@@ -325,17 +325,17 @@ __global__ static void diff_scalar_kernel_active(
 // ============= Scalar Passive Pairs (generic)
 template <uint32_t blockThreads,
           typename LossHandleT,
-          typename ObjHandleT,
+          typename OptVarHandleT,
           typename HandleT0,
           typename HandleT1,
           typename HessMatT,
           typename ScalarT,
           typename LambdaT>
 __global__ static void diff_scalar_kernel_passive_pair(
-    CandidatePairs<HandleT0, HandleT1, HessMatT>          pairs,
-    Attribute<typename ScalarT::PassiveType, LossHandleT> loss,
-    Attribute<typename ScalarT::PassiveType, ObjHandleT>  objective,
-    LambdaT                                               user_func)
+    CandidatePairs<HandleT0, HandleT1, HessMatT>            pairs,
+    Attribute<typename ScalarT::PassiveType, LossHandleT>   loss,
+    Attribute<typename ScalarT::PassiveType, OptVarHandleT> opt_var,
+    LambdaT                                                 user_func)
 {
     static_assert(std::is_same_v<HandleT0, HandleT1>);
 
@@ -356,7 +356,7 @@ __global__ static void diff_scalar_kernel_passive_pair(
 
         PairIterator<HandleT0> iter(pair.first, pair.second);
 
-        PassiveT res = user_func(diff_handle, iter, objective);
+        PassiveT res = user_func(diff_handle, iter, opt_var);
 
         //???? not sure which vertex should take the loss
         loss(pair.first) = res;
@@ -368,7 +368,7 @@ template <uint32_t blockThreads, typename ScalarT, typename LambdaT>
 __global__ static void diff_scalar_kernel_passive_vf_pair(
     const Context                                  context,
     VertexAttribute<typename ScalarT::PassiveType> loss,
-    VertexAttribute<typename ScalarT::PassiveType> objective,
+    VertexAttribute<typename ScalarT::PassiveType> opt_var,
     FaceAttribute<VertexHandle>                    face_interact_vertex,
     LambdaT                                        user_func)
 {
@@ -381,7 +381,7 @@ __global__ static void diff_scalar_kernel_passive_vf_pair(
         if (vh.is_valid()) {
             DiffHandle<PassiveT, FaceHandle> diff_handle(fh);
 
-            PassiveT res = user_func(diff_handle, vh, iter, objective);
+            PassiveT res = user_func(diff_handle, vh, iter, opt_var);
 
             loss(vh) = res;
         }
@@ -398,7 +398,7 @@ __global__ static void diff_scalar_kernel_passive_vf_pair(
 // ============= Scalar Active Pairs (generic)
 template <uint32_t blockThreads,
           typename LossHandleT,
-          typename ObjHandleT,
+          typename OptVarHandleT,
           typename HandleT0,
           typename HandleT1,
           typename HessMatT,
@@ -411,7 +411,7 @@ __global__ static void diff_scalar_kernel_active_pair(
     DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor>     grad,
     HessianSparseMatrix<typename ScalarT::PassiveType, VariableDim> hess,
     Attribute<typename ScalarT::PassiveType, LossHandleT>           loss,
-    Attribute<typename ScalarT::PassiveType, ObjHandleT>            objective,
+    Attribute<typename ScalarT::PassiveType, OptVarHandleT>         opt_var,
     LambdaT                                                         user_func)
 {
     static_assert(std::is_same_v<HandleT0, HandleT1>);
@@ -440,7 +440,7 @@ __global__ static void diff_scalar_kernel_active_pair(
 
         PairIterator<HandleT0> iter(pair.first, pair.second);
 
-        ScalarT res = user_func(diff_handle, iter, objective);
+        ScalarT res = user_func(diff_handle, iter, opt_var);
 
         //???? not sure which vertex should take the loss
         loss(pair.first) = res.val();
@@ -489,7 +489,7 @@ __global__ static void diff_scalar_kernel_active_pair(
 // ============= Scalar Active Pairs (VF pairs)
 template <uint32_t blockThreads,
           typename ScalarT,
-          int VariableDim,
+          int  VariableDim,
           bool ProjectHess,
           typename LambdaT>
 __global__ static void diff_scalar_kernel_active_vf_pair(
@@ -497,7 +497,7 @@ __global__ static void diff_scalar_kernel_active_vf_pair(
     DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor>     grad,
     HessianSparseMatrix<typename ScalarT::PassiveType, VariableDim> hess,
     VertexAttribute<typename ScalarT::PassiveType>                  loss,
-    VertexAttribute<typename ScalarT::PassiveType>                  objective,
+    VertexAttribute<typename ScalarT::PassiveType>                  opt_var,
     FaceAttribute<VertexHandle> face_interact_vertex,
     LambdaT                     user_func)
 {
@@ -512,7 +512,7 @@ __global__ static void diff_scalar_kernel_active_vf_pair(
         if (vh.is_valid()) {
             DiffHandle<ScalarT, FaceHandle> diff_handle(fh);
 
-            ScalarT res = user_func(diff_handle, vh, iter, objective);
+            ScalarT res = user_func(diff_handle, vh, iter, opt_var);
 
             // function
             loss(vh) = res.val();
@@ -577,7 +577,7 @@ __global__ static void diff_scalar_kernel_active_vf_pair(
 // ============= Vector Passive
 template <uint32_t blockThreads,
           typename LossHandleT,
-          typename ObjHandleT,
+          typename OptVarHandleT,
           Op  op,
           int InputDim,
           typename ScalarT,
@@ -585,7 +585,7 @@ template <uint32_t blockThreads,
 __global__ static void diff_vector_kernel_passive(
     const Context                                               context,
     DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor> residual,
-    Attribute<typename ScalarT::PassiveType, ObjHandleT>        objective,
+    Attribute<typename ScalarT::PassiveType, OptVarHandleT>     opt_var,
     const bool                                                  oriented,
     LambdaT                                                     user_func)
 {
@@ -609,7 +609,7 @@ __global__ static void diff_vector_kernel_passive(
             DiffHandle<PassiveT, LossHandleT> diff_handle(fh);
 
             Eigen::Vector<PassiveT, InputDim> res =
-                user_func(diff_handle, objective);
+                user_func(diff_handle, opt_var);
 
             for (int i = 0; i < InputDim; ++i) {
                 residual(fh, i) = res[i];
@@ -623,7 +623,7 @@ __global__ static void diff_vector_kernel_passive(
             DiffHandle<PassiveT, LossHandleT> diff_handle(fh);
 
             Eigen::Vector<PassiveT, InputDim> res =
-                user_func(diff_handle, iter, objective);
+                user_func(diff_handle, iter, opt_var);
 
             for (int i = 0; i < InputDim; ++i) {
                 residual(fh, i) = res[i];
@@ -642,7 +642,7 @@ __global__ static void diff_vector_kernel_passive(
 // ============= Vector Active
 template <uint32_t blockThreads,
           typename LossHandleT,
-          typename ObjHandleT,
+          typename OptVarHandleT,
           Op  op,
           int InputDim,
           typename ScalarT,
@@ -653,7 +653,7 @@ __global__ static void diff_vector_kernel_active(
     int                                                         term_id,
     JacobianSparseMatrix<typename ScalarT::PassiveType>         jac,
     DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor> residual,
-    Attribute<typename ScalarT::PassiveType, ObjHandleT>        objective,
+    Attribute<typename ScalarT::PassiveType, OptVarHandleT>     opt_var,
     const bool                                                  oriented,
     LambdaT                                                     user_func)
 {
@@ -678,11 +678,11 @@ __global__ static void diff_vector_kernel_active(
     if constexpr (op == Op::V || op == Op::E || op == Op::F) {
 
         for_each<op, blockThreads>(context, [&](const LossHandleT& fh) {
-            // eval the objective function
+            // eval the user function
             DiffHandle<ScalarT, LossHandleT> diff_handle(fh);
 
             Eigen::Vector<ScalarT, InputDim> res =
-                user_func(diff_handle, objective);
+                user_func(diff_handle, opt_var);
 
             // residual
             for (int i = 0; i < InputDim; ++i) {
@@ -702,11 +702,11 @@ __global__ static void diff_vector_kernel_active(
     } else {
         // Binary query
         auto eval = [&](const LossHandleT& fh, const IteratorT& iter) {
-            // eval the objective function
+            // eval the user function
             DiffHandle<ScalarT, LossHandleT> diff_handle(fh);
 
             Eigen::Vector<ScalarT, InputDim> res =
-                user_func(diff_handle, iter, objective);
+                user_func(diff_handle, iter, opt_var);
 
             // residual
             for (int i = 0; i < InputDim; ++i) {

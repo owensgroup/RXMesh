@@ -10,7 +10,7 @@
 
 namespace rxmesh {
 
-template <typename T, int VariableDim, typename ObjHandleT>
+template <typename T, int VariableDim, typename OptVarHandleT>
 struct DiffVectorProblem
 {
     using DenseMatT = DenseMatrix<T, Eigen::RowMajor>;
@@ -20,22 +20,22 @@ struct DiffVectorProblem
 
     RXMeshStatic& rx;
 
-    std::shared_ptr<Attribute<T, ObjHandleT>> objective;
-    std::shared_ptr<DenseMatT>                residual;
-    std::shared_ptr<DenseMatT>                grad;
+    std::shared_ptr<Attribute<T, OptVarHandleT>> opt_var;
+    std::shared_ptr<DenseMatT>                   residual;
+    std::shared_ptr<DenseMatT>                   grad;
 
     // residual_reshaped is a view in residual for different terms
-    std::vector<DenseMatT>                                  residual_reshaped;
-    std::shared_ptr<JacSpMatT>                              jac;
-    std::vector<Op>                                         ops;
-    std::vector<BlockShape>                                 block_shapes;
-    std::vector<std::shared_ptr<VectorTerm<T, ObjHandleT>>> terms;
-    bool                                                    is_prep_eval_called;
+    std::vector<DenseMatT>     residual_reshaped;
+    std::shared_ptr<JacSpMatT> jac;
+    std::vector<Op>            ops;
+    std::vector<BlockShape>    block_shapes;
+    std::vector<std::shared_ptr<VectorTerm<T, OptVarHandleT>>> terms;
+    bool is_prep_eval_called;
 
 
     DiffVectorProblem(RXMeshStatic& rx)
         : rx(rx),
-          objective(rx.add_attribute<T, ObjHandleT>("objective", VariableDim)),
+          opt_var(rx.add_attribute<T, OptVarHandleT>("opt_var", VariableDim)),
           is_prep_eval_called(false)
     {
     }
@@ -62,7 +62,7 @@ struct DiffVectorProblem
                       op == Op::V) {
             auto new_term =
                 std::make_shared<TemplatedVectorTerm<VertexHandle,
-                                                     ObjHandleT,
+                                                     OptVarHandleT,
                                                      blockThreads,
                                                      op,
                                                      ScalarT,
@@ -70,14 +70,15 @@ struct DiffVectorProblem
                                                      VariableDim,
                                                      LambdaT>>(rx, t, oreinted);
             terms.push_back(
-                std::dynamic_pointer_cast<VectorTerm<T, ObjHandleT>>(new_term));
+                std::dynamic_pointer_cast<VectorTerm<T, OptVarHandleT>>(
+                    new_term));
         }
 
         if constexpr (op == Op::EV || op == Op::EE || op == Op::EF ||
                       op == Op::E || op == Op::EVDiamond) {
             auto new_term =
                 std::make_shared<TemplatedVectorTerm<EdgeHandle,
-                                                     ObjHandleT,
+                                                     OptVarHandleT,
                                                      blockThreads,
                                                      op,
                                                      ScalarT,
@@ -85,14 +86,15 @@ struct DiffVectorProblem
                                                      VariableDim,
                                                      LambdaT>>(rx, t, oreinted);
             terms.push_back(
-                std::dynamic_pointer_cast<VectorTerm<T, ObjHandleT>>(new_term));
+                std::dynamic_pointer_cast<VectorTerm<T, OptVarHandleT>>(
+                    new_term));
         }
 
         if constexpr (op == Op::FV || op == Op::FE || op == Op::FF ||
                       op == Op::F) {
             auto new_term =
                 std::make_shared<TemplatedVectorTerm<FaceHandle,
-                                                     ObjHandleT,
+                                                     OptVarHandleT,
                                                      blockThreads,
                                                      op,
                                                      ScalarT,
@@ -100,7 +102,8 @@ struct DiffVectorProblem
                                                      VariableDim,
                                                      LambdaT>>(rx, t, oreinted);
             terms.push_back(
-                std::dynamic_pointer_cast<VectorTerm<T, ObjHandleT>>(new_term));
+                std::dynamic_pointer_cast<VectorTerm<T, OptVarHandleT>>(
+                    new_term));
         }
 
         ops.push_back(op);
@@ -133,7 +136,7 @@ struct DiffVectorProblem
                       op == Op::V) {
             auto new_term =
                 std::make_shared<TemplatedVectorTerm<VertexHandle,
-                                                     ObjHandleT,
+                                                     OptVarHandleT,
                                                      blockThreads,
                                                      op,
                                                      ScalarT,
@@ -141,14 +144,15 @@ struct DiffVectorProblem
                                                      OutputVariableDim,
                                                      LambdaT>>(rx, t, oreinted);
             terms.push_back(
-                std::dynamic_pointer_cast<VectorTerm<T, ObjHandleT>>(new_term));
+                std::dynamic_pointer_cast<VectorTerm<T, OptVarHandleT>>(
+                    new_term));
         }
 
         if constexpr (op == Op::EV || op == Op::EE || op == Op::EF ||
                       op == Op::E || op == Op::EVDiamond) {
             auto new_term =
                 std::make_shared<TemplatedVectorTerm<EdgeHandle,
-                                                     ObjHandleT,
+                                                     OptVarHandleT,
                                                      blockThreads,
                                                      op,
                                                      ScalarT,
@@ -156,14 +160,15 @@ struct DiffVectorProblem
                                                      OutputVariableDim,
                                                      LambdaT>>(rx, t, oreinted);
             terms.push_back(
-                std::dynamic_pointer_cast<VectorTerm<T, ObjHandleT>>(new_term));
+                std::dynamic_pointer_cast<VectorTerm<T, OptVarHandleT>>(
+                    new_term));
         }
 
         if constexpr (op == Op::FV || op == Op::FE || op == Op::FF ||
                       op == Op::F) {
             auto new_term =
                 std::make_shared<TemplatedVectorTerm<FaceHandle,
-                                                     ObjHandleT,
+                                                     OptVarHandleT,
                                                      blockThreads,
                                                      op,
                                                      ScalarT,
@@ -171,7 +176,8 @@ struct DiffVectorProblem
                                                      OutputVariableDim,
                                                      LambdaT>>(rx, t, oreinted);
             terms.push_back(
-                std::dynamic_pointer_cast<VectorTerm<T, ObjHandleT>>(new_term));
+                std::dynamic_pointer_cast<VectorTerm<T, OptVarHandleT>>(
+                    new_term));
         }
 
         ops.push_back(op);
@@ -219,7 +225,7 @@ struct DiffVectorProblem
 
         for (size_t i = 0; i < terms.size(); ++i) {
             terms[i]->eval_active(
-                i, *objective, residual_reshaped[i], *jac, stream);
+                i, *opt_var, residual_reshaped[i], *jac, stream);
         }
     }
 
@@ -246,19 +252,19 @@ struct DiffVectorProblem
     /**
      * @brief evaluate all terms in passive mode
      */
-    void eval_terms_passive(Attribute<T, ObjHandleT>* obj    = nullptr,
-                            cudaStream_t              stream = NULL)
+    void eval_terms_passive(Attribute<T, OptVarHandleT>* opt_var_in = nullptr,
+                            cudaStream_t                 stream     = NULL)
     {
         if (!is_prep_eval_called) {
             prep_eval();
         }
 
         for (size_t i = 0; i < terms.size(); ++i) {
-            if (obj) {
-                terms[i]->eval_passive(*obj, residual_reshaped[i], stream);
-            } else {
+            if (opt_var_in) {
                 terms[i]->eval_passive(
-                    *objective, residual_reshaped[i], stream);
+                    *opt_var_in, residual_reshaped[i], stream);
+            } else {
+                terms[i]->eval_passive(*opt_var, residual_reshaped[i], stream);
             }
         }
     }
