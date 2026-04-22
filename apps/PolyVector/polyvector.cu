@@ -294,7 +294,7 @@ int main(int argc, char** argv)
     ProblemT problem(rx);
 
     // used in line search
-    auto x_new = *rx.add_attribute_like("x_new", *problem.objective);
+    auto x_new = *rx.add_attribute_like("x_new", *problem.opt_var);
 
 #ifdef USE_CUDSS
     using SolverT =
@@ -317,7 +317,7 @@ int main(int argc, char** argv)
     auto ctx = rx.get_context();
 
     problem.add_term<Op::EF, 7>(
-        [=] __device__(const auto& eh, const auto& iter, auto& objective) {
+        [=] __device__(const auto& eh, const auto& iter, auto& opt_var) {
             assert(iter.size() == 2);
 
             using ActiveT = ACTIVE_TYPE(eh);
@@ -330,11 +330,11 @@ int main(int argc, char** argv)
             //  4 variables in face f and g
             Eigen::Vector4<ActiveT> vars_f, vars_g;
             if (ctx.linear_id_fast(iter[0]) > ctx.linear_id_fast(iter[1])) {
-                vars_f = iter_val<ActiveT, 4>(eh, iter, objective, 0);
-                vars_g = iter_val<ActiveT, 4>(eh, iter, objective, 1);
+                vars_f = iter_val<ActiveT, 4>(eh, iter, opt_var, 0);
+                vars_g = iter_val<ActiveT, 4>(eh, iter, opt_var, 1);
             } else {
-                vars_f = iter_val<ActiveT, 4>(eh, iter, objective, 1);
-                vars_g = iter_val<ActiveT, 4>(eh, iter, objective, 0);
+                vars_f = iter_val<ActiveT, 4>(eh, iter, opt_var, 1);
+                vars_g = iter_val<ActiveT, 4>(eh, iter, opt_var, 0);
             }
 
             thrust::complex<T> f_conj = e_f_conj(eh);
@@ -398,7 +398,7 @@ int main(int argc, char** argv)
         });
 
 
-    problem.add_term<Op::F, 5>([=] __device__(const auto& fh, auto& objective) {
+    problem.add_term<Op::F, 5>([=] __device__(const auto& fh, auto& opt_var) {
         using ActiveT = ACTIVE_TYPE(fh);
 
         uint32_t id = ctx.linear_id_fast(fh);
@@ -406,7 +406,7 @@ int main(int argc, char** argv)
         Eigen::Vector<ActiveT, 5> res;
 
         // Get 2D vectors (alpha, beta) in local basis of face f
-        Eigen::Vector4<ActiveT> vars = iter_val<ActiveT, 4>(fh, objective);
+        Eigen::Vector4<ActiveT> vars = iter_val<ActiveT, 4>(fh, opt_var);
 
         thrust::complex<ActiveT> alpha(vars[0], vars[1]);
         thrust::complex<ActiveT> beta(vars[2], vars[3]);
@@ -468,7 +468,7 @@ int main(int argc, char** argv)
         return res;
     });
 
-    problem.objective->copy_from(x_init, LOCATION_ALL, LOCATION_ALL);
+    problem.opt_var->copy_from(x_init, LOCATION_ALL, LOCATION_ALL);
 
     Timers<GPUTimer> timer;
     timer.add("Total");
@@ -516,14 +516,14 @@ int main(int argc, char** argv)
             rx.for_each_face(
                 DEVICE,
                 [x_new   = x_new,
-                 obj     = *problem.objective,
+                 opt_var = *problem.opt_var,
                  dir     = solver.dir,
                  sz      = step_size,
                  n_faces = rx.get_num_faces()] __device__(const FaceHandle
                                                               fh) mutable {
                     dir.reshape(n_faces, N);
                     for (int i = 0; i < N; ++i) {
-                        x_new(fh, i) = obj(fh, i) + sz * dir(fh, i);
+                        x_new(fh, i) = opt_var(fh, i) + sz * dir(fh, i);
                     }
                 });
 
@@ -546,20 +546,20 @@ int main(int argc, char** argv)
         }
 
         rx.for_each_face(DEVICE,
-                         [x0  = x_prev,
-                          obj = *problem.objective,
-                          x1  = x_new,
-                          N   = N] __device__(const FaceHandle fh) mutable {
+                         [x0      = x_prev,
+                          opt_var = *problem.opt_var,
+                          x1      = x_new,
+                          N       = N] __device__(const FaceHandle fh) mutable {
                              for (int i = 0; i < N; ++i) {
-                                 x0(fh, i)  = obj(fh, i);
-                                 obj(fh, i) = x1(fh, i);
+                                 x0(fh, i)      = opt_var(fh, i);
+                                 opt_var(fh, i) = x1(fh, i);
                              }
                          });
 
         timer.stop("LineSearch");
 
-        // x_prev.copy_from(*problem.objective, DEVICE, DEVICE);
-        // problem.objective->copy_from(x_new, DEVICE, DEVICE);
+        // x_prev.copy_from(*problem.opt_var, DEVICE, DEVICE);
+        // problem.opt_var->copy_from(x_new, DEVICE, DEVICE);
 
 
         // Decay smoothness term after every 5 iters
@@ -591,10 +591,10 @@ int main(int argc, char** argv)
         timer.elapsed_millis("LinearSolver") / max_iters);
 
 #if USE_POLYSCOPE
-    problem.objective->move(DEVICE, HOST);
+    problem.opt_var->move(DEVICE, HOST);
 
     viz_curl(rx, "xInit", x_init, e_f_conj, e_g_conj, b1, b2);
-    viz_curl(rx, "x", *problem.objective, e_f_conj, e_g_conj, b1, b2);
+    viz_curl(rx, "x", *problem.opt_var, e_f_conj, e_g_conj, b1, b2);
 
     rx.get_polyscope_mesh()->addFaceVectorQuantity("B1", b1);
     rx.get_polyscope_mesh()->addFaceVectorQuantity("B2", b2);
@@ -613,7 +613,7 @@ int main(int argc, char** argv)
     // Eigen::write_text("rx_" + mesh_file_name + "_b2.dat",
     //                   b2.to_matrix()->to_eigen_copy());
     // Eigen::write_text("rx_" + mesh_file_name + "_x.dat",
-    //                   problem.objective->to_matrix()->to_eigen_copy());
+    //                   problem.opt_var->to_matrix()->to_eigen_copy());
 
 
     solver.release();

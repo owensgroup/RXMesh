@@ -13,10 +13,10 @@ void gravity_energy(ProblemT& problem, VAttrT& x, T h, T mass)
 
     problem.template add_term<Op::V, true>(
         [x, neg_mass_times_h_sq, g] __device__(const auto& vh,
-                                               auto&       obj) mutable {
+                                               auto&       opt_var) mutable {
             using ActiveT = ACTIVE_TYPE(vh);
 
-            Eigen::Vector3<ActiveT> xx = iter_val<ActiveT, 3>(vh, obj);
+            Eigen::Vector3<ActiveT> xx = iter_val<ActiveT, 3>(vh, opt_var);
 
             ActiveT E = neg_mass_times_h_sq * xx.dot(g);
 

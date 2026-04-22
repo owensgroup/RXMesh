@@ -189,7 +189,7 @@ void manifold_optimization(RXMeshStatic&                          rx,
     // add energy term
     problem.template add_term<Op::FV, true>([=] __device__(const auto& fh,
                                                            const auto& iter,
-                                                           auto&       obj) {
+                                                           auto& opt_var) {
         // fh is a face handle
         // iter is an iterator over fh's vertices
 
@@ -201,9 +201,12 @@ void manifold_optimization(RXMeshStatic&                          rx,
         using ActiveT = ACTIVE_TYPE(fh);
 
         // tangent vectors at the triangle three vertices (a,b,c)
-        Eigen::Vector2<ActiveT> a_tang = iter_val<ActiveT, 2>(fh, iter, obj, 0);
-        Eigen::Vector2<ActiveT> b_tang = iter_val<ActiveT, 2>(fh, iter, obj, 1);
-        Eigen::Vector2<ActiveT> c_tang = iter_val<ActiveT, 2>(fh, iter, obj, 2);
+        Eigen::Vector2<ActiveT> a_tang =
+            iter_val<ActiveT, 2>(fh, iter, opt_var, 0);
+        Eigen::Vector2<ActiveT> b_tang =
+            iter_val<ActiveT, 2>(fh, iter, opt_var, 1);
+        Eigen::Vector2<ActiveT> c_tang =
+            iter_val<ActiveT, 2>(fh, iter, opt_var, 2);
 
 
         // Retract 2D tangent vectors to 3D points on the sphere.
@@ -259,7 +262,7 @@ void manifold_optimization(RXMeshStatic&                          rx,
     for (iter = 0; iter < Arg.max_iter; ++iter) {
 
 
-        problem.objective->reset(0, DEVICE);
+        problem.opt_var->reset(0, DEVICE);
 
         timer.start("Diff");
 
@@ -301,10 +304,10 @@ void manifold_optimization(RXMeshStatic&                          rx,
 
         // Re-center local bases
         rx.for_each_vertex(DEVICE,
-                           [S, B1, B2, obj = *problem.objective] __device__(
+                           [S, B1, B2, opt_var = *problem.opt_var] __device__(
                                const VertexHandle h) mutable {
                                Eigen::Vector2<T> v =
-                                   obj.template to_eigen<2>(h);
+                                   opt_var.template to_eigen<2>(h);
                                Eigen::Vector3<T> s = retract(v, h, S, B1, B2);
                                S.from_eigen(h, s);
                            });

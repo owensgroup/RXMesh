@@ -10,7 +10,7 @@ void mass_spring_energy(ProblemT& problem, EAttrT& rest_l, T h, T k)
     T half_k_times_h_sq = T(0.5) * k * h * h;
     problem.template add_term<Op::EV, true>(
         [rest_l, half_k_times_h_sq] __device__(
-            const auto& eh, const auto& iter, auto& obj) mutable {
+            const auto& eh, const auto& iter, auto& opt_var) mutable {
             assert(iter[0].is_valid() && iter[1].is_valid());
 
             assert(iter.size() == 2);
@@ -18,9 +18,9 @@ void mass_spring_energy(ProblemT& problem, EAttrT& rest_l, T h, T k)
             using ActiveT = ACTIVE_TYPE(eh);
 
             const Eigen::Vector3<ActiveT> a =
-                iter_val<ActiveT, 3>(eh, iter, obj, 0);
+                iter_val<ActiveT, 3>(eh, iter, opt_var, 0);
             const Eigen::Vector3<ActiveT> b =
-                iter_val<ActiveT, 3>(eh, iter, obj, 1);
+                iter_val<ActiveT, 3>(eh, iter, opt_var, 1);
 
             const T r = rest_l(eh);
 

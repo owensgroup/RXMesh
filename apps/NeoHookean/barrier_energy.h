@@ -94,11 +94,11 @@ void box_barrier_energy(ProblemT& problem,
         const Eigen::Vector3<T> n_eigen(n[0], n[1], n[2]);
 
         problem.template add_term<Op::V, true>(
-            [=] __device__(const auto& vh, auto& obj) mutable {
+            [=] __device__(const auto& vh, auto& opt_var) mutable {
                 using ActiveT = ACTIVE_TYPE(vh);
 
                 const Eigen::Vector3<ActiveT> xi =
-                    iter_val<ActiveT, 3>(vh, obj);
+                    iter_val<ActiveT, 3>(vh, opt_var);
 
                 ActiveT d = (xi - o_eigen).dot(n_eigen);
 
@@ -259,7 +259,7 @@ void vv_contact_energy(ProblemT&     problem,
 
     problem.template add_interaction_term<Op::VV, true>(
         [=] __device__(
-            const auto& id, const auto& iter, const auto& obj) mutable {
+            const auto& id, const auto& iter, const auto& opt_var) mutable {
             using ActiveT = ACTIVE_TYPE(id);
 
             const VertexHandle v0 = iter[0];  // First vertex in contact pair
@@ -267,9 +267,9 @@ void vv_contact_energy(ProblemT&     problem,
 
             // Get vertex positions
             const Eigen::Vector3<ActiveT> xi =
-                iter_val<ActiveT, 3>(id, iter, obj, 0);
+                iter_val<ActiveT, 3>(id, iter, opt_var, 0);
             const Eigen::Vector3<ActiveT> xj =
-                iter_val<ActiveT, 3>(id, iter, obj, 1);
+                iter_val<ActiveT, 3>(id, iter, opt_var, 1);
 
             // Compute distance between vertices
             ActiveT d = (xi - xj).norm();
@@ -383,18 +383,18 @@ void vf_contact_energy(ProblemT&     problem,
         [=] __device__(const auto& fh,
                        const auto& vh,
                        const auto& iter,
-                       const auto& obj) mutable {
+                       const auto& opt_var) mutable {
             using ActiveT = ACTIVE_TYPE(fh);
 
             // Get vertex and face vertices positions
             const Eigen::Vector3<ActiveT> xi =
-                iter_val<ActiveT, 3>(fh, vh, iter, obj, 0);
+                iter_val<ActiveT, 3>(fh, vh, iter, opt_var, 0);
             const Eigen::Vector3<ActiveT> p0 =
-                iter_val<ActiveT, 3>(fh, vh, iter, obj, 1);
+                iter_val<ActiveT, 3>(fh, vh, iter, opt_var, 1);
             const Eigen::Vector3<ActiveT> p1 =
-                iter_val<ActiveT, 3>(fh, vh, iter, obj, 2);
+                iter_val<ActiveT, 3>(fh, vh, iter, opt_var, 2);
             const Eigen::Vector3<ActiveT> p2 =
-                iter_val<ActiveT, 3>(fh, vh, iter, obj, 3);
+                iter_val<ActiveT, 3>(fh, vh, iter, opt_var, 3);
 
             // Compute point-to-triangle distance
             ActiveT d_sq = point_triangle_distance_squared(xi, p0, p1, p2);

@@ -14,24 +14,23 @@ using namespace rxmesh;
 template <typename ProblemT>
 inline void add_smoothing_term(ProblemT& problem)
 {
-    problem.template add_term<Op::EV>(
-        [=] __device__(const auto& eh, const auto& iter, auto& objective) {
-            assert(iter.size() == 2);
+    problem.template add_term<Op::EV>([=] __device__(const auto& eh,
+                                                     const auto& iter,
+                                                     auto&       opt_var) {
+        assert(iter.size() == 2);
 
-            using ActiveT = ACTIVE_TYPE(eh);
+        using ActiveT = ACTIVE_TYPE(eh);
 
-            // pos
-            Eigen::Vector3<ActiveT> d0 =
-                iter_val<ActiveT, 3>(eh, iter, objective, 0);
-            Eigen::Vector3<ActiveT> d1 =
-                iter_val<ActiveT, 3>(eh, iter, objective, 1);
+        // pos
+        Eigen::Vector3<ActiveT> d0 = iter_val<ActiveT, 3>(eh, iter, opt_var, 0);
+        Eigen::Vector3<ActiveT> d1 = iter_val<ActiveT, 3>(eh, iter, opt_var, 1);
 
-            Eigen::Vector3<ActiveT> dist = (d0 - d1);
+        Eigen::Vector3<ActiveT> dist = (d0 - d1);
 
-            ActiveT dist_sq = dist.squaredNorm();
+        ActiveT dist_sq = dist.squaredNorm();
 
-            return dist_sq;
-        });
+        return dist_sq;
+    });
 }
 
 TEST(Diff, SmoothingNewton)
@@ -49,7 +48,7 @@ TEST(Diff, SmoothingNewton)
 
     auto v_input_pos = *rx.get_input_vertex_coordinates();
 
-    problem.objective->copy_from(v_input_pos, DEVICE, DEVICE);
+    problem.opt_var->copy_from(v_input_pos, DEVICE, DEVICE);
 
     add_smoothing_term(problem);
 
@@ -100,13 +99,13 @@ TEST(Diff, SmoothingNewton)
     // so newton method on this function should lead to a vertex position that
     // is just zero since the function is quadratic
 
-    problem.objective->move(DEVICE, HOST);
+    problem.opt_var->move(DEVICE, HOST);
 
-    T f = (*problem.objective)(VertexHandle(0, 0), 0);
+    T f = (*problem.opt_var)(VertexHandle(0, 0), 0);
 
     rx.for_each_vertex(HOST, [&](const VertexHandle vh) {
         for (int i = 0; i < 3; ++i) {
-            EXPECT_NEAR((*problem.objective)(vh, 0), f, 1e-3);
+            EXPECT_NEAR((*problem.opt_var)(vh, 0), f, 1e-3);
         }
     });
 }
@@ -123,7 +122,7 @@ void copy_x(RXMeshStatic& rx, const VAttr& pos, VAttr& val)
 template <typename VAttr, typename DenseMatT>
 void verify_while_loop_x(RXMeshStatic&    rx,
                          const VAttr&     pos,
-                         const VAttr&     obj,
+                         const VAttr&     opt_var,
                          const DenseMatT& grad,
                          float            tol)
 {
@@ -133,7 +132,7 @@ void verify_while_loop_x(RXMeshStatic&    rx,
 
             float expected_grad = 1.0f / (2.0f * expected_sqrt);
 
-            ASSERT_NEAR(obj(vh, 0), expected_sqrt, tol);
+            ASSERT_NEAR(opt_var(vh, 0), expected_sqrt, tol);
             ASSERT_NEAR(grad(vh, 0), expected_grad, tol);
         }
     });
@@ -145,12 +144,12 @@ inline void add_while_loop_term(ProblemT& problem, float tol)
 {
 
     problem.template add_term<Op::V>(
-        [=] __device__(const auto& vh, auto& objective) mutable {
+        [=] __device__(const auto& vh, auto& opt_var) mutable {
             using ActiveT = ACTIVE_TYPE(vh);
 
             tol = tol;
 
-            Eigen::Vector<ActiveT, 1> xx = iter_val<ActiveT, 1>(vh, objective);
+            Eigen::Vector<ActiveT, 1> xx = iter_val<ActiveT, 1>(vh, opt_var);
 
             ActiveT a = xx(0);
 
@@ -165,8 +164,8 @@ inline void add_while_loop_term(ProblemT& problem, float tol)
                     xx(0) = ActiveT(0.0);
                 }
 
-                // hijacking the objective for storing the sqrt value.
-                objective(vh, 0) = xx(0).val();
+                // hijacking the opt_var for storing the sqrt value.
+                opt_var(vh, 0) = xx(0).val();
             }
 
 
@@ -190,7 +189,7 @@ TEST(Diff, WhileLoop)
 
     auto v_input_pos = *rx.get_input_vertex_coordinates();
 
-    copy_x(rx, v_input_pos, *problem.objective);
+    copy_x(rx, v_input_pos, *problem.opt_var);
 
     T tol = std::numeric_limits<T>::epsilon();
 
@@ -199,9 +198,8 @@ TEST(Diff, WhileLoop)
 
     problem.eval_terms();
 
-    problem.objective->move(DEVICE, HOST);
+    problem.opt_var->move(DEVICE, HOST);
     problem.grad.move(DEVICE, HOST);
 
-    verify_while_loop_x(
-        rx, v_input_pos, *problem.objective, problem.grad, 0.001);
+    verify_while_loop_x(rx, v_input_pos, *problem.opt_var, problem.grad, 0.001);
 }

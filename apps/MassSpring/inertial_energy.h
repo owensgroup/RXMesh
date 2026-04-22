@@ -9,10 +9,10 @@ void inertial_energy(ProblemT& problem, VAttrT& x, T mass)
 {
     T half_mass = T(0.5) * mass;
     problem.template add_term<Op::V, true>(
-        [x, half_mass] __device__(const auto& vh, auto& obj) mutable {
+        [x, half_mass] __device__(const auto& vh, auto& opt_var) mutable {
             using ActiveT = ACTIVE_TYPE(vh);
 
-            Eigen::Vector3<ActiveT> x_tilda = iter_val<ActiveT, 3>(vh, obj);
+            Eigen::Vector3<ActiveT> x_tilda = iter_val<ActiveT, 3>(vh, opt_var);
 
             Eigen::Vector3<T> xx = x.to_eigen<3>(vh);
 

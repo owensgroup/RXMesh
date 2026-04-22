@@ -91,7 +91,7 @@ void mass_spring(RXMeshStatic& rx, Scenario scenario, int max_time_steps)
 
     auto x = *rx.get_input_vertex_coordinates();
 
-    auto& x_tilde = *problem.objective;
+    auto& x_tilde = *problem.opt_var;
     x_tilde.copy_from(x, DEVICE, DEVICE);
 
     typename ProblemT::DenseMatT alpha(

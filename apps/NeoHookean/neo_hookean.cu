@@ -141,7 +141,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
 
     NetwtonSolver newton_solver(problem, &solver);
 
-    auto& x = *problem.objective;
+    auto& x = *problem.opt_var;
     x.copy_from(*rx.get_input_vertex_coordinates(), DEVICE, DEVICE);
 
     auto x_n     = *rx.add_vertex_attribute_like("x_n", x);
@@ -214,7 +214,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
         // x_n = x (copy current position)
         timer.start("Step");
 
-        nvtxRangePushA("Step");        
+        nvtxRangePushA("Step");
         rx.for_each_vertex(DEVICE, [=] __device__(VertexHandle vh) mutable {
             for (int i = 0; i < 3; ++i) {
                 x_tilde(vh, i) = x(vh, i) + time_step * velocity(vh, i);

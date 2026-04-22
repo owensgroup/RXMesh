@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "rxmesh/rxmesh_static.h"
 
@@ -22,49 +22,51 @@ void neo_hookean_energy(ProblemT& problem,
 
     const T h_sq = h * h;
 
-    problem.template add_term<Op::FV, true>(
-        [=] __device__(const auto& fh, const auto& iter, auto& obj) mutable {
-            assert(iter.size() == 3);
+    problem.template add_term<Op::FV, true>([=] __device__(
+                                                const auto& fh,
+                                                const auto& iter,
+                                                auto&       opt_var) mutable {
+        assert(iter.size() == 3);
 
-            using ActiveT = ACTIVE_TYPE(fh);
+        using ActiveT = ACTIVE_TYPE(fh);
 
-            // if (is_dbc(iter[0]) || is_dbc(iter[1]) || is_dbc(iter[2])) {
-            //     return ActiveT();
-            // }
+        // if (is_dbc(iter[0]) || is_dbc(iter[1]) || is_dbc(iter[2])) {
+        //     return ActiveT();
+        // }
 
-            Eigen::Vector3<ActiveT> x0 = iter_val<ActiveT, 3>(fh, iter, obj, 0);
-            Eigen::Vector3<ActiveT> x1 = iter_val<ActiveT, 3>(fh, iter, obj, 1);
-            Eigen::Vector3<ActiveT> x2 = iter_val<ActiveT, 3>(fh, iter, obj, 2);
+        Eigen::Vector3<ActiveT> x0 = iter_val<ActiveT, 3>(fh, iter, opt_var, 0);
+        Eigen::Vector3<ActiveT> x1 = iter_val<ActiveT, 3>(fh, iter, opt_var, 1);
+        Eigen::Vector3<ActiveT> x2 = iter_val<ActiveT, 3>(fh, iter, opt_var, 2);
 
-            Eigen::Vector3<ActiveT> e0 = x2 - x0;
-            Eigen::Vector3<ActiveT> e1 = x1 - x0;
+        Eigen::Vector3<ActiveT> e0 = x2 - x0;
+        Eigen::Vector3<ActiveT> e1 = x1 - x0;
 
-            Eigen::Vector3<ActiveT> n = e0.cross(e1);
-            n.normalize();
+        Eigen::Vector3<ActiveT> n = e0.cross(e1);
+        n.normalize();
 
-            Eigen::Matrix<ActiveT, 3, 3> f = col_mat(e0, e1, n);
+        Eigen::Matrix<ActiveT, 3, 3> f = col_mat(e0, e1, n);
 
-            Eigen::Matrix<T, 3, 3> ib = inv_b(fh);
+        Eigen::Matrix<T, 3, 3> ib = inv_b(fh);
 
-            // F is the deformation gradient
-            Eigen::Matrix<ActiveT, 3, 3> F = f * ib;
+        // F is the deformation gradient
+        Eigen::Matrix<ActiveT, 3, 3> F = f * ib;
 
-            ActiveT J = F.determinant();
+        ActiveT J = F.determinant();
 
-            ActiveT lnJ = log(J);
+        ActiveT lnJ = log(J);
 
-            Eigen::Matrix<ActiveT, 3, 3> FtF = (F.transpose() * F);
-
-
-            // psi is energy density function
-            ActiveT psi = T(0.5) * mu_lame * (FtF.trace() - dim) -
-                          mu_lame * lnJ + T(0.5) * lam * lnJ * lnJ;
-
-            ActiveT E = volume(fh) * psi * h_sq;
+        Eigen::Matrix<ActiveT, 3, 3> FtF = (F.transpose() * F);
 
 
-            return E;
-        });
+        // psi is energy density function
+        ActiveT psi = T(0.5) * mu_lame * (FtF.trace() - dim) - mu_lame * lnJ +
+                      T(0.5) * lam * lnJ * lnJ;
+
+        ActiveT E = volume(fh) * psi * h_sq;
+
+
+        return E;
+    });
 }
 
 template <typename DenseMatT,

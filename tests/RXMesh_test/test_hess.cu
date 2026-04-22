@@ -13,10 +13,10 @@ template <typename ProblemT, typename T>
 void add_inertia_term(ProblemT& problem, rxmesh::VertexAttribute<T>& x, T mass)
 {
     problem.template add_term<Op::V, true>(
-        [x, mass] __device__(const auto& vh, auto& obj) mutable {
+        [x, mass] __device__(const auto& vh, auto& opt_var) mutable {
             using ActiveT = ACTIVE_TYPE(vh);
 
-            Eigen::Vector3<ActiveT> x_tilda = iter_val<ActiveT, 3>(vh, obj);
+            Eigen::Vector3<ActiveT> x_tilda = iter_val<ActiveT, 3>(vh, opt_var);
 
             Eigen::Vector3<T> xx = x.to_eigen<3>(vh);
 
@@ -174,7 +174,7 @@ TEST(Diff, HessUpdate)
 
     using ProblemT = DiffScalarProblem<T, VariableDim, VertexHandle, true>;
 
-    int expected_num_new_pairs = rx.get_num_vertices()*rx.get_num_vertices();
+    int expected_num_new_pairs = rx.get_num_vertices() * rx.get_num_vertices();
 
     ProblemT problem(rx, true, expected_num_new_pairs);
 
@@ -195,7 +195,7 @@ TEST(Diff, HessUpdate)
 
     auto [d_pairs, num_new_pairs] = generate_pairs(rx);
 
-    //EXPECT_EQ(num_new_pairs, expected_num_new_pairs);
+    // EXPECT_EQ(num_new_pairs, expected_num_new_pairs);
 
     new_entries(rx, problem, num_new_pairs, d_pairs);
     problem.update_hessian();
@@ -234,23 +234,26 @@ void add_vf_term(ProblemT& problem, int face_id, int vert_id)
         vf_pairs.insert(vh, fh);
     });
 
-    problem.template add_interaction_term<Op::VF>([=] __device__(const auto& fh,
-                                                                 const auto& vh,
-                                                                 auto& iter,
-                                                                 auto& obj) {
-        using ActiveT = ACTIVE_TYPE(fh);
+    problem.template add_interaction_term<Op::VF>(
+        [=] __device__(
+            const auto& fh, const auto& vh, auto& iter, auto& opt_var) {
+            using ActiveT = ACTIVE_TYPE(fh);
 
-        assert(fh.local_id() == face_id);
-        assert(vh.local_id() == vert_id);
+            assert(fh.local_id() == face_id);
+            assert(vh.local_id() == vert_id);
 
-        Eigen::Vector3<ActiveT> x0 = iter_val<ActiveT, 3>(fh, vh, iter, obj, 0);
-        Eigen::Vector3<ActiveT> x1 = iter_val<ActiveT, 3>(fh, vh, iter, obj, 1);
-        Eigen::Vector3<ActiveT> x2 = iter_val<ActiveT, 3>(fh, vh, iter, obj, 2);
-        Eigen::Vector3<ActiveT> x3 = iter_val<ActiveT, 3>(fh, vh, iter, obj, 3);
+            Eigen::Vector3<ActiveT> x0 =
+                iter_val<ActiveT, 3>(fh, vh, iter, opt_var, 0);
+            Eigen::Vector3<ActiveT> x1 =
+                iter_val<ActiveT, 3>(fh, vh, iter, opt_var, 1);
+            Eigen::Vector3<ActiveT> x2 =
+                iter_val<ActiveT, 3>(fh, vh, iter, opt_var, 2);
+            Eigen::Vector3<ActiveT> x3 =
+                iter_val<ActiveT, 3>(fh, vh, iter, opt_var, 3);
 
-        ActiveT E;
-        return E;
-    });
+            ActiveT E;
+            return E;
+        });
 }
 
 TEST(Diff, VFInteraction)

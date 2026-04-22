@@ -39,7 +39,7 @@ void arap(RXMeshStatic& rx, Scenario scenario, const std::string& marker_path)
     // 0-2 are the offset
     // 3-11 are the 9 entries of the rotation matrix row-wise, i.e.,
     // col_0 = [c3, c6, c9]
-    auto& opt_var = *problem.objective;
+    auto& opt_var = *problem.opt_var;
 
     rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle& vh) mutable {
         for (int i = 0; i < VariableDim; ++i) {
@@ -127,11 +127,11 @@ void arap(RXMeshStatic& rx, Scenario scenario, const std::string& marker_path)
 
     // E_fit + E_rot
     problem.template add_term<Op::V, 9>([=] __device__(const auto& vh,
-                                                       auto&       obj) {
+                                                       auto&       opt_var) {
         using ActiveT = ACTIVE_TYPE(vh);
 
         // vertex combined position and rotation matrix variable
-        Eigen::Vector<ActiveT, 12> o_r = iter_val<ActiveT, 12>(vh, obj);
+        Eigen::Vector<ActiveT, 12> o_r = iter_val<ActiveT, 12>(vh, opt_var);
 
         Eigen::Vector<ActiveT, 9> ret;
         for (int i = 0; i < 9; ++i) {
@@ -198,38 +198,39 @@ void arap(RXMeshStatic& rx, Scenario scenario, const std::string& marker_path)
 
     // E_reg
     int ddd = 0;
-    problem.template add_term<Op::EV, 3>([=] __device__(const auto& eh,
-                                                        const auto& iter,
-                                                        auto&       obj) {
-        using ActiveT = ACTIVE_TYPE(eh);
+    problem.template add_term<Op::EV, 3>(
+        [=] __device__(const auto& eh, const auto& iter, auto& opt_var) {
+            using ActiveT = ACTIVE_TYPE(eh);
 
 
-        Eigen::Vector<ActiveT, 12> v0 = iter_val<ActiveT, 12>(eh, iter, obj, 0);
-        Eigen::Vector<ActiveT, 12> v1 = iter_val<ActiveT, 12>(eh, iter, obj, 1);
+            Eigen::Vector<ActiveT, 12> v0 =
+                iter_val<ActiveT, 12>(eh, iter, opt_var, 0);
+            Eigen::Vector<ActiveT, 12> v1 =
+                iter_val<ActiveT, 12>(eh, iter, opt_var, 1);
 
 
-        // Rest edge
-        Eigen::Vector<T, 3> u0  = Urshape.to_eigen<3>(iter[0]);
-        Eigen::Vector<T, 3> u1  = Urshape.to_eigen<3>(iter[1]);
-        T                   dux = u1[0] - u0[0];
-        T                   duy = u1[1] - u0[1];
-        T                   duz = u1[2] - u0[2];
+            // Rest edge
+            Eigen::Vector<T, 3> u0  = Urshape.to_eigen<3>(iter[0]);
+            Eigen::Vector<T, 3> u1  = Urshape.to_eigen<3>(iter[1]);
+            T                   dux = u1[0] - u0[0];
+            T                   duy = u1[1] - u0[1];
+            T                   duz = u1[2] - u0[2];
 
-        ActiveT rdu_x = v0[3] * dux + v0[4] * duy + v0[5] * duz;
-        ActiveT rdu_y = v0[6] * dux + v0[7] * duy + v0[8] * duz;
-        ActiveT rdu_z = v0[9] * dux + v0[10] * duy + v0[11] * duz;
+            ActiveT rdu_x = v0[3] * dux + v0[4] * duy + v0[5] * duz;
+            ActiveT rdu_y = v0[6] * dux + v0[7] * duy + v0[8] * duz;
+            ActiveT rdu_z = v0[9] * dux + v0[10] * duy + v0[11] * duz;
 
-        Eigen::Vector<ActiveT, 3> ret;
+            Eigen::Vector<ActiveT, 3> ret;
 
-        if (ddd == 0) {
-            ret[0] = ((u1[0] + v1[0]) - (u0[0] + v0[0])) - rdu_x;
-            ret[1] = ((u1[1] + v1[1]) - (u0[1] + v0[1])) - rdu_y;
-            ret[2] = ((u1[2] + v1[2]) - (u0[2] + v0[2])) - rdu_z;
-        }
-        
+            if (ddd == 0) {
+                ret[0] = ((u1[0] + v1[0]) - (u0[0] + v0[0])) - rdu_x;
+                ret[1] = ((u1[1] + v1[1]) - (u0[1] + v0[1])) - rdu_y;
+                ret[2] = ((u1[2] + v1[2]) - (u0[2] + v0[2])) - rdu_z;
+            }
 
-        return w_reg_sqrt * ret;
-    });
+
+            return w_reg_sqrt * ret;
+        });
 
     Timers<GPUTimer> timer;
     timer.add("Step");

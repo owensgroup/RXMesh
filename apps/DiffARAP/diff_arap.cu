@@ -31,7 +31,7 @@ void arap(RXMeshStatic& rx)
     auto P = *rx.get_input_vertex_coordinates();
 
     // deformed vertex position that change every iteration
-    auto& P_prime = *problem.objective;
+    auto& P_prime = *problem.opt_var;
     P_prime.copy_from(P, DEVICE, DEVICE);
 
     // vertex constraints where
@@ -87,17 +87,17 @@ void arap(RXMeshStatic& rx)
 
     // energy term
     problem.template add_term<Op::EV, true>(
-        [=] __device__(const auto& eh, const auto& iter, auto& obj) {
+        [=] __device__(const auto& eh, const auto& iter, auto& opt_var) {
             using ActiveT = ACTIVE_TYPE(eh);
 
             auto vi = iter[0];
             auto vj = iter[1];
 
             Eigen::Vector3<ActiveT> pi_prime =
-                iter_val<ActiveT, 3>(eh, iter, obj, 0);
+                iter_val<ActiveT, 3>(eh, iter, opt_var, 0);
 
             Eigen::Vector3<ActiveT> pj_prime =
-                iter_val<ActiveT, 3>(eh, iter, obj, 1);
+                iter_val<ActiveT, 3>(eh, iter, opt_var, 1);
 
             Eigen::Vector3<T> pi = P.to_eigen<3>(vi);
 
@@ -286,13 +286,13 @@ void arap(RXMeshStatic& rx)
 int main(int argc, char** argv)
 {
     CLI::App app{"DiffARAP"};
-    
-    std::string filename = STRINGIFY(INPUT_DIR) "dragon.obj";
-    uint32_t device_id = 0;
-    
+
+    std::string filename  = STRINGIFY(INPUT_DIR) "dragon.obj";
+    uint32_t    device_id = 0;
+
     app.add_option("-i,--input", filename, "Input OBJ mesh file")
         ->default_val(std::string(STRINGIFY(INPUT_DIR) "dragon.obj"));
-    
+
     app.add_option("-d,--device_id", device_id, "GPU device ID")
         ->default_val(0u);
 

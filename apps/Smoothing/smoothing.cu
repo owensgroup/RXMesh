@@ -43,21 +43,21 @@ void smoothing(RXMeshStatic& rx)
 
     auto v_input_pos = *rx.get_input_vertex_coordinates();
 
-    problem.objective->copy_from(v_input_pos, DEVICE, DEVICE);
+    problem.opt_var->copy_from(v_input_pos, DEVICE, DEVICE);
 
     if (Arg.area) {
         problem.template add_term<Op::FV>(
-            [=] __device__(const auto& fh, const auto& iter, auto& objective) {
+            [=] __device__(const auto& fh, const auto& iter, auto& opt_var) {
                 assert(iter.size() == 3);
 
                 using ActiveT = ACTIVE_TYPE(fh);
 
                 Eigen::Vector3<ActiveT> x0 =
-                    iter_val<ActiveT, 3>(fh, iter, objective, 0);
+                    iter_val<ActiveT, 3>(fh, iter, opt_var, 0);
                 Eigen::Vector3<ActiveT> x1 =
-                    iter_val<ActiveT, 3>(fh, iter, objective, 1);
+                    iter_val<ActiveT, 3>(fh, iter, opt_var, 1);
                 Eigen::Vector3<ActiveT> x2 =
-                    iter_val<ActiveT, 3>(fh, iter, objective, 2);
+                    iter_val<ActiveT, 3>(fh, iter, opt_var, 2);
 
                 Eigen::Vector3<ActiveT> d0 = (x1 - x0);
                 Eigen::Vector3<ActiveT> d1 = (x2 - x0);
@@ -67,16 +67,16 @@ void smoothing(RXMeshStatic& rx)
             });
     } else {
         problem.template add_term<Op::EV>(
-            [=] __device__(const auto& eh, const auto& iter, auto& objective) {
+            [=] __device__(const auto& eh, const auto& iter, auto& opt_var) {
                 assert(iter.size() == 2);
 
                 using ActiveT = ACTIVE_TYPE(eh);
 
                 // pos
                 Eigen::Vector3<ActiveT> d0 =
-                    iter_val<ActiveT, 3>(eh, iter, objective, 0);
+                    iter_val<ActiveT, 3>(eh, iter, opt_var, 0);
                 Eigen::Vector3<ActiveT> d1 =
-                    iter_val<ActiveT, 3>(eh, iter, objective, 1);
+                    iter_val<ActiveT, 3>(eh, iter, opt_var, 1);
                 Eigen::Vector3<ActiveT> dist = (d0 - d1);
 
                 ActiveT dist_sq = dist.squaredNorm();
@@ -118,8 +118,8 @@ void smoothing(RXMeshStatic& rx)
                  "Smoothing_RXMesh_" + extract_file_name(Arg.obj_file_name));
 
 #if USE_POLYSCOPE
-    problem.objective->move(DEVICE, HOST);
-    rx.get_polyscope_mesh()->updateVertexPositions(*problem.objective);
+    problem.opt_var->move(DEVICE, HOST);
+    rx.get_polyscope_mesh()->updateVertexPositions(*problem.opt_var);
 #endif
 }
 
@@ -132,7 +132,8 @@ int main(int argc, char** argv)
     app.add_option("-i,--input", Arg.obj_file_name, "Input OBJ mesh file")
         ->default_val(std::string(STRINGIFY(INPUT_DIR) "bunnyhead.obj"));
 
-    app.add_flag("--area", Arg.area, "Use area-based gradients instead of edge-based");
+    app.add_flag(
+        "--area", Arg.area, "Use area-based gradients instead of edge-based");
 
     app.add_option("-n,--iter", Arg.num_iter, "Number of iterations")
         ->default_val(100);
