@@ -288,13 +288,6 @@ struct ALIGN(32) Scalar
         return res;
     }
 
-    /// Initialize passive variable a.k.a. constant with zero derivatives
-    /// it just calls Scalar(_val)
-    __host__ __device__ static Scalar make_passive(PassiveT _val)
-    {
-        return Scalar(_val);
-    }
-
     /// Initialize active variable with derivatives of
     // by calling Scalar(val, idx)
     __host__ __device__ static Scalar make_active(PassiveT     _val,
