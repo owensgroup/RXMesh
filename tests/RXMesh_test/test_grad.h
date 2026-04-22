@@ -143,34 +143,34 @@ template <typename ProblemT>
 inline void add_while_loop_term(ProblemT& problem, float tol)
 {
 
-    problem.template add_term<Op::V>(
-        [=] __device__(const auto& vh, auto& opt_var) mutable {
-            using ActiveT = ACTIVE_TYPE(vh);
+    problem.template add_term<Op::V>([=] __device__(const auto& vh,
+                                                    auto& opt_var) mutable {
+        using ActiveT = ACTIVE_TYPE(vh);
 
-            tol = tol;
+        tol = tol;
 
-            Eigen::Vector<ActiveT, 1> xx = iter_val<ActiveT, 1>(vh, opt_var);
+        Eigen::Vector<ActiveT, 1> xx = opt_var.template active<ActiveT, 1>(vh);
 
-            ActiveT a = xx(0);
+        ActiveT a = xx(0);
 
-            if constexpr (is_scalar_v<ActiveT>) {
+        if constexpr (is_scalar_v<ActiveT>) {
 
-                // x_new = 0.5 * (x + a / x)
-                if (a.val() > tol) {
-                    do {
-                        xx(0) = 0.5 * (xx(0) + a / xx(0));
-                    } while (fabs(xx(0).val() * xx(0).val() - a.val()) > tol);
-                } else {
-                    xx(0) = ActiveT(0.0);
-                }
-
-                // hijacking the opt_var for storing the sqrt value.
-                opt_var(vh, 0) = xx(0).val();
+            // x_new = 0.5 * (x + a / x)
+            if (a.val() > tol) {
+                do {
+                    xx(0) = 0.5 * (xx(0) + a / xx(0));
+                } while (fabs(xx(0).val() * xx(0).val() - a.val()) > tol);
+            } else {
+                xx(0) = ActiveT(0.0);
             }
 
+            // hijacking the opt_var for storing the sqrt value.
+            opt_var(vh, 0) = xx(0).val();
+        }
 
-            return xx(0);
-        });
+
+        return xx(0);
+    });
 }
 
 TEST(Diff, WhileLoop)

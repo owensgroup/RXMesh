@@ -302,6 +302,44 @@ class Attribute : public AttributeBase
                                                  const uint16_t local_id,
                                                  const uint32_t attr);
 
+
+    /**
+     * @brief load the attribute into Eigen matrix using a Scalar type that
+     * could be active (i.e., tracking derivatives) or passive (i.e., plain
+     * floating point)
+     * @tparam ActiveT the Scalar type
+     * @tparam DiffHandleT the type of the handle
+     * @tparam VariableDim the dimension/number of components of the variable
+     * @param handle the handle at which the attribute will be read
+     */
+    template <typename ActiveT, int VariableDim, typename DiffHandleT>
+    __host__ __device__ __inline__ Eigen::Vector<ActiveT, VariableDim> active(
+        const DiffHandleT& handle) const
+    {
+        Eigen::Vector<ActiveT, VariableDim> ret;
+
+        assert(VariableDim <= get_num_attributes());
+
+
+        // val
+        for (int j = 0; j < VariableDim; ++j) {
+            if constexpr (DiffHandleT::IsActive) {
+                ret[j].val() = (*this)(handle, j);
+            } else {
+                ret[j] = (*this)(handle, j);
+            }
+        }
+
+        // init grad
+        if constexpr (DiffHandleT::IsActive) {
+            for (int j = 0; j < VariableDim; ++j) {
+                ret[j].grad()[j] = 1;
+            }
+        }
+
+        return ret;
+    }
+
     /**
      * @brief Check if the attribute is empty
      */
