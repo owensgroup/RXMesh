@@ -99,91 +99,91 @@ void bending_energy(ProblemT& problem,
     //     });
 
     // Bending energy operates on edges with their diamond (two adjacent faces)
-    problem.template add_term<Op::EVDiamond, true>([=] __device__(
-                                                       const auto& eh,
-                                                       const auto& iter,
-                                                       auto& opt_var) mutable {
-        using ActiveT = ACTIVE_TYPE(eh);
+    problem.template add_term<Op::EVDiamond, true>(
+        [=] __device__(
+            const auto& eh, const auto& iter, auto& opt_var) mutable {
+            using ActiveT = ACTIVE_TYPE(eh);
 
-        // Check if all vertices are valid (not boundary edge)
-        if (!iter[0].is_valid() || !iter[1].is_valid() || !iter[2].is_valid() ||
-            !iter[3].is_valid()) {
-            // boundary edge, no bending energy
-            return ActiveT(0.0f);
-        }
+            // Check if all vertices are valid (not boundary edge)
+            if (!iter[0].is_valid() || !iter[1].is_valid() ||
+                !iter[2].is_valid() || !iter[3].is_valid()) {
+                // boundary edge, no bending energy
+                return ActiveT(0.0f);
+            }
 
-        // Check if any vertex is Dirichlet BC
-        // if (is_dbc(iter[0]) || is_dbc(iter[1]) || is_dbc(iter[2]) ||
-        //     is_dbc(iter[3])) {
-        //     return ActiveT(0.0f);
-        // }
+            // Check if any vertex is Dirichlet BC
+            // if (is_dbc(iter[0]) || is_dbc(iter[1]) || is_dbc(iter[2]) ||
+            //     is_dbc(iter[3])) {
+            //     return ActiveT(0.0f);
+            // }
 
-        // Get vertex positions
-        // Edge goes from p to r. q and s are opposite to the edge
-        Eigen::Vector3<ActiveT> p = iter_val<ActiveT, 3>(eh, iter, opt_var, 0);
-        Eigen::Vector3<ActiveT> q = iter_val<ActiveT, 3>(eh, iter, opt_var, 1);
-        Eigen::Vector3<ActiveT> r = iter_val<ActiveT, 3>(eh, iter, opt_var, 2);
-        Eigen::Vector3<ActiveT> s = iter_val<ActiveT, 3>(eh, iter, opt_var, 3);
+            // Get vertex positions
+            // Edge goes from p to r. q and s are opposite to the edge
+            Eigen::Vector3<ActiveT> p = opt_var.template active<3>(eh, iter, 0);
+            Eigen::Vector3<ActiveT> q = opt_var.template active<3>(eh, iter, 1);
+            Eigen::Vector3<ActiveT> r = opt_var.template active<3>(eh, iter, 2);
+            Eigen::Vector3<ActiveT> s = opt_var.template active<3>(eh, iter, 3);
 
-        // Compute dihedral angle using helper function
-        ActiveT n0_norm, n1_norm;
-        ActiveT theta = compute_dihedral_angle(p, q, r, s, n0_norm, n1_norm);
+            // Compute dihedral angle using helper function
+            ActiveT n0_norm, n1_norm;
+            ActiveT theta =
+                compute_dihedral_angle(p, q, r, s, n0_norm, n1_norm);
 
-        // Check for degenerate configuration
-        if (n0_norm < ActiveT(1e-7) || n1_norm < ActiveT(1e-7)) {
-            return ActiveT(0.0f);
-        }
+            // Check for degenerate configuration
+            if (n0_norm < ActiveT(1e-7) || n1_norm < ActiveT(1e-7)) {
+                return ActiveT(0.0f);
+            }
 
-        // Get rest angle
-        T theta_rest = rest_angle(eh);
+            // Get rest angle
+            T theta_rest = rest_angle(eh);
 
-        // Compute angle difference
-        ActiveT d_theta = theta - theta_rest;
+            // Compute angle difference
+            ActiveT d_theta = theta - theta_rest;
 
-        // Bending energy: k_b * area * (theta - theta_rest)^2 * h^2
-        // where area is the average area of the two triangles divided by 3
-        // (distributed equally among the 3 edges)
-        T area = edge_area(eh);
+            // Bending energy: k_b * area * (theta - theta_rest)^2 * h^2
+            // where area is the average area of the two triangles divided by 3
+            // (distributed equally among the 3 edges)
+            T area = edge_area(eh);
 
-        // Skip if area is too small (degenerate configuration)
-        if (area < T(1e-12)) {
-            return ActiveT(0.0f);
-        }
+            // Skip if area is too small (degenerate configuration)
+            if (area < T(1e-12)) {
+                return ActiveT(0.0f);
+            }
 
-        ActiveT E =
-            T(0.5) * bending_stiffness * area * d_theta * d_theta * h_sq;
+            ActiveT E =
+                T(0.5) * bending_stiffness * area * d_theta * d_theta * h_sq;
 #ifndef NDEBUG
-        // Debug: check for misbehaving energy values
-        if constexpr (std::is_same_v<ActiveT, T>) {
-            // ActiveT is just T (float), no AD
-            if (isnan(E) || isinf(E) || E < T(0)) {
-                printf(
-                    "Bending energy misbehaves: E=%f, area=%f, d_theta=%f, "
-                    "theta=%f, theta_rest=%f\n",
-                    E,
-                    area,
-                    d_theta,
-                    theta,
-                    theta_rest);
+            // Debug: check for misbehaving energy values
+            if constexpr (std::is_same_v<ActiveT, T>) {
+                // ActiveT is just T (float), no AD
+                if (isnan(E) || isinf(E) || E < T(0)) {
+                    printf(
+                        "Bending energy misbehaves: E=%f, area=%f, d_theta=%f, "
+                        "theta=%f, theta_rest=%f\n",
+                        E,
+                        area,
+                        d_theta,
+                        theta,
+                        theta_rest);
+                }
+            } else {
+                // ActiveT is Scalar type with AD
+                if (isnan(E.val()) || isinf(E.val()) || E.val() < T(0)) {
+                    printf(
+                        "Bending energy misbehaves: E=%f, area=%f, d_theta=%f, "
+                        "theta=%f, theta_rest=%f, n0_norm=%f, n1_norm=%f\n",
+                        E.val(),
+                        area,
+                        d_theta.val(),
+                        theta.val(),
+                        theta_rest,
+                        n0_norm.val(),
+                        n1_norm.val());
+                }
             }
-        } else {
-            // ActiveT is Scalar type with AD
-            if (isnan(E.val()) || isinf(E.val()) || E.val() < T(0)) {
-                printf(
-                    "Bending energy misbehaves: E=%f, area=%f, d_theta=%f, "
-                    "theta=%f, theta_rest=%f, n0_norm=%f, n1_norm=%f\n",
-                    E.val(),
-                    area,
-                    d_theta.val(),
-                    theta.val(),
-                    theta_rest,
-                    n0_norm.val(),
-                    n1_norm.val());
-            }
-        }
 #endif
-        return E;
-    });
+            return E;
+        });
 }
 
 /**

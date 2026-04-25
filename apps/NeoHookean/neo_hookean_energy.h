@@ -34,9 +34,9 @@ void neo_hookean_energy(ProblemT& problem,
         //     return ActiveT();
         // }
 
-        Eigen::Vector3<ActiveT> x0 = iter_val<ActiveT, 3>(fh, iter, opt_var, 0);
-        Eigen::Vector3<ActiveT> x1 = iter_val<ActiveT, 3>(fh, iter, opt_var, 1);
-        Eigen::Vector3<ActiveT> x2 = iter_val<ActiveT, 3>(fh, iter, opt_var, 2);
+        Eigen::Vector3<ActiveT> x0 = opt_var.template active<3>(fh, iter, 0);
+        Eigen::Vector3<ActiveT> x1 = opt_var.template active<3>(fh, iter, 1);
+        Eigen::Vector3<ActiveT> x2 = opt_var.template active<3>(fh, iter, 2);
 
         Eigen::Vector3<ActiveT> e0 = x2 - x0;
         Eigen::Vector3<ActiveT> e1 = x1 - x0;

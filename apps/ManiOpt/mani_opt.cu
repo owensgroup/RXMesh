@@ -202,11 +202,11 @@ void manifold_optimization(RXMeshStatic&                          rx,
 
         // tangent vectors at the triangle three vertices (a,b,c)
         Eigen::Vector2<ActiveT> a_tang =
-            iter_val<ActiveT, 2>(fh, iter, opt_var, 0);
+            opt_var.template active<2>(fh, iter, 0);
         Eigen::Vector2<ActiveT> b_tang =
-            iter_val<ActiveT, 2>(fh, iter, opt_var, 1);
+            opt_var.template active<2>(fh, iter, 1);
         Eigen::Vector2<ActiveT> c_tang =
-            iter_val<ActiveT, 2>(fh, iter, opt_var, 2);
+            opt_var.template active<2>(fh, iter, 2);
 
 
         // Retract 2D tangent vectors to 3D points on the sphere.

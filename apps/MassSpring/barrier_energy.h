@@ -20,10 +20,10 @@ void barrier_energy(ProblemT& problem,
 
     problem.template add_term<Op::V, true>(
         [x, contact_area, h_sq, y_ground, dhat, kappa] __device__(
-            const auto& vh, auto& obj) mutable {
+            const auto& vh, auto& opt_var) mutable {
             using ActiveT = ACTIVE_TYPE(vh);
 
-            Eigen::Vector3<ActiveT> xx = iter_val<ActiveT, 3>(vh, obj);
+            Eigen::Vector3<ActiveT> xx = opt_var.template active<3>(vh);
 
             ActiveT E(T(0));
 
@@ -56,44 +56,45 @@ void barrier_energy(ProblemT&               problem,
 
     const T r = std::sqrt(sphere_radius_sq);
 
-    problem.template add_term<Op::V, true>([=] __device__(const auto& vh,
-                                                          auto& obj) mutable {
-        using ActiveT  = ACTIVE_TYPE(vh);
-        using PassiveT = PassiveType<ActiveT>;
+    problem.template add_term<Op::V, true>(
+        [=] __device__(const auto& vh, auto& opt_var) mutable {
+            using ActiveT  = ACTIVE_TYPE(vh);
+            using PassiveT = PassiveType<ActiveT>;
 
-        Eigen::Vector3<ActiveT> xx = iter_val<ActiveT, 3>(vh, obj);
+            Eigen::Vector3<ActiveT> xx = opt_var.template active<3>(vh);
 
-        Eigen::Vector3<ActiveT> c;
-        c << ActiveT(sphere_center.x()), ActiveT(sphere_center.y()),
-            ActiveT(sphere_center.z());
+            Eigen::Vector3<ActiveT> c;
+            c << ActiveT(sphere_center.x()), ActiveT(sphere_center.y()),
+                ActiveT(sphere_center.z());
 
-        Eigen::Vector3<ActiveT> diff = xx - c;
-        ActiveT                 d2   = diff.squaredNorm();
+            Eigen::Vector3<ActiveT> diff = xx - c;
+            ActiveT                 d2   = diff.squaredNorm();
 
 
-        const T rp = r + dhat;
-        if (d2 < ActiveT(rp * rp)) {
+            const T rp = r + dhat;
+            if (d2 < ActiveT(rp * rp)) {
 
-            ActiveT d   = sqrt(d2);
-            ActiveT gap = d - ActiveT(r);  // signed distance to sphere surface
+                ActiveT d = sqrt(d2);
+                ActiveT gap =
+                    d - ActiveT(r);  // signed distance to sphere surface
 
-            if (gap < ActiveT(dhat)) {
-                ActiveT s = gap / ActiveT(dhat);
+                if (gap < ActiveT(dhat)) {
+                    ActiveT s = gap / ActiveT(dhat);
 
-                if (s <= ActiveT(0)) {
-                    return ActiveT(std::numeric_limits<PassiveT>::max());
+                    if (s <= ActiveT(0)) {
+                        return ActiveT(std::numeric_limits<PassiveT>::max());
+                    }
+
+                    ActiveT E =
+                        ActiveT(h_sq * contact_area * dhat * T(0.5) * kappa) *
+                        (s - ActiveT(1)) * log(s);
+
+                    return E;
                 }
-
-                ActiveT E =
-                    ActiveT(h_sq * contact_area * dhat * T(0.5) * kappa) *
-                    (s - ActiveT(1)) * log(s);
-
-                return E;
             }
-        }
 
-        return ActiveT(0);
-    });
+            return ActiveT(0);
+        });
 }
 
 

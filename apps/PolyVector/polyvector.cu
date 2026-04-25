@@ -330,11 +330,11 @@ int main(int argc, char** argv)
             //  4 variables in face f and g
             Eigen::Vector4<ActiveT> vars_f, vars_g;
             if (ctx.linear_id_fast(iter[0]) > ctx.linear_id_fast(iter[1])) {
-                vars_f = iter_val<ActiveT, 4>(eh, iter, opt_var, 0);
-                vars_g = iter_val<ActiveT, 4>(eh, iter, opt_var, 1);
+                vars_f = opt_var.template active<4>(eh, iter, 0);
+                vars_g = opt_var.template active<4>(eh, iter, 1);
             } else {
-                vars_f = iter_val<ActiveT, 4>(eh, iter, opt_var, 1);
-                vars_g = iter_val<ActiveT, 4>(eh, iter, opt_var, 0);
+                vars_f = opt_var.template active<4>(eh, iter, 1);
+                vars_g = opt_var.template active<4>(eh, iter, 0);
             }
 
             thrust::complex<T> f_conj = e_f_conj(eh);
@@ -406,7 +406,7 @@ int main(int argc, char** argv)
         Eigen::Vector<ActiveT, 5> res;
 
         // Get 2D vectors (alpha, beta) in local basis of face f
-        Eigen::Vector4<ActiveT> vars = iter_val<ActiveT, 4>(fh, opt_var);
+        Eigen::Vector4<ActiveT> vars = opt_var.template active<4>(fh);
 
         thrust::complex<ActiveT> alpha(vars[0], vars[1]);
         thrust::complex<ActiveT> beta(vars[2], vars[3]);

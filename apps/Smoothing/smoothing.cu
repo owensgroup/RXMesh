@@ -53,11 +53,11 @@ void smoothing(RXMeshStatic& rx)
                 using ActiveT = ACTIVE_TYPE(fh);
 
                 Eigen::Vector3<ActiveT> x0 =
-                    iter_val<ActiveT, 3>(fh, iter, opt_var, 0);
+                    opt_var.template active<3>(fh, iter, 0);
                 Eigen::Vector3<ActiveT> x1 =
-                    iter_val<ActiveT, 3>(fh, iter, opt_var, 1);
+                    opt_var.template active<3>(fh, iter, 1);
                 Eigen::Vector3<ActiveT> x2 =
-                    iter_val<ActiveT, 3>(fh, iter, opt_var, 2);
+                    opt_var.template active<3>(fh, iter, 2);
 
                 Eigen::Vector3<ActiveT> d0 = (x1 - x0);
                 Eigen::Vector3<ActiveT> d1 = (x2 - x0);
@@ -74,9 +74,9 @@ void smoothing(RXMeshStatic& rx)
 
                 // pos
                 Eigen::Vector3<ActiveT> d0 =
-                    iter_val<ActiveT, 3>(eh, iter, opt_var, 0);
+                    opt_var.template active<3>(eh, iter, 0);
                 Eigen::Vector3<ActiveT> d1 =
-                    iter_val<ActiveT, 3>(eh, iter, opt_var, 1);
+                    opt_var.template active<3>(eh, iter, 1);
                 Eigen::Vector3<ActiveT> dist = (d0 - d1);
 
                 ActiveT dist_sq = dist.squaredNorm();

@@ -94,10 +94,10 @@ void arap(RXMeshStatic& rx)
             auto vj = iter[1];
 
             Eigen::Vector3<ActiveT> pi_prime =
-                iter_val<ActiveT, 3>(eh, iter, opt_var, 0);
+                opt_var.template active<3>(eh, iter, 0);
 
             Eigen::Vector3<ActiveT> pj_prime =
-                iter_val<ActiveT, 3>(eh, iter, opt_var, 1);
+                opt_var.template active<3>(eh, iter, 1);
 
             Eigen::Vector3<T> pi = P.to_eigen<3>(vi);
 

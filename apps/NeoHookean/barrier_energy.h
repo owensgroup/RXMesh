@@ -98,7 +98,7 @@ void box_barrier_energy(ProblemT& problem,
                 using ActiveT = ACTIVE_TYPE(vh);
 
                 const Eigen::Vector3<ActiveT> xi =
-                    iter_val<ActiveT, 3>(vh, opt_var);
+                    opt_var.template active<3>(vh);
 
                 ActiveT d = (xi - o_eigen).dot(n_eigen);
 
@@ -267,9 +267,9 @@ void vv_contact_energy(ProblemT&     problem,
 
             // Get vertex positions
             const Eigen::Vector3<ActiveT> xi =
-                iter_val<ActiveT, 3>(id, iter, opt_var, 0);
+                opt_var.template active<3>(id, iter, 0);
             const Eigen::Vector3<ActiveT> xj =
-                iter_val<ActiveT, 3>(id, iter, opt_var, 1);
+                opt_var.template active<3>(id, iter, 1);
 
             // Compute distance between vertices
             ActiveT d = (xi - xj).norm();
@@ -388,13 +388,13 @@ void vf_contact_energy(ProblemT&     problem,
 
             // Get vertex and face vertices positions
             const Eigen::Vector3<ActiveT> xi =
-                iter_val<ActiveT, 3>(fh, vh, iter, opt_var, 0);
+                opt_var.template active<3>(fh, vh, iter, 0);
             const Eigen::Vector3<ActiveT> p0 =
-                iter_val<ActiveT, 3>(fh, vh, iter, opt_var, 1);
+                opt_var.template active<3>(fh, vh, iter, 1);
             const Eigen::Vector3<ActiveT> p1 =
-                iter_val<ActiveT, 3>(fh, vh, iter, opt_var, 2);
+                opt_var.template active<3>(fh, vh, iter, 2);
             const Eigen::Vector3<ActiveT> p2 =
-                iter_val<ActiveT, 3>(fh, vh, iter, opt_var, 3);
+                opt_var.template active<3>(fh, vh, iter, 3);
 
             // Compute point-to-triangle distance
             ActiveT d_sq = point_triangle_distance_squared(xi, p0, p1, p2);
@@ -434,7 +434,7 @@ __global__ static void build_triangle_boxes_kernel(const Context context,
     using box_t      = cuBQL::box_t<T, 3>;
     auto compute_box = [&](FaceHandle fh, VertexIterator& fv) {
         // Get the three vertices of the triangle
-        // Don't use iter_val because this is bvh creation oepration.
+        // Don't use .active because this is bvh creation oepration.
         Eigen::Vector3<T> v0 = x.template to_eigen<3>(fv[0]);
         Eigen::Vector3<T> v1 = x.template to_eigen<3>(fv[1]);
         Eigen::Vector3<T> v2 = x.template to_eigen<3>(fv[2]);

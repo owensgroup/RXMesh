@@ -18,9 +18,9 @@ void mass_spring_energy(ProblemT& problem, EAttrT& rest_l, T h, T k)
             using ActiveT = ACTIVE_TYPE(eh);
 
             const Eigen::Vector3<ActiveT> a =
-                iter_val<ActiveT, 3>(eh, iter, opt_var, 0);
+                opt_var.template active<3>(eh, iter, 0);
             const Eigen::Vector3<ActiveT> b =
-                iter_val<ActiveT, 3>(eh, iter, opt_var, 1);
+                opt_var.template active<3>(eh, iter, 1);
 
             const T r = rest_l(eh);
 

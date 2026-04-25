@@ -12,7 +12,7 @@ void inertial_energy(ProblemT& problem, VAttrT& x, T mass)
         [x, half_mass] __device__(const auto& vh, auto& opt_var) mutable {
             using ActiveT = ACTIVE_TYPE(vh);
 
-            Eigen::Vector3<ActiveT> x_tilda = iter_val<ActiveT, 3>(vh, opt_var);
+            Eigen::Vector3<ActiveT> x_tilda = opt_var.template active<3>(vh);
 
             Eigen::Vector3<T> xx = x.to_eigen<3>(vh);
 

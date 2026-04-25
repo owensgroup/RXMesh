@@ -16,7 +16,7 @@ void gravity_energy(ProblemT& problem, VAttrT& x, T h, T mass)
                                                auto&       opt_var) mutable {
             using ActiveT = ACTIVE_TYPE(vh);
 
-            Eigen::Vector3<ActiveT> xx = iter_val<ActiveT, 3>(vh, opt_var);
+            Eigen::Vector3<ActiveT> xx = opt_var.template active<3>(vh);
 
             ActiveT E = neg_mass_times_h_sq * xx.dot(g);
 

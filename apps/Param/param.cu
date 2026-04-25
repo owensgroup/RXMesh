@@ -142,46 +142,46 @@ void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
 
 
     // add energy term
-    problem.template add_term<Op::FV, true>([=] __device__(const auto& fh,
-                                                           const auto& iter,
-                                                           auto& opt_var) {
-        // fh is a face handle
-        // iter is an iterator over fh's vertices
-        // opt_var is the uv coordinates
+    problem.template add_term<Op::FV, true>(
+        [=] __device__(const auto& fh, const auto& iter, auto& opt_var) {
+            // fh is a face handle
+            // iter is an iterator over fh's vertices
+            // opt_var is the uv coordinates
 
-        assert(iter[0].is_valid() && iter[1].is_valid() && iter[2].is_valid());
+            assert(iter[0].is_valid() && iter[1].is_valid() &&
+                   iter[2].is_valid());
 
-        assert(iter.size() == 3);
+            assert(iter.size() == 3);
 
-        using ActiveT = ACTIVE_TYPE(fh);
+            using ActiveT = ACTIVE_TYPE(fh);
 
-        // uv
-        Eigen::Vector2<ActiveT> a = iter_val<ActiveT, 2>(fh, iter, opt_var, 0);
-        Eigen::Vector2<ActiveT> b = iter_val<ActiveT, 2>(fh, iter, opt_var, 1);
-        Eigen::Vector2<ActiveT> c = iter_val<ActiveT, 2>(fh, iter, opt_var, 2);
-
-
-        // Triangle flipped?
-        Eigen::Matrix<ActiveT, 2, 2> M = col_mat(b - a, c - a);
-
-        if (M.determinant() <= 0.0) {
-            using PassiveT = PassiveType<ActiveT>;
-            return ActiveT(std::numeric_limits<PassiveT>::max());
-        }
-
-        // Get constant 2D rest shape and area of triangle t
-        const Eigen::Matrix<T, 2, 2> Mr = rest_shape(fh);
-
-        const T A = T(0.5) * Mr.determinant();
-
-        // Compute symmetric Dirichlet energy
-        Eigen::Matrix<ActiveT, 2, 2> J = M * Mr.inverse();
-
-        ActiveT res = A * (J.squaredNorm() + J.inverse().squaredNorm());
+            // uv
+            Eigen::Vector2<ActiveT> a = opt_var.template active<2>(fh, iter, 0);
+            Eigen::Vector2<ActiveT> b = opt_var.template active<2>(fh, iter, 1);
+            Eigen::Vector2<ActiveT> c = opt_var.template active<2>(fh, iter, 2);
 
 
-        return res;
-    });
+            // Triangle flipped?
+            Eigen::Matrix<ActiveT, 2, 2> M = col_mat(b - a, c - a);
+
+            if (M.determinant() <= 0.0) {
+                using PassiveT = PassiveType<ActiveT>;
+                return ActiveT(std::numeric_limits<PassiveT>::max());
+            }
+
+            // Get constant 2D rest shape and area of triangle t
+            const Eigen::Matrix<T, 2, 2> Mr = rest_shape(fh);
+
+            const T A = T(0.5) * Mr.determinant();
+
+            // Compute symmetric Dirichlet energy
+            Eigen::Matrix<ActiveT, 2, 2> J = M * Mr.inverse();
+
+            ActiveT res = A * (J.squaredNorm() + J.inverse().squaredNorm());
+
+
+            return res;
+        });
 
 
     T convergence_eps = 1e-2;

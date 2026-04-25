@@ -14,7 +14,7 @@ void inertial_energy(ProblemT& problem, const VAttrT& x_tilde, const T mass)
 
             ActiveT E(T(0));
 
-            Eigen::Vector3<ActiveT> xx = iter_val<ActiveT, 3>(vh, opt_var);
+            Eigen::Vector3<ActiveT> xx = opt_var.template active<3>(vh);
 
             Eigen::Vector3<T> xx_tilde = x_tilde.to_eigen<3>(vh);
 

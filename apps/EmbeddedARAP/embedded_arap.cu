@@ -131,7 +131,7 @@ void arap(RXMeshStatic& rx, Scenario scenario, const std::string& marker_path)
         using ActiveT = ACTIVE_TYPE(vh);
 
         // vertex combined position and rotation matrix variable
-        Eigen::Vector<ActiveT, 12> o_r = iter_val<ActiveT, 12>(vh, opt_var);
+        Eigen::Vector<ActiveT, 12> o_r = opt_var.template active<12>(vh);
 
         Eigen::Vector<ActiveT, 9> ret;
         for (int i = 0; i < 9; ++i) {
@@ -204,9 +204,9 @@ void arap(RXMeshStatic& rx, Scenario scenario, const std::string& marker_path)
 
 
             Eigen::Vector<ActiveT, 12> v0 =
-                iter_val<ActiveT, 12>(eh, iter, opt_var, 0);
+                opt_var.template active<12>(eh, iter, 0);
             Eigen::Vector<ActiveT, 12> v1 =
-                iter_val<ActiveT, 12>(eh, iter, opt_var, 1);
+                opt_var.template active<12>(eh, iter, 1);
 
 
             // Rest edge
