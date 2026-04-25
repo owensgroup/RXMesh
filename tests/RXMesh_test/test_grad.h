@@ -22,8 +22,8 @@ inline void add_smoothing_term(ProblemT& problem)
         using ActiveT = ACTIVE_TYPE(eh);
 
         // pos
-        Eigen::Vector3<ActiveT> d0 = iter_val<ActiveT, 3>(eh, iter, opt_var, 0);
-        Eigen::Vector3<ActiveT> d1 = iter_val<ActiveT, 3>(eh, iter, opt_var, 1);
+        Eigen::Vector3<ActiveT> d0 = opt_var.template active<3>(eh, iter, 0);
+        Eigen::Vector3<ActiveT> d1 = opt_var.template active<3>(eh, iter, 1);
 
         Eigen::Vector3<ActiveT> dist = (d0 - d1);
 
@@ -149,7 +149,7 @@ inline void add_while_loop_term(ProblemT& problem, float tol)
 
         tol = tol;
 
-        Eigen::Vector<ActiveT, 1> xx = opt_var.template active<ActiveT, 1>(vh);
+        Eigen::Vector<ActiveT, 1> xx = opt_var.template active<1>(vh);
 
         ActiveT a = xx(0);
 

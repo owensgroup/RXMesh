@@ -11,6 +11,7 @@
 #include "rxmesh/patch_info.h"
 #include "rxmesh/types.h"
 
+#include "rxmesh/diff/util.h"
 #include "rxmesh/matrix/dense_matrix.h"
 
 #include <Eigen/Dense>
@@ -306,16 +307,16 @@ class Attribute : public AttributeBase
     /**
      * @brief load the attribute into Eigen matrix using a Scalar type that
      * could be active (i.e., tracking derivatives) or passive (i.e., plain
-     * floating point)
-     * @tparam ActiveT the Scalar type
-     * @tparam DiffHandleT the type of the handle
+     * floating point). The Scalar type is deduced from the handle's
+     * DiffHandleT::Active.
      * @tparam VariableDim the dimension/number of components of the variable
+     * @tparam DiffHandleT the type of the handle
      * @param handle the handle at which the attribute will be read
      */
-    template <typename ActiveT, int VariableDim, typename DiffHandleT>
-    __host__ __device__ __inline__ Eigen::Vector<ActiveT, VariableDim> active(
-        const DiffHandleT& handle) const
+    template <int VariableDim, typename DiffHandleT>
+    __host__ __device__ __inline__ auto active(const DiffHandleT& handle) const
     {
+        using ActiveT = typename DiffHandleT::Active;
         Eigen::Vector<ActiveT, VariableDim> ret;
 
         assert(VariableDim <= get_num_attributes());
@@ -339,6 +340,110 @@ class Attribute : public AttributeBase
 
         return ret;
     }
+
+
+    /**
+     * @brief load the attribute value at iter[index] into an Eigen vector
+     * using a Scalar type that may be active (tracking derivatives) or passive
+     * (plain floating point). The Scalar type is deduced from
+     * DiffHandleT::Active. The gradient is initialized so that the iter[index]
+     * entry is treated as an independent variable in a query of size
+     * iter.size() x VariableDim.
+     * @tparam VariableDim dimension/number of components of the variable
+     * @tparam DiffHandleT type of the handle (deduced)
+     * @tparam IteratorT type of the iterator (deduced)
+     * @param handle the handle this lambda/kernel is invoked on (used to pick
+     * active vs. passive scalar type)
+     * @param iter iterator over neighboring elements
+     * @param index position within iter whose value to load
+     */
+    template <int VariableDim, typename DiffHandleT, typename IteratorT>
+    __host__ __device__ __inline__ auto active(const DiffHandleT& handle,
+                                               const IteratorT&   iter,
+                                               int                index) const
+    {
+        using ActiveT = typename DiffHandleT::Active;
+        Eigen::Vector<ActiveT, VariableDim> ret;
+
+        assert(index < iter.size());
+        assert(VariableDim <= get_num_attributes());
+
+        for (int j = 0; j < VariableDim; ++j) {
+            if constexpr (DiffHandleT::IsActive) {
+                ret[j].val() = (*this)(iter[index], j);
+            } else {
+                ret[j] = (*this)(iter[index], j);
+            }
+        }
+
+        if constexpr (DiffHandleT::IsActive) {
+            for (int j = 0; j < VariableDim; ++j) {
+                ret[j].grad()[index_mapping(VariableDim, index, j)] = 1;
+            }
+        }
+
+        return ret;
+    }
+
+
+    /**
+     * @brief Loads the attribute value at "center" when index == 0, and at
+     * "iter[index - 1]" when index >= 1, into an Eigen vector. The Scalar type
+     * is deduced from DiffHandleT::Active. The gradient is initialized so that
+     * the slot at "index" is treated as an independent variable in a query of
+     * size (iter.size() + 1) x VariableDim, where slot 0 corresponds to
+     * "center".
+     * @tparam VariableDim dimension/number of components of the variable
+     * @tparam DiffHandleT type of the differentiation handle
+     * @tparam HandleT2 type of the center handle (deduced)
+     * @tparam IteratorT type of the iterator (deduced)
+     * @param handle the handle this lambda/kernel is invoked on (used to pick
+     * active vs. passive scalar type)
+     * @param center the center element handle (used when index == 0)
+     * @param iter iterator over neighboring elements (used when index >= 1)
+     * @param index position within [0, iter.size()] whose value to load; 0 maps
+     * to "center", k maps to iter[k-1] for k >= 1
+     */
+    template <int VariableDim,
+              typename DiffHandleT,
+              typename HandleT2,
+              typename IteratorT>
+    __host__ __device__ __inline__ auto active(const DiffHandleT& handle,
+                                               const HandleT2&    center,
+                                               const IteratorT&   iter,
+                                               int                index) const
+    {
+        using ActiveT = typename DiffHandleT::Active;
+        Eigen::Vector<ActiveT, VariableDim> ret;
+
+        assert(index < iter.size() + 1);
+        assert(VariableDim <= get_num_attributes());
+
+        for (int j = 0; j < VariableDim; ++j) {
+            if constexpr (DiffHandleT::IsActive) {
+                if (index == 0) {
+                    ret[j].val() = (*this)(center, j);
+                } else {
+                    ret[j].val() = (*this)(iter[index - 1], j);
+                }
+            } else {
+                if (index == 0) {
+                    ret[j] = (*this)(center, j);
+                } else {
+                    ret[j] = (*this)(iter[index - 1], j);
+                }
+            }
+        }
+
+        if constexpr (DiffHandleT::IsActive) {
+            for (int j = 0; j < VariableDim; ++j) {
+                ret[j].grad()[index_mapping(VariableDim, index, j)] = 1;
+            }
+        }
+
+        return ret;
+    }
+
 
     /**
      * @brief Check if the attribute is empty

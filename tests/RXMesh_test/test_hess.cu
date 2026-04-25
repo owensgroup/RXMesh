@@ -16,8 +16,7 @@ void add_inertia_term(ProblemT& problem, rxmesh::VertexAttribute<T>& x, T mass)
         [x, mass] __device__(const auto& vh, auto& opt_var) mutable {
             using ActiveT = ACTIVE_TYPE(vh);
 
-            Eigen::Vector3<ActiveT> x_tilda =
-                opt_var.template active<ActiveT, 3>(vh);
+            Eigen::Vector3<ActiveT> x_tilda = opt_var.template active<3>(vh);
 
             Eigen::Vector3<T> xx = x.to_eigen<3>(vh);
 
@@ -242,15 +241,15 @@ void add_vf_term(ProblemT& problem, int face_id, int vert_id)
 
             assert(fh.local_id() == face_id);
             assert(vh.local_id() == vert_id);
-
+            
             Eigen::Vector3<ActiveT> x0 =
-                iter_val<ActiveT, 3>(fh, vh, iter, opt_var, 0);
+                opt_var.template active<3>(fh, vh, iter, 0);
             Eigen::Vector3<ActiveT> x1 =
-                iter_val<ActiveT, 3>(fh, vh, iter, opt_var, 1);
+                opt_var.template active<3>(fh, vh, iter, 1);
             Eigen::Vector3<ActiveT> x2 =
-                iter_val<ActiveT, 3>(fh, vh, iter, opt_var, 2);
+                opt_var.template active<3>(fh, vh, iter, 2);
             Eigen::Vector3<ActiveT> x3 =
-                iter_val<ActiveT, 3>(fh, vh, iter, opt_var, 3);
+                opt_var.template active<3>(fh, vh, iter, 3);
 
             ActiveT E;
             return E;
