@@ -18,7 +18,6 @@
 
 #include "rxmesh/diff/candidate_pairs.h"
 #include "rxmesh/diff/diff_handle.h"
-#include "rxmesh/diff/diff_iterator.h"
 
 namespace rxmesh {
 namespace detail {
