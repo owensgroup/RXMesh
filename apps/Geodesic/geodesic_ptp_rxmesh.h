@@ -122,9 +122,9 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&        rx,
 
     rxmesh_geo->copy_from(*double_buffer[d], rxmesh::DEVICE, rxmesh::HOST);
 
-    RXMESH_TRACE("Geodesic_RXMesh took {} (ms) -- #iter= {}",
-                 timer.elapsed_millis(),
-                 iter);
+    RXMESH_INFO("Geodesic_RXMesh took {} (ms) -- #iter= {}",
+                timer.elapsed_millis(),
+                iter);
 
 #if USE_POLYSCOPE
     auto ps_mesh = rx.get_polyscope_mesh();

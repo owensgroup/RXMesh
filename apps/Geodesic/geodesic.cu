@@ -23,6 +23,7 @@ struct arg
     char**      argv;
     int         argc;
     uint32_t    num_seeds = 1;
+    int         seed_id   = -1;
 
 } Arg;
 
@@ -51,13 +52,18 @@ void geodesic()
 
     // Generate Seeds
     std::vector<uint32_t> h_seeds(Arg.num_seeds);
-    std::random_device    dev;
-    std::mt19937          rng(dev());
-    std::uniform_int_distribution<std::mt19937::result_type> dist(
-        0, rx.get_num_vertices());
-    for (auto& s : h_seeds) {
-        s = dist(rng);
-        // s = 0;
+    if (Arg.seed_id < 0) {
+        std::random_device                                       dev;
+        std::mt19937                                             rng(dev());
+        std::uniform_int_distribution<std::mt19937::result_type> dist(
+            0, rx.get_num_vertices());
+        for (auto& s : h_seeds) {
+            s = dist(rng);
+            // s = 0;
+        }
+    } else {
+        assert(Arg.num_seeds == 1);
+        h_seeds[0] = Arg.seed_id;
     }
 
 
@@ -85,6 +91,11 @@ int main(int argc, char** argv)
     app.add_option("-i,--input", Arg.obj_file_name, "Input OBJ mesh file")
         ->default_val(std::string(STRINGIFY(INPUT_DIR) "sphere3.obj"));
 
+    app.add_option("-s,--source",
+                   Arg.seed_id,
+                   "Source vertex ID for computing geodesic distance")
+        ->default_val(-1);
+
     app.add_option("-o,--output", Arg.output_folder, "JSON file output folder")
         ->default_val(std::string(STRINGIFY(OUTPUT_DIR)));
 
@@ -109,7 +120,8 @@ int main(int argc, char** argv)
     RXMESH_TRACE("input= {}", Arg.obj_file_name);
     RXMESH_TRACE("output_folder= {}", Arg.output_folder);
     RXMESH_TRACE("num_seeds= {}", Arg.num_seeds);
-    RXMESH_TRACE("device_id= {}", Arg.device_id);
+    RXMESH_TRACE("num_seeds= {}", Arg.num_seeds);
+    RXMESH_TRACE("source = {}", Arg.seed_id);
 
     geodesic();
 }
