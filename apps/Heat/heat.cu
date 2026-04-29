@@ -136,8 +136,8 @@ int main(int argc, char** argv)
                 sum_w += w;
                 L(p, r) = -w;
 
-                const T a = partial_voronoi_area(P, Q, R);
-                v_area += (a > 0.f) ? a : 0.f;
+                const T a = tri_area(P, Q, R);
+                v_area += (a > 0.f) ? (a / T(3)) : 0.f;
                 q = r;
             }
             L(p, p)    = sum_w + 1e-6f;
@@ -203,7 +203,7 @@ int main(int argc, char** argv)
 
             const T gn = glm::length(g);
 
-            const vec3<T> Xi = (gn > 1e-20f) ? (-g / gn) : vec3<T>(0.f);
+            const vec3<T> Xi = (gn > 1e-20f) ? (g / gn) : vec3<T>(0.f);
 
             X(f, 0) = Xi.x;
             X(f, 1) = Xi.y;
@@ -257,20 +257,10 @@ int main(int argc, char** argv)
 
 
     // Distance = phi - phi(source)
-    /*rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle vh) mutable {
+    rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle vh) mutable {
         dist(vh, 0) = phi_or_u(vh, 0) - phi_or_u(source_handle, 0);
     });
-    dist.move(DEVICE, HOST);*/
-
-    phi_or_u.move(DEVICE, HOST);
-    T phi_min = std::numeric_limits<T>::max();
-    rx.for_each_vertex(HOST, [&](VertexHandle vh) {
-        phi_min = std::min(phi_min, phi_or_u(vh, 0));
-    });
-
-    rx.for_each_vertex(HOST, [&](VertexHandle vh) {
-        dist(vh, 0) = phi_or_u(vh, 0) - phi_min;
-    });
+    dist.move(DEVICE, HOST);   
 
     timer.stop();
 
