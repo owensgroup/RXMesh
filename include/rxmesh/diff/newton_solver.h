@@ -15,7 +15,7 @@
 namespace rxmesh {
 
 template <typename T, int VariableDim, typename OptVarHandleT, typename SolverT>
-struct NetwtonSolver
+struct NewtonSolver
 {
 
     using DiffProblemT = DiffScalarProblem<T, VariableDim, OptVarHandleT, true>;
@@ -32,7 +32,7 @@ struct NetwtonSolver
     /**
      * @brief Newton solver
      */
-    NetwtonSolver(DiffProblemT& p, SolverT* s)
+    NewtonSolver(DiffProblemT& p, SolverT* s)
         : problem(p),
           dir(DenseMatT(p.rx, p.grad.rows(), p.grad.cols(), LOCATION_ALL)),
           temp_opt_var(p.rx.add_attribute_like("temp_opt_var", *p.opt_var)),

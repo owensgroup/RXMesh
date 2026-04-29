@@ -435,7 +435,7 @@ int main(int argc, char** argv)
         using HessMatT = typename ProblemT::HessMatT;
         LUSolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(
             problem.hess.get());
-        NetwtonSolver newton_solver(problem, &solver);
+        NewtonSolver newton_solver(problem, &solver);
 
         manifold_optimization<T>(
             rx, problem, newton_solver, init_s, Direction::Default);

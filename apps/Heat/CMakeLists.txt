@@ -1,3 +1,7 @@
+if(NOT ${RX_USE_CUDSS})
+    return()
+endif()
+
 set(SOURCE_LIST
   heat.cu
 )

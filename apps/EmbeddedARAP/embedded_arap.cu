@@ -31,7 +31,7 @@ void arap(RXMeshStatic& rx, Scenario scenario, const std::string& marker_path)
         CholeskySolver<SparseMatrix<T>, ProblemT::DenseMatT::OrderT>;
 #endif
 
-    GaussNetwtonSolver<T, VariableDim, VertexHandle, SolverT> solver(problem);
+    GaussNewtonSolver<T, VariableDim, VertexHandle, SolverT> solver(problem);
 
     auto Urshape = *rx.get_input_vertex_coordinates();
 

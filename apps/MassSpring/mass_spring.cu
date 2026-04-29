@@ -79,7 +79,7 @@ void mass_spring(RXMeshStatic& rx, Scenario scenario, int max_time_steps)
         problem.hess.get());
 #endif
 
-    NetwtonSolver newton_solver(problem, &solver);
+    NewtonSolver newton_solver(problem, &solver);
 
     auto rest_l = *rx.add_edge_attribute<T>("RestLen", 1);
 

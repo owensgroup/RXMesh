@@ -139,7 +139,7 @@ void neo_hookean(RXMeshStatic& rx, T dx, const PhysicsParams& params)
         *problem.hess, 1, params.cg_max_iter);
 
 
-    NetwtonSolver newton_solver(problem, &solver);
+    NewtonSolver newton_solver(problem, &solver);
 
     auto& x = *problem.opt_var;
     x.copy_from(*rx.get_input_vertex_coordinates(), DEVICE, DEVICE);
