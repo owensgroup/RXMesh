@@ -1014,6 +1014,73 @@ struct SparseMatrix
         }
     }
 
+    /**
+     * @brief Deep copy from a source sparse matrix of the same shape (number of
+     * rows, cols, and nnz). If source_flag and dst_flag are both set to
+     * LOCATION_ALL, then we copy what is on host to host, and what on device to
+     * device. If source_flag is set to HOST (or DEVICE) and dst_flag is set to
+     * LOCATION_ALL, then we copy source's HOST (or DEVICE) to both HOST and
+     * DEVICE.
+     * @param source_mat attribute to copy from
+     * @param source_flag defines where we will copy from
+     * @param dst_flag defines where we will copy to
+     * @param stream used to launch kernel/memcpy
+     */
+    __host__ void copy_from(SparseMatrix<T>& source_mat,
+                            locationT        source_flag,
+                            locationT        dst_flag,
+                            cudaStream_t     stream = NULL)
+    {
+
+        if (rows() != source_mat.rows() || cols() != source_mat.cols() ||
+            non_zeros() != source_mat.non_zeros()) {
+            RXMESH_ERROR(
+                "SparseMatrix::copy_from() source matrix (#rows: {}, #cols: "
+                "{}, #nnz: {}) does not have the same shape as the target "
+                "(#rows: {}, #cols: {}, #nnz: {})",
+                source_mat.rows(),
+                source_mat.cols(),
+                source_mat.non_zeros(),
+                rows(),
+                cols(),
+                non_zeros());
+            return;
+        }
+
+
+        if ((source_flag & HOST) == HOST && (dst_flag & HOST) == HOST) {
+
+            std::memcpy(m_h_val, source_mat.m_h_val, max_nnz_bytes_data());
+        }
+
+        if ((source_flag & DEVICE) == DEVICE && (dst_flag & DEVICE) == DEVICE) {
+
+            CUDA_ERROR(cudaMemcpyAsync(m_d_val,
+                                       source_mat.m_d_val,
+                                       max_nnz_bytes_data(),
+                                       cudaMemcpyDeviceToDevice,
+                                       stream));
+        }
+
+        if ((source_flag & DEVICE) == DEVICE && (dst_flag & HOST) == HOST) {
+
+            CUDA_ERROR(cudaMemcpyAsync(m_h_val,
+                                       source_mat.m_d_val,
+                                       size_t(m_nnz) * sizeof(T),
+                                       cudaMemcpyDeviceToHost,
+                                       stream));
+        }
+
+        if ((source_flag & HOST) == HOST && (dst_flag & DEVICE) == DEVICE) {
+
+            CUDA_ERROR(cudaMemcpyAsync(m_d_val,
+                                       source_mat.m_h_val,
+                                       size_t(m_nnz) * sizeof(T),
+                                       cudaMemcpyHostToDevice,
+                                       stream));
+        }
+    }
+
 
     /**
      * @brief allocate the temp buffer needed for sparse matrix multiplication
