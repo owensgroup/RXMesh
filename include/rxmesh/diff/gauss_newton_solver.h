@@ -13,7 +13,7 @@
 namespace rxmesh {
 
 template <typename T, int VariableDim, typename OptVarHandleT, typename SolverT>
-struct GaussNetwtonSolver
+struct GaussNewtonSolver
 {
 
     using DiffProblemT = DiffVectorProblem<T, VariableDim, OptVarHandleT>;
@@ -34,7 +34,7 @@ struct GaussNetwtonSolver
     /**
      * @brief Newton solver
      */
-    GaussNetwtonSolver(DiffProblemT& p)
+    GaussNewtonSolver(DiffProblemT& p)
         : problem(p),
           solve_time(0),
           is_prep_solver_called(false),
@@ -389,7 +389,7 @@ struct GaussNetwtonSolver
             CUSPARSE_ERROR(cusparseSpMatGetSize(JtJ.m_spdescr, &r, &c, &nnz));
             if (m_JtJ_nnz_expected >= 0 && nnz != m_JtJ_nnz_expected) {
                 RXMESH_ERROR(
-                    "GaussNetwtonSolver::compute_JtJ() JtJ nnz changed ({} -> "
+                    "GaussNewtonSolver::compute_JtJ() JtJ nnz changed ({} -> "
                     "{}). Rebuild required.",
                     m_JtJ_nnz_expected,
                     nnz);

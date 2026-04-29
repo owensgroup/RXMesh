@@ -26,7 +26,7 @@ void arap(RXMeshStatic& rx)
     CholeskySolver<HessMatT, ProblemT::DenseMatT::OrderT> solver(
         problem.hess.get());
 
-    NetwtonSolver newton_solver(problem, &solver);
+    NewtonSolver newton_solver(problem, &solver);
 
     auto P = *rx.get_input_vertex_coordinates();
 

@@ -31,7 +31,7 @@ struct SparseMatrix
     friend class VCycle;
 
     template <typename U0, int U1, typename U2, typename U3>
-    friend struct GaussNetwtonSolver;
+    friend struct GaussNewtonSolver;
 
     using IndexT = int;
 

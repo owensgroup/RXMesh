@@ -4,6 +4,8 @@
 #include "rxmesh/matrix/dense_matrix.h"
 #include "rxmesh/matrix/sparse_matrix.h"
 
+#include "rxmesh/matrix/cg_solver.h"
+
 namespace rxmesh {
 
 /**

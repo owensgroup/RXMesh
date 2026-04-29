@@ -306,7 +306,7 @@ int main(int argc, char** argv)
         CholeskySolver<SparseMatrix<T>, ProblemT::DenseMatT::OrderT>;
 #endif
 
-    GaussNetwtonSolver<T, N, FaceHandle, SolverT> solver(problem);
+    GaussNewtonSolver<T, N, FaceHandle, SolverT> solver(problem);
 
     // constant transport terms for polynomial coefficients per edge
     auto e_f_conj = *rx.add_edge_attribute<thrust::complex<T>>("e_f_conj", 1);

@@ -65,7 +65,7 @@ void add_mesh_to_polyscope(RXMeshStatic&       rx,
 template <typename T, typename ProblemT, typename SolverT>
 void parameterize(RXMeshStatic& rx, ProblemT& problem, SolverT& solver)
 {
-    NetwtonSolver newton_solver(problem, &solver);
+    NewtonSolver newton_solver(problem, &solver);
 
     auto coordinates = *rx.get_input_vertex_coordinates();
 
