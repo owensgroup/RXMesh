@@ -115,74 +115,71 @@ struct DiffVectorProblem
      * @brief add a (energy) vector term to the loss function that depends on
      * local query operation (e.g., FV)
      */
-    template <Op       op,
-              int      InputDim,
-              int      OutputDimStart,
-              int      OutputDimEnd,
-              uint32_t blockThreads = 256,
-              typename LambdaT      = void>
-    void add_term(LambdaT t, bool oreinted = false)
-    {
-        constexpr int OutputVariableDim = OutputDimEnd - OutputDimStart;
+    /* template <Op       op,
+               int      InputDim,
+               int      OutputDimStart,
+               int      OutputDimEnd,
+               uint32_t blockThreads = 256,
+               typename LambdaT      = void>
+     void add_term(LambdaT t, bool oreinted = false)
+     {
+         constexpr int OutputVariableDim = OutputDimEnd - OutputDimStart;
 
-        constexpr int ElementValence = element_valence<op>();
+         constexpr int ElementValence = element_valence<op>();
 
-        constexpr int NElements =
-            std::max(OutputVariableDim * ElementValence, Eigen::Dynamic);
+         constexpr int NElements =
+             std::max(OutputVariableDim * ElementValence, Eigen::Dynamic);
 
-        using ScalarT = Scalar<T, NElements, false>;
+         using ScalarT = Scalar<T, NElements, false>;
 
-        if constexpr (op == Op::VV || op == Op::VE || op == Op::VF ||
-                      op == Op::V) {
-            auto new_term =
-                std::make_shared<TemplatedVectorTerm<VertexHandle,
-                                                     OptVarHandleT,
-                                                     blockThreads,
-                                                     op,
-                                                     ScalarT,
-                                                     InputDim,
-                                                     OutputVariableDim,
-                                                     LambdaT>>(rx, t, oreinted);
-            terms.push_back(
-                std::dynamic_pointer_cast<VectorTerm<T, OptVarHandleT>>(
-                    new_term));
-        }
+         if constexpr (op == Op::VV || op == Op::VE || op == Op::VF ||
+                       op == Op::V) {
+             auto new_term =
+                 std::make_shared<TemplatedVectorTerm<VertexHandle,
+                                                      OptVarHandleT,
+                                                      blockThreads,
+                                                      op,
+                                                      ScalarT,
+                                                      InputDim,
+                                                      OutputVariableDim,
+                                                      LambdaT>>(rx, t,
+     oreinted); terms.push_back( std::dynamic_pointer_cast<VectorTerm<T,
+     OptVarHandleT>>( new_term));
+         }
 
-        if constexpr (op == Op::EV || op == Op::EE || op == Op::EF ||
-                      op == Op::E || op == Op::EVDiamond) {
-            auto new_term =
-                std::make_shared<TemplatedVectorTerm<EdgeHandle,
-                                                     OptVarHandleT,
-                                                     blockThreads,
-                                                     op,
-                                                     ScalarT,
-                                                     InputDim,
-                                                     OutputVariableDim,
-                                                     LambdaT>>(rx, t, oreinted);
-            terms.push_back(
-                std::dynamic_pointer_cast<VectorTerm<T, OptVarHandleT>>(
-                    new_term));
-        }
+         if constexpr (op == Op::EV || op == Op::EE || op == Op::EF ||
+                       op == Op::E || op == Op::EVDiamond) {
+             auto new_term =
+                 std::make_shared<TemplatedVectorTerm<EdgeHandle,
+                                                      OptVarHandleT,
+                                                      blockThreads,
+                                                      op,
+                                                      ScalarT,
+                                                      InputDim,
+                                                      OutputVariableDim,
+                                                      LambdaT>>(rx, t,
+     oreinted); terms.push_back( std::dynamic_pointer_cast<VectorTerm<T,
+     OptVarHandleT>>( new_term));
+         }
 
-        if constexpr (op == Op::FV || op == Op::FE || op == Op::FF ||
-                      op == Op::F) {
-            auto new_term =
-                std::make_shared<TemplatedVectorTerm<FaceHandle,
-                                                     OptVarHandleT,
-                                                     blockThreads,
-                                                     op,
-                                                     ScalarT,
-                                                     InputDim,
-                                                     OutputVariableDim,
-                                                     LambdaT>>(rx, t, oreinted);
-            terms.push_back(
-                std::dynamic_pointer_cast<VectorTerm<T, OptVarHandleT>>(
-                    new_term));
-        }
+         if constexpr (op == Op::FV || op == Op::FE || op == Op::FF ||
+                       op == Op::F) {
+             auto new_term =
+                 std::make_shared<TemplatedVectorTerm<FaceHandle,
+                                                      OptVarHandleT,
+                                                      blockThreads,
+                                                      op,
+                                                      ScalarT,
+                                                      InputDim,
+                                                      OutputVariableDim,
+                                                      LambdaT>>(rx, t,
+     oreinted); terms.push_back( std::dynamic_pointer_cast<VectorTerm<T,
+     OptVarHandleT>>( new_term));
+         }
 
-        ops.push_back(op);
-        block_shapes.push_back({InputDim, OutputVariableDim});
-    }
+         ops.push_back(op);
+         block_shapes.push_back({InputDim, OutputVariableDim});
+     }*/
 
     /**
      * @brief prepare the Jacobian for evaluation (i.e., allocate memory). this
