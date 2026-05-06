@@ -9,10 +9,13 @@
 #include <limits>
 
 #include "rxmesh/geometry_util.cuh"
-#include "rxmesh/matrix/cudss_cholesky_solver.h"
 #include "rxmesh/reduce_handle.h"
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/timer.h"
+
+#include "rxmesh/matrix/cg_solver.h"
+#include "rxmesh/matrix/cudss_cholesky_solver.h"
+#include "rxmesh/matrix/pcg_solver.h"
 
 using namespace rxmesh;
 
@@ -22,10 +25,13 @@ int main(int argc, char** argv)
 
     CLI::App app{"Heat geodesics (Crane et al. 2017)"};
 
-    std::string mesh_path  = STRINGIFY(INPUT_DIR) "sphere3.obj";
-    uint32_t    device_id  = 0;
-    uint32_t    source_vid = 0;
-    T           t_factor   = 1.0f;
+    std::string mesh_path   = STRINGIFY(INPUT_DIR) "sphere3.obj";
+    uint32_t    device_id   = 0;
+    uint32_t    source_vid  = 0;
+    T           t_factor    = 1.0f;
+    int         cg_max_iter = 10000;
+    std::string solver      = "cudss";
+
 
     app.add_option("-i,--input", mesh_path, "Input OBJ mesh file")
         ->default_val(mesh_path);
@@ -37,17 +43,37 @@ int main(int argc, char** argv)
                    t_factor,
                    "Heat time-step multiplier on h^2 (default 1)")
         ->default_val(1.0f);
+    app.add_option("-c,--cg_max_iter", cg_max_iter, "Max #iter for CG solver")
+        ->default_val(cg_max_iter);
+    app.add_option("-l,--solver",
+                   solver,
+                   "Solver. Only cudss, cg, and pcg are supported")
+        ->default_val(solver);
 
     try {
         app.parse(argc, argv);
     } catch (const CLI::ParseError& e) {
         return app.exit(e);
     }
-
     rx_init(device_id);
 
-    RXMeshStatic rx(mesh_path);
+    RXMESH_INFO("input = {}", mesh_path);
+    RXMESH_INFO("device_id = {}", device_id);
+    RXMESH_INFO("source_vid = {}", source_vid);
+    RXMESH_INFO("solver = {}", solver);
+    RXMESH_INFO("cg_max_iter = {}", cg_max_iter);
+
+    if (solver != "pcg" && solver != "cg" && solver != "cudss") {
+        RXMESH_ERROR(
+            "Unuspported solver option {}. Supported options are cudss, cg, "
+            "and pcg",
+            solver);
+        return EXIT_FAILURE;
+    }
     
+
+    RXMeshStatic rx(mesh_path);
+
     auto coords = *rx.get_input_vertex_coordinates();
 
     const uint32_t num_vertices = rx.get_num_vertices();
@@ -164,10 +190,21 @@ int main(int argc, char** argv)
 
 
     // 4) solve A_heat*u = rhs
-    cuDSSCholeskySolver<SparseMatrix<T>> heat_solver(&A_heat);
-    heat_solver.pre_solve(rx, rhs, phi_or_u);
-    heat_solver.solve(rhs, phi_or_u);
-
+    if (solver == "cudss") {
+        cuDSSCholeskySolver<SparseMatrix<T>> heat_solver(&A_heat);
+        heat_solver.pre_solve(rx, rhs, phi_or_u);
+        heat_solver.solve(rhs, phi_or_u);
+    }
+    if (solver == "pcg") {
+        PCGSolver<T> heat_solver(A_heat, 1, cg_max_iter);
+        heat_solver.pre_solve(rhs, phi_or_u);
+        heat_solver.solve(rhs, phi_or_u);
+    }
+    if (solver == "cg") {
+        CGSolver<T> heat_solver(A_heat, 1, cg_max_iter);
+        heat_solver.pre_solve(rhs, phi_or_u);
+        heat_solver.solve(rhs, phi_or_u);
+    }
 
     // 5) Per-face X = -grad(u) / |grad(u)|.
     //  For a triangle (p0, p1, p2) with face normal N:
@@ -250,26 +287,39 @@ int main(int argc, char** argv)
 
 
     // 7) Solve L phi = div(X)
-    cuDSSCholeskySolver<SparseMatrix<T>> poisson_solver(&L);
     phi_or_u.reset(0, DEVICE);
-    poisson_solver.pre_solve(rx, rhs, phi_or_u);
-    poisson_solver.solve(rhs, phi_or_u);
+    if (solver == "cudss") {
+        cuDSSCholeskySolver<SparseMatrix<T>> poisson_solver(&L);
+        poisson_solver.pre_solve(rx, rhs, phi_or_u);
+        poisson_solver.solve(rhs, phi_or_u);
+    }
+    if (solver == "pcg") {
+        PCGSolver<T> poisson_solver(L, 1, cg_max_iter);
+        poisson_solver.pre_solve(rhs, phi_or_u);
+        poisson_solver.solve(rhs, phi_or_u);
+    }
+    if (solver == "cg") {
+        CGSolver<T> poisson_solver(L, 1, cg_max_iter);
+        poisson_solver.pre_solve(rhs, phi_or_u);
+        poisson_solver.solve(rhs, phi_or_u);
+    }
 
 
     // Distance = phi - phi(source)
     rx.for_each_vertex(DEVICE, [=] __device__(const VertexHandle vh) mutable {
         dist(vh, 0) = phi_or_u(vh, 0) - phi_or_u(source_handle, 0);
     });
-    dist.move(DEVICE, HOST);   
+    dist.move(DEVICE, HOST);
 
     timer.stop();
 
     RXMESH_INFO("Heat Geodesics took {} (ms)", timer.elapsed_millis());
 #if USE_POLYSCOPE
+    auto ps_geo =
+        rx.get_polyscope_mesh()->addVertexScalarQuantity("geodesic", dist);
+    ps_geo->setEnabled(true);
 
-    rx.get_polyscope_mesh()
-        ->addVertexScalarQuantity("geodesic", dist)
-        ->setEnabled(true);
+    ps_geo->setIsolinesEnabled(true);
     polyscope::show();
 #endif
 
