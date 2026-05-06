@@ -33,8 +33,7 @@ struct arg
 void geodesic()
 {
     using namespace rxmesh;
-    using dataT = float;
-
+    
     RXMeshStatic rx(Arg.obj_file_name);
     if (!rx.is_closed()) {
         RXMESH_ERROR(
@@ -75,10 +74,10 @@ void geodesic()
     std::vector<uint32_t> toplesets(rx.get_num_vertices(), 1u);
     std::vector<uint32_t> sorted_index;
     std::vector<uint32_t> limits;
-    geodesic_ptp_openmesh<dataT>(h_seeds, sorted_index, limits, toplesets);
+    geodesic_ptp_openmesh<rx_coord_t>(h_seeds, sorted_index, limits, toplesets);
 
     // RXMesh Impl
-    geodesic_rxmesh<dataT>(rx, h_seeds, sorted_index, limits, toplesets);
+    geodesic_rxmesh<rx_coord_t>(rx, h_seeds, sorted_index, limits, toplesets);
 }
 
 int main(int argc, char** argv)
