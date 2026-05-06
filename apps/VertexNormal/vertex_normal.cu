@@ -85,7 +85,7 @@ void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rx,
     }
 
     RXMESH_INFO("vertex_normal_rxmesh() vertex normal kernel took {} (ms)",
-                 vn_time / Arg.num_run);
+                vn_time / Arg.num_run);
 
     // Verify
     v_normals->move(rxmesh::DEVICE, rxmesh::HOST);
@@ -111,16 +111,19 @@ void vertex_normal_rxmesh(rxmesh::RXMeshStatic&              rx,
     report.add_test(td);
     report.write(Arg.output_folder + "/rxmesh",
                  "VertexNormal_RXMesh_" + extract_file_name(Arg.obj_file_name));
+
+#ifdef USE_POLYSCOPE
+    rx.get_polyscope_mesh()->addVertexVectorQuantity("v_normals", *v_normals);
+#endif
 }
 
 int vertex_normal_main()
 {
     using namespace rxmesh;
-    using dataT = float;
 
     // Load mesh
-    std::vector<std::vector<dataT>>    Verts;
-    std::vector<std::vector<uint32_t>> Faces;
+    std::vector<std::vector<rx_coord_t>> Verts;
+    std::vector<std::vector<uint32_t>>   Faces;
 
     if (!import_obj(Arg.obj_file_name, Verts, Faces)) {
         RXMESH_ERROR("Failed to import OBJ file: {}", Arg.obj_file_name);
@@ -129,8 +132,12 @@ int vertex_normal_main()
 
     RXMeshStatic rx(Faces);
 
+#ifdef USE_POLYSCOPE
+    rx.add_vertex_coordinates(Verts);
+#endif
+
     // Serial reference
-    std::vector<dataT> vertex_normal_gold(3 * Verts.size());
+    std::vector<rx_coord_t> vertex_normal_gold(3 * Verts.size());
     vertex_normal_ref(Faces, Verts, vertex_normal_gold);
 
     // RXMesh Impl
@@ -138,6 +145,10 @@ int vertex_normal_main()
 
     // Hardwired Impl
     vertex_normal_hardwired(Faces, Verts, vertex_normal_gold);
+
+#ifdef USE_POLYSCOPE
+    polyscope::show();
+#endif
 
     return 0;
 }
