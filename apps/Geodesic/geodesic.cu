@@ -22,7 +22,7 @@ struct arg
     uint32_t    device_id     = 0;
     char**      argv;
     int         argc;
-    uint32_t    num_seeds = 1;
+    int         num_seeds = 1;
     int         seed_id   = -1;
 
 } Arg;
@@ -33,7 +33,7 @@ struct arg
 void geodesic()
 {
     using namespace rxmesh;
-    
+
     RXMeshStatic rx(Arg.obj_file_name);
     if (!rx.is_closed()) {
         RXMESH_ERROR(
@@ -50,19 +50,18 @@ void geodesic()
 
 
     // Generate Seeds
-    std::vector<uint32_t> h_seeds(Arg.num_seeds);
+    DenseMatrix<int> h_seeds(Arg.num_seeds, 1, HOST);
     if (Arg.seed_id < 0) {
         std::random_device                                       dev;
         std::mt19937                                             rng(dev());
         std::uniform_int_distribution<std::mt19937::result_type> dist(
             0, rx.get_num_vertices());
-        for (auto& s : h_seeds) {
-            s = dist(rng);
-            // s = 0;
+        for (int i = 0; i < Arg.num_seeds; ++i) {
+            h_seeds(i, 0) = dist(rng);
         }
     } else {
         assert(Arg.num_seeds == 1);
-        h_seeds[0] = Arg.seed_id;
+        h_seeds(0, 0) = Arg.seed_id;
     }
 
 
@@ -71,13 +70,14 @@ void geodesic()
     // sorted_index and limit. We keep it for RXMesh because it is
     // used to quickly determine whether or not a vertex is within
     // the "update band".
-    std::vector<uint32_t> toplesets(rx.get_num_vertices(), 1u);
-    std::vector<uint32_t> sorted_index;
-    std::vector<uint32_t> limits;
-    geodesic_ptp_openmesh<rx_coord_t>(h_seeds, sorted_index, limits, toplesets);
+    std::vector<int> toplesets(rx.get_num_vertices(), 1u);
+    DenseMatrix<int> limits(rx.get_num_vertices() + 2, 1, HOST);
+    int              limits_size = 0;
+    geodesic_ptp_openmesh<rx_coord_t>(h_seeds, limits, limits_size, toplesets);
 
     // RXMesh Impl
-    geodesic_rxmesh<rx_coord_t>(rx, h_seeds, sorted_index, limits, toplesets);
+    auto d_toplesets = rx.add_vertex_attribute(toplesets, "topleset");
+    geodesic_rxmesh<rx_coord_t>(rx, h_seeds, limits, limits_size, *d_toplesets);
 }
 
 int main(int argc, char** argv)

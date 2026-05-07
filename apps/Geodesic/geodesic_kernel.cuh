@@ -76,27 +76,27 @@ __device__ __inline__ T update_step(
 
 template <typename T, uint32_t blockThreads>
 __global__ static void relax_ptp_rxmesh(
-    const rxmesh::Context                   context,
-    const rxmesh::VertexAttribute<T>        coords,
-    rxmesh::VertexAttribute<T>              new_geo_dist,
-    const rxmesh::VertexAttribute<T>        old_geo_dist,
-    const rxmesh::VertexAttribute<uint32_t> toplesets,
-    const uint32_t                          band_start,
-    const uint32_t                          band_end,
-    uint32_t*                               d_error,
-    const T                                 infinity_val,
-    const T                                 error_tol)
+    const rxmesh::Context              context,
+    const rxmesh::VertexAttribute<T>   coords,
+    rxmesh::VertexAttribute<T>         new_geo_dist,
+    const rxmesh::VertexAttribute<T>   old_geo_dist,
+    const rxmesh::VertexAttribute<int> toplesets,
+    const int                          band_start,
+    const int                          band_end,
+    int*                               d_error,
+    const T                            infinity_val,
+    const T                            error_tol)
 {
     using namespace rxmesh;
 
     auto in_active_set = [&](VertexHandle p_id) {
-        uint32_t my_band = toplesets(p_id);
+        int my_band = toplesets(p_id);
         return my_band >= band_start && my_band < band_end;
     };
 
     auto geo_lambda = [&](VertexHandle& p_id, const VertexIterator& iter) {
         // this vertex (p_id) update_band
-        uint32_t my_band = toplesets(p_id);
+        int my_band = toplesets(p_id);
 
         // this is the last vertex in the one-ring (before r_id)
         auto q_id = iter.back();
@@ -104,7 +104,7 @@ __global__ static void relax_ptp_rxmesh(
         // one-ring enumeration
         T current_dist = old_geo_dist(p_id);
         T new_dist     = current_dist;
-        for (uint32_t v = 0; v < iter.size(); ++v) {
+        for (int v = 0; v < iter.size(); ++v) {
             // the current one ring vertex
             auto r_id = iter[v];
 

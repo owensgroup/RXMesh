@@ -1,5 +1,6 @@
 #pragma once
 #include "geodesic_kernel.cuh"
+#include "rxmesh/matrix/dense_matrix.h"
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/util/report.h"
 #include "rxmesh/util/timer.h"
@@ -7,11 +8,11 @@
 constexpr float EPS = 10e-6;
 
 template <typename T>
-inline void geodesic_rxmesh(rxmesh::RXMeshStatic&        rx,
-                            const std::vector<uint32_t>& h_seeds,
-                            const std::vector<uint32_t>& h_sorted_index,
-                            const std::vector<uint32_t>& h_limits,
-                            const std::vector<uint32_t>& toplesets)
+inline void geodesic_rxmesh(rxmesh::RXMeshStatic&           rx,
+                            const rxmesh::DenseMatrix<int>& h_seeds,
+                            const rxmesh::DenseMatrix<int>& h_limits,
+                            int                             h_limits_size,
+                            rxmesh::VertexAttribute<int>&   d_toplesets)
 {
     using namespace rxmesh;
     constexpr uint32_t blockThreads = 256;
@@ -22,14 +23,10 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&        rx,
     report.device();
     report.system();
     report.model_data(Arg.obj_file_name, rx);
-    report.add_member("seeds", h_seeds);
     report.add_member("method", std::string("RXMesh"));
 
     // input coords
     auto input_coord = rx.get_input_vertex_coordinates();
-
-    // toplesets
-    auto d_toplesets = rx.add_vertex_attribute(toplesets, "topleset");
 
 
     // RXMesh launch box
@@ -45,9 +42,9 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&        rx,
     auto rxmesh_geo = rx.add_vertex_attribute<T>("geo", 1u);
     rxmesh_geo->reset(std::numeric_limits<T>::infinity(), rxmesh::HOST);
     rx.for_each_vertex(rxmesh::HOST, [&](const VertexHandle vh) {
-        uint32_t v_id = rx.map_to_global(vh);
-        for (uint32_t s : h_seeds) {
-            if (s == v_id) {
+        int v_id = rx.map_to_global(vh);
+        for (int k = 0; k < h_seeds.rows(); ++k) {
+            if (h_seeds(k, 0) == v_id) {
                 (*rxmesh_geo)(vh) = 0;
                 break;
             }
@@ -62,8 +59,8 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&        rx,
 
 
     // Error
-    uint32_t *d_error(nullptr), h_error(0);
-    CUDA_ERROR(cudaMalloc((void**)&d_error, sizeof(uint32_t)));
+    int *d_error(nullptr), h_error(0);
+    CUDA_ERROR(cudaMalloc((void**)&d_error, sizeof(int)));
 
     // double buffer
     VertexAttribute<T>* double_buffer[2] = {rxmesh_geo.get(),
@@ -74,10 +71,10 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&        rx,
     timer.start();
 
     // actual computation
-    uint32_t d = 0;
-    uint32_t i(1), j(2);
-    uint32_t iter     = 0;
-    uint32_t max_iter = 2 * h_limits.size();
+    int d = 0;
+    int i(1), j(2);
+    int iter     = 0;
+    int max_iter = 2 * h_limits_size;
     while (i < j && iter < max_iter) {
         iter++;
         if (i < (j / 2)) {
@@ -91,24 +88,24 @@ inline void geodesic_rxmesh(rxmesh::RXMeshStatic&        rx,
                 *input_coord,
                 *double_buffer[!d],
                 *double_buffer[d],
-                *d_toplesets,
+                d_toplesets,
                 i,
                 j,
                 d_error,
                 std::numeric_limits<T>::infinity(),
                 T(1e-3));
 
-        CUDA_ERROR(cudaMemcpy(
-            &h_error, d_error, sizeof(uint32_t), cudaMemcpyDeviceToHost));
-        CUDA_ERROR(cudaMemset(d_error, 0, sizeof(uint32_t)));
+        CUDA_ERROR(
+            cudaMemcpy(&h_error, d_error, sizeof(int), cudaMemcpyDeviceToHost));
+        CUDA_ERROR(cudaMemset(d_error, 0, sizeof(int)));
 
 
-        const uint32_t n_cond = h_limits[i + 1] - h_limits[i];
+        const int n_cond = h_limits(i + 1, 0) - h_limits(i, 0);
 
         if (n_cond == h_error) {
             i++;
         }
-        if (j < h_limits.size() - 1) {
+        if (j < h_limits_size - 1) {
             j++;
         }
 
