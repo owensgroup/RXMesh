@@ -125,7 +125,7 @@ __device__ __inline__ void Query<blockThreads>::dispatch(
 
     run_compute(block, compute_op);
 
-    // epilogue(block, shrd_alloc);
+    epilogue(block, shrd_alloc);
 }
 
 template <uint32_t blockThreads>
