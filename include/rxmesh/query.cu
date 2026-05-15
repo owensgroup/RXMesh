@@ -6,33 +6,6 @@
 namespace rxmesh {
 
 template <uint32_t blockThreads>
-__device__ Query<blockThreads>::Query(const Context& context,
-                                      const uint32_t pid)
-    : m_context(context),
-      m_patch_info(context.m_patches_info[pid]),
-      m_num_src_in_patch(0),
-      m_s_participant_bitmask(nullptr),
-      m_s_output_owned_bitmask(nullptr),
-      m_s_output_offset(nullptr),
-      m_s_output_value(nullptr),
-      m_s_valence(nullptr),
-      m_s_table(nullptr)
-{
-}
-
-template <uint32_t blockThreads>
-__device__ int Query<blockThreads>::get_patch_id() const
-{
-    return m_patch_info.patch_id;
-}
-
-template <uint32_t blockThreads>
-__device__ const PatchInfo& Query<blockThreads>::get_patch_info() const
-{
-    return m_patch_info;
-}
-
-template <uint32_t blockThreads>
 __device__ void Query<blockThreads>::compute_vertex_valence(
     cooperative_groups::thread_block& block,
     ShmemAllocator&                   shrd_alloc)
@@ -41,8 +14,9 @@ __device__ void Query<blockThreads>::compute_vertex_valence(
         return;
     }
 
-    const uint16_t num_vertices = m_patch_info.num_vertices[0];
-    const uint16_t num_edges    = m_patch_info.num_edges[0];
+    const uint16_t num_vertices =
+        m_context.m_patches_info[m_pid].num_vertices[0];
+    const uint16_t num_edges = m_context.m_patches_info[m_pid].num_edges[0];
 
     m_s_valence = shrd_alloc.alloc<uint8_t>(num_vertices);
 
@@ -50,8 +24,9 @@ __device__ void Query<blockThreads>::compute_vertex_valence(
     block.sync();
 
     for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
-        if (!m_patch_info.is_deleted(LocalEdgeT(e))) {
-            auto [v0, v1] = m_patch_info.get_edge_vertices(e);
+        if (!m_context.m_patches_info[m_pid].is_deleted(LocalEdgeT(e))) {
+            auto [v0, v1] =
+                m_context.m_patches_info[m_pid].get_edge_vertices(e);
             atomicAdd(m_s_valence + v0, uint8_t(1));
             atomicAdd(m_s_valence + v1, uint8_t(1));
             assert(m_s_valence[v0] < 255);
@@ -59,42 +34,6 @@ __device__ void Query<blockThreads>::compute_vertex_valence(
         }
     }
     block.sync();
-}
-
-template <uint32_t blockThreads>
-__device__ uint16_t Query<blockThreads>::vertex_valence(uint16_t v) const
-{
-    assert(m_s_valence);
-    assert(v < m_patch_info.num_vertices[0]);
-    return m_s_valence[v];
-}
-
-template <uint32_t blockThreads>
-__device__ uint16_t Query<blockThreads>::vertex_valence(VertexHandle vh) const
-{
-    assert(m_s_valence);
-    assert(vh.patch_id() == m_patch_info.patch_id);
-    assert(vh.local_id() < m_patch_info.num_vertices[0]);
-    return m_s_valence[vh.local_id()];
-}
-
-template <uint32_t blockThreads>
-__device__ void Query<blockThreads>::epilogue(
-    cooperative_groups::thread_block& block,
-    ShmemAllocator&                   shrd_alloc)
-{
-    if (get_patch_id() == INVALID32) {
-        return;
-    }
-
-    // cleanup shared memory allocation
-    shrd_alloc.dealloc(shrd_alloc.get_allocated_size_bytes() - m_shmem_before);
-    m_num_src_in_patch       = 0;
-    m_s_participant_bitmask  = nullptr;
-    m_s_output_owned_bitmask = nullptr;
-    m_s_output_offset        = nullptr;
-    m_s_output_value         = nullptr;
-    m_s_table                = nullptr;
 }
 
 // ---- Explicit instantiations
@@ -185,7 +124,7 @@ RXMESH_QUERY_INSTANTIATE_PROLOGUE(1024)
 
 #define RXMESH_QUERY_INSTANTIATE_GET_ITERATOR(BLOCK_THREADS)                  \
     template VertexIterator                                                   \
-        Query<BLOCK_THREADS>::get_iterator<VertexIterator>(uint16_t) const;   \
+    Query<BLOCK_THREADS>::get_iterator<VertexIterator>(uint16_t) const;       \
     template EdgeIterator Query<BLOCK_THREADS>::get_iterator<EdgeIterator>(   \
         uint16_t) const;                                                      \
     template DEdgeIterator Query<BLOCK_THREADS>::get_iterator<DEdgeIterator>( \

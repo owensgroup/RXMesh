@@ -17,6 +17,11 @@
 
 #pragma once
 
+#if defined(__CUDACC__)
+#include "rxmesh/kernels/loader.cuh"
+#include "rxmesh/kernels/util.cuh"
+#endif
+
 #include "rxmesh/hash_functions.h"
 #include "rxmesh/lp_pair.cuh"
 #include "rxmesh/util/macros.h"
@@ -44,12 +49,22 @@ struct LPHashTable
 
     static constexpr uint8_t stash_size = 128;
 
-    __device__ __host__ LPHashTable();
-    LPHashTable(const LPHashTable& other)      = default;
-    LPHashTable(LPHashTable&&)                 = default;
-    LPHashTable& operator=(const LPHashTable&) = default;
-    LPHashTable& operator=(LPHashTable&&)      = default;
-    ~LPHashTable()                             = default;
+    __device__ __host__ __forceinline__ LPHashTable()
+        : m_table(nullptr),
+          m_stash(nullptr),
+          m_capacity(0),
+          m_max_cuckoo_chains(0),
+          m_is_on_device(false)
+    {
+    }
+    __device__ __host__ __forceinline__ LPHashTable(const LPHashTable& other) =
+        default;
+    __device__ __host__ __forceinline__ LPHashTable(LPHashTable&&) = default;
+    __device__ __host__ __forceinline__ LPHashTable& operator=(
+        const LPHashTable&) = default;
+    __device__ __host__ __forceinline__ LPHashTable& operator=(LPHashTable&&) =
+        default;
+    __device__ __host__ __forceinline__ ~LPHashTable() = default;
 
     /**
      * @brief Constructor using the hash table capacity.This is used as
@@ -60,7 +75,10 @@ struct LPHashTable
     /**
      * @brief Get the hash table capacity
      */
-    __host__ __device__ uint16_t get_capacity() const;
+    __device__ __host__ __forceinline__ uint16_t get_capacity() const
+    {
+        return m_capacity;
+    }
 
     /**
      * @brief Reset the hash table to sentinel key-value (tombstone). This API
@@ -83,7 +101,10 @@ struct LPHashTable
     /**
      * @brief size of the hash table in bytes which may be needed for allocation
      */
-    __host__ __device__ uint32_t num_bytes() const;
+    __device__ __host__ __forceinline__ uint32_t num_bytes() const
+    {
+        return m_capacity * sizeof(LPPair);
+    }
 
     /**
      * @brief (Re)Generate new hashers
@@ -113,9 +134,22 @@ struct LPHashTable
      * @brief Load the memory used for the hash table into a shared memory
      * buffer
      */
-    __device__ void load_in_shared_memory(LPPair* s_table,
-                                          bool    with_wait,
-                                          LPPair* s_stash = nullptr) const;
+    __device__ __forceinline__ void load_in_shared_memory(
+        LPPair* s_table,
+        bool    with_wait,
+        LPPair* s_stash = nullptr) const
+    {
+#if defined(__CUDACC__)
+        if (s_stash != nullptr) {
+            detail::load_async(m_stash, stash_size, s_stash, false);
+        }
+        detail::load_async(m_table, m_capacity, s_table, with_wait);
+#else
+        (void)s_table;
+        (void)with_wait;
+        (void)s_stash;
+#endif
+    }
 
     /**
      * @brief write the content of the hash table from (likely shared memory)
@@ -145,9 +179,15 @@ struct LPHashTable
      * device)
      * @return a LPPair pair that contains the key and its associated value
      */
-    __host__ __device__ LPPair find(const typename LPPair::KeyT key,
-                                    const LPPair*               table = nullptr,
-                                    const LPPair* stash = nullptr) const;
+    __host__ __device__ __forceinline__ LPPair
+    find(const typename LPPair::KeyT key,
+         const LPPair*               table = nullptr,
+         const LPPair*               stash = nullptr) const
+    {
+        uint32_t bucket_id(0);
+        bool     in_stash(false);
+        return find(key, bucket_id, in_stash, table, stash);
+    }
 
     /**
      * @brief Replace an existing pair with another. We use the new_pair to
@@ -179,11 +219,64 @@ struct LPHashTable
      * device) Otherwise, it should be null
      * @return a LPPair pair that contains the key and its associated value
      */
-    __host__ __device__ LPPair find(const typename LPPair::KeyT key,
-                                    uint32_t&                   bucket_id,
-                                    bool&                       in_stash,
-                                    const LPPair*               table = nullptr,
-                                    const LPPair* stash = nullptr) const;
+    __host__ __device__ __forceinline__ LPPair
+    find(const typename LPPair::KeyT key,
+         uint32_t&                   bucket_id,
+         bool&                       in_stash,
+         const LPPair*               table = nullptr,
+         const LPPair*               stash = nullptr) const
+    {
+#ifndef __CUDA_ARCH__
+        assert(stash == nullptr);
+        assert(table == nullptr);
+#endif
+
+        constexpr int num_hfs = 4;
+        in_stash              = false;
+        bucket_id             = m_hasher0(key) % m_capacity;
+        for (int hf = 0; hf < num_hfs; ++hf) {
+
+            LPPair found;
+            if (table != nullptr) {
+                found = table[bucket_id];
+            } else {
+#ifdef __CUDA_ARCH__
+                uint32_t* ptr =
+                    reinterpret_cast<uint32_t*>(m_table + bucket_id);
+                found = LPPair(atomic_read(ptr));
+#else
+                found = m_table[bucket_id];
+#endif
+            }
+
+            if (found.key() == key) {
+                return found;
+            } else {
+                if (hf == 0) {
+                    bucket_id = m_hasher1(key) % m_capacity;
+                } else if (hf == 1) {
+                    bucket_id = m_hasher2(key) % m_capacity;
+                } else if (hf == 2) {
+                    bucket_id = m_hasher3(key) % m_capacity;
+                }
+            }
+        }
+
+        for (bucket_id = 0; bucket_id < stash_size; ++bucket_id) {
+            LPPair st_pair;
+            if (stash != nullptr) {
+                st_pair = stash[bucket_id];
+            } else {
+                st_pair = m_stash[bucket_id];
+            }
+
+            if (st_pair.key() == key) {
+                in_stash = true;
+                return st_pair;
+            }
+        }
+        return LPPair::sentinel_pair();
+    }
 
     LPPair*  m_table;
     LPPair*  m_stash;

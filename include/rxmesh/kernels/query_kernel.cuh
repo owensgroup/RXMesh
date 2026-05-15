@@ -10,9 +10,9 @@
 namespace rxmesh {
 namespace detail {
 template <uint32_t blockThreads, Op op, typename LambdaT>
-__global__ static void query_kernel(const Context context,
-                                    const bool    oriented,
-                                    LambdaT       user_lambda)
+__global__ static void query_kernel(const __grid_constant__ Context context,
+                                    const bool                      oriented,
+                                    LambdaT                         user_lambda)
 {
     auto block = cooperative_groups::this_thread_block();
 

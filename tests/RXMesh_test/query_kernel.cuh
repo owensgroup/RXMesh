@@ -5,8 +5,6 @@
 
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
-#include "rxmesh/iterator.cuh"
-#include "rxmesh/query.h"
 
 /**
  * @brief perform query of type of and store the output as well as the
@@ -18,10 +16,11 @@ template <uint32_t   blockThreads,
           typename OutputHandleT,
           typename InputAttributeT,
           typename OutputAttributeT>
-__global__ static void query_kernel(const rxmesh::Context context,
-                                    InputAttributeT       input,
-                                    OutputAttributeT      output,
-                                    const bool            oriented = false)
+__global__ static void __launch_bounds__(blockThreads, 4)
+    query_kernel(const __grid_constant__ rxmesh::Context context,
+                 InputAttributeT                         input,
+                 OutputAttributeT                        output,
+                 const bool                              oriented = false)
 {
     using namespace rxmesh;
 

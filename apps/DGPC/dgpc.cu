@@ -754,7 +754,7 @@ int main(int argc, char** argv)
         return app.exit(e);
     }
 
-    rx_init(device_id);
+    rx_init(device_id, spdlog::level::trace);
 
     RXMeshStatic rx(mesh_path);
 

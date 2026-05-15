@@ -18,18 +18,18 @@ struct Query
     Query(const Query&)            = delete;
     Query& operator=(const Query&) = delete;
 
-    __device__ __inline__ Query(const Context& context,
-                                const uint32_t pid = blockIdx.x);
+    __device__ __forceinline__ Query(const Context& context,
+                                     const uint32_t pid = blockIdx.x);
 
     /**
      * @brief return the patch id associated with this instance
      */
-    __device__ __inline__ int get_patch_id() const;
+    __device__ __forceinline__ int get_patch_id() const;
 
     /**
      * @brief return the patch info associated with this instance
      */
-    __device__ __inline__ const PatchInfo& get_patch_info() const;
+    __device__ __forceinline__ const PatchInfo& get_patch_info() const;
 
     /**
      * @brief compute the vertex valence
@@ -43,14 +43,14 @@ struct Query
      * first
      * @param v vertex for which valence will be returned
      */
-    __device__ __inline__ uint16_t vertex_valence(uint16_t v) const;
+    __device__ __forceinline__ uint16_t vertex_valence(uint16_t v) const;
 
     /**
      * @brief return the vertex valence. compute_vertex_valence has to be called
      * first
      * @param vh vertex for which valence will be returned
      */
-    __device__ __inline__ uint16_t vertex_valence(VertexHandle vh) const;
+    __device__ __forceinline__ uint16_t vertex_valence(VertexHandle vh) const;
 
     /**
      * @brief The query dispatch function to be called by the whole block.
@@ -69,8 +69,8 @@ struct Query
                                         ShmemAllocator& shrd_alloc,
                                         computeT        compute_op,
                                         activeSetT      compute_active_set,
-                                        const bool      oriented        = false,
-                                        const bool      allow_not_owned = false);
+                                        const bool      oriented   = false,
+                                        const bool allow_not_owned = false);
 
     /**
      * @brief run the query and prepare internal data structure to run the
@@ -111,22 +111,26 @@ struct Query
     /**
      * @brief free up shared memory allocated to store the query operations.
      */
-    __device__ __inline__ void epilogue(cooperative_groups::thread_block& block,
-                                        ShmemAllocator& shrd_alloc);
+    __device__ __forceinline__ void epilogue(
+        cooperative_groups::thread_block& block,
+        ShmemAllocator&                   shrd_alloc);
 
    private:
-    const Context&    m_context;
-    const PatchInfo&  m_patch_info;
-    uint32_t          m_shmem_before;
-    uint32_t          m_num_src_in_patch;
-    uint32_t*         m_s_participant_bitmask;
-    uint32_t*         m_s_output_owned_bitmask;
-    uint16_t*         m_s_output_offset;
-    uint16_t*         m_s_output_value;
-    uint8_t*          m_s_valence;
-    LPHashTable       m_output_lp_hashtable;
-    LPPair*           m_s_table;
-    Op                m_op;
+    __device__ __forceinline__ void reset_query_storage();
+
+    const Context& m_context;
+    // PatchInfo  m_patch_info;
+    int         m_pid;
+    uint32_t    m_shmem_before;
+    uint32_t    m_num_src_in_patch;
+    uint32_t*   m_s_participant_bitmask;
+    uint32_t*   m_s_output_owned_bitmask;
+    uint16_t*   m_s_output_offset;
+    uint16_t*   m_s_output_value;
+    uint8_t*    m_s_valence;
+    LPHashTable m_output_lp_hashtable;
+    LPPair*     m_s_table;
+    Op          m_op;
 };
 
 }  // namespace rxmesh

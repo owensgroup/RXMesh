@@ -35,32 +35,11 @@ __global__ void memset_attribute(const Attribute<T, HandleT> attr,
 }  // namespace detail
 
 template <class T, typename HandleT>
-Attribute<T, HandleT>::Attribute()
-    : AttributeBase(),
-      m_rxmesh(nullptr),
-      m_h_patches_info(nullptr),
-      m_d_patches_info(nullptr),
-      m_name(nullptr),
-      m_num_attributes(0),
-      m_allocated(LOCATION_NONE),
-      m_h_data(nullptr),
-      m_d_data(nullptr),
-      m_h_offsets(nullptr),
-      m_d_offsets(nullptr),
-      m_max_num_patches(0),
-      m_layout(AoS),
-      m_total_bytes(0)
-{
-    this->m_name    = (char*)malloc(sizeof(char) * 1);
-    this->m_name[0] = '\0';
-}
-
-template <class T, typename HandleT>
-Attribute<T, HandleT>::Attribute(const char*    name,
-                                 const uint32_t num_attributes,
-                                 locationT      location,
-                                 const layoutT  layout,
-                                 RXMeshStatic*  rxmesh)
+__host__ Attribute<T, HandleT>::Attribute(const char*    name,
+                                          const uint32_t num_attributes,
+                                          locationT      location,
+                                          const layoutT  layout,
+                                          RXMeshStatic*  rxmesh)
     : AttributeBase(),
       m_rxmesh(rxmesh),
       m_h_patches_info(rxmesh->m_h_patches_info),
@@ -232,17 +211,6 @@ Attribute<T, HandleT>::size(const uint32_t p) const
 }
 
 template <class T, typename HandleT>
-__host__ __device__ __forceinline__ uint32_t
-Attribute<T, HandleT>::capacity(const uint32_t p) const
-{
-#ifdef __CUDA_ARCH__
-    return m_d_patches_info[p].get_capacity<HandleT>();
-#else
-    return m_h_patches_info[p].get_capacity<HandleT>();
-#endif
-}
-
-template <class T, typename HandleT>
 __host__ __device__ __forceinline__ const PatchInfo&
 Attribute<T, HandleT>::get_patch_info(const uint32_t p) const
 {
@@ -251,20 +219,6 @@ Attribute<T, HandleT>::get_patch_info(const uint32_t p) const
 #else
     return m_h_patches_info[p];
 #endif
-}
-
-template <class T, typename HandleT>
-__host__ __device__ __forceinline__ uint32_t
-Attribute<T, HandleT>::pitch_x() const
-{
-    return (m_layout == AoS) ? m_num_attributes : 1;
-}
-
-template <class T, typename HandleT>
-__host__ __device__ __forceinline__ uint32_t
-Attribute<T, HandleT>::pitch_y(const uint32_t p) const
-{
-    return (m_layout == AoS) ? 1 : capacity(p);
 }
 
 template <class T, typename HandleT>
@@ -302,63 +256,6 @@ Attribute<T, HandleT>::is_host_allocated() const
     return ((m_allocated & HOST) == HOST);
 }
 
-template <class T, typename HandleT>
-__host__ __device__ __forceinline__ T& Attribute<T, HandleT>::operator()(
-    const uint32_t p_id,
-    const uint16_t local_id,
-    const uint32_t attr) const
-{
-    assert(p_id < m_max_num_patches);
-    assert(attr < m_num_attributes);
-
-#ifdef __CUDA_ARCH__
-    assert(local_id < capacity(p_id));
-    const uint32_t offset = m_d_offsets[p_id];
-    return m_d_data[offset + local_id * pitch_x() + attr * pitch_y(p_id)];
-#else
-    assert(local_id < size(p_id));
-    const uint32_t offset = m_h_offsets[p_id];
-    return m_h_data[offset + local_id * pitch_x() + attr * pitch_y(p_id)];
-#endif
-}
-
-template <class T, typename HandleT>
-__host__ __device__ __forceinline__ T& Attribute<T, HandleT>::operator()(
-    const uint32_t p_id,
-    const uint16_t local_id,
-    const uint32_t attr)
-{
-    assert(p_id < m_max_num_patches);
-    assert(attr < m_num_attributes);
-
-#ifdef __CUDA_ARCH__
-    assert(local_id < capacity(p_id));
-    const uint32_t offset = m_d_offsets[p_id];
-    return m_d_data[offset + local_id * pitch_x() + attr * pitch_y(p_id)];
-#else
-    assert(local_id < size(p_id));
-    const uint32_t offset = m_h_offsets[p_id];
-    return m_h_data[offset + local_id * pitch_x() + attr * pitch_y(p_id)];
-#endif
-}
-
-template <class T, typename HandleT>
-__host__ __device__ __forceinline__ T& Attribute<T, HandleT>::operator()(
-    const HandleT  handle,
-    const uint32_t attr) const
-{
-    auto pl = handle.unpack();
-    return this->operator()(pl.first, pl.second, attr);
-}
-
-template <class T, typename HandleT>
-__host__ __device__ __forceinline__ T& Attribute<T, HandleT>::operator()(
-    const HandleT  handle,
-    const uint32_t attr)
-{
-    auto pl = handle.unpack();
-    return this->operator()(pl.first, pl.second, attr);
-}
 
 template <class T, typename HandleT>
 __host__ __device__ __forceinline__ bool Attribute<T, HandleT>::is_empty() const

@@ -65,7 +65,27 @@ class Attribute : public AttributeBase
     /**
      * @brief Default constructor which initializes all pointers to nullptr
      */
-    Attribute();
+    __device__ __host__ __forceinline__ Attribute()
+        : AttributeBase(),
+          m_rxmesh(nullptr),
+          m_h_patches_info(nullptr),
+          m_d_patches_info(nullptr),
+          m_name(nullptr),
+          m_num_attributes(0),
+          m_allocated(LOCATION_NONE),
+          m_h_data(nullptr),
+          m_d_data(nullptr),
+          m_h_offsets(nullptr),
+          m_d_offsets(nullptr),
+          m_max_num_patches(0),
+          m_layout(AoS),
+          m_total_bytes(0)
+    {
+#if defined(__CUDACC__)
+        this->m_name    = (char*)malloc(sizeof(char) * 1);
+        this->m_name[0] = '\0';
+#endif
+    }
 
     /**
      * @brief Main constructor to be used by RXMeshStatic not directly by the
@@ -76,11 +96,11 @@ class Attribute : public AttributeBase
      * @param layout memory layout in case of num_attributes>1
      * @param rxmesh pointer to the RXMeshStatic instance
      */
-    explicit Attribute(const char*    name,
-                       const uint32_t num_attributes,
-                       locationT      location,
-                       const layoutT  layout,
-                       RXMeshStatic*  rxmesh);
+    __host__ explicit Attribute(const char*    name,
+                                const uint32_t num_attributes,
+                                locationT      location,
+                                const layoutT  layout,
+                                RXMeshStatic*  rxmesh);
 
     T& operator()(size_t i, size_t j = 0);
 
@@ -132,7 +152,15 @@ class Attribute : public AttributeBase
      * corresponds to the template HandleT
      * @param p the patch id
      */
-    __host__ __device__ __inline__ uint32_t capacity(const uint32_t p) const;
+    __host__ __device__ __forceinline__ uint32_t
+    capacity(const uint32_t p) const
+    {
+#ifdef __CUDA_ARCH__
+        return m_d_patches_info[p].get_capacity<HandleT>();
+#else
+        return m_h_patches_info[p].get_capacity<HandleT>();
+#endif
+    }
 
     /**
      * @brief Get patch info for patch p
@@ -141,10 +169,16 @@ class Attribute : public AttributeBase
         const uint32_t p) const;
 
 
-    __host__ __device__ __inline__ uint32_t pitch_x() const;
+    __host__ __device__ __forceinline__ uint32_t pitch_x() const
+    {
+        return (m_layout == AoS) ? m_num_attributes : 1;
+    }
 
 
-    __host__ __device__ __inline__ uint32_t pitch_y(const uint32_t p) const;
+    __host__ __device__ __forceinline__ uint32_t pitch_y(const uint32_t p) const
+    {
+        return (m_layout == AoS) ? 1 : capacity(p);
+    }
 
     Attribute(const Attribute& rhs) = default;
 
@@ -230,8 +264,13 @@ class Attribute : public AttributeBase
      * @param attr the attribute id
      * @return const reference to the attribute
      */
-    __host__ __device__ __inline__ T& operator()(const HandleT  handle,
-                                                 const uint32_t attr = 0) const;
+    __host__ __device__ __forceinline__ T& operator()(
+        const HandleT  handle,
+        const uint32_t attr = 0) const
+    {
+        auto pl = handle.unpack();
+        return this->operator()(pl.first, pl.second, attr);
+    }
 
     /**
      * @brief Accessing the attribute as a glm vector. This is used for read
@@ -276,8 +315,12 @@ class Attribute : public AttributeBase
      * @param attr the attribute id
      * @return non-const reference to the attribute
      */
-    __host__ __device__ __inline__ T& operator()(const HandleT  handle,
-                                                 const uint32_t attr = 0);
+    __host__ __device__ __forceinline__ T& operator()(const HandleT  handle,
+                                                      const uint32_t attr = 0)
+    {
+        auto pl = handle.unpack();
+        return this->operator()(pl.first, pl.second, attr);
+    }
 
     /**
      * @brief Access the attribute value using patch and local index in the
@@ -287,9 +330,23 @@ class Attribute : public AttributeBase
      * @param attr the attribute id
      * @return const reference to the attribute
      */
-    __host__ __device__ __inline__ T& operator()(const uint32_t p_id,
-                                                 const uint16_t local_id,
-                                                 const uint32_t attr) const;
+    __host__ __device__ __forceinline__ T& operator()(const uint32_t p_id,
+                                                      const uint16_t local_id,
+                                                      const uint32_t attr) const
+    {
+        assert(p_id < m_max_num_patches);
+        assert(attr < m_num_attributes);
+
+#ifdef __CUDA_ARCH__
+        assert(local_id < capacity(p_id));
+        const uint32_t offset = m_d_offsets[p_id];
+        return m_d_data[offset + local_id * pitch_x() + attr * pitch_y(p_id)];
+#else
+        assert(local_id < size(p_id));
+        const uint32_t offset = m_h_offsets[p_id];
+        return m_h_data[offset + local_id * pitch_x() + attr * pitch_y(p_id)];
+#endif
+    }
 
     /**
      * @brief Access the attribute value using patch and local index in the
@@ -299,9 +356,23 @@ class Attribute : public AttributeBase
      * @param attr the attribute id
      * @return non-const reference to the attribute
      */
-    __host__ __device__ __inline__ T& operator()(const uint32_t p_id,
-                                                 const uint16_t local_id,
-                                                 const uint32_t attr);
+    __host__ __device__ __forceinline__ T& operator()(const uint32_t p_id,
+                                                      const uint16_t local_id,
+                                                      const uint32_t attr)
+    {
+        assert(p_id < m_max_num_patches);
+        assert(attr < m_num_attributes);
+
+#ifdef __CUDA_ARCH__
+        assert(local_id < capacity(p_id));
+        const uint32_t offset = m_d_offsets[p_id];
+        return m_d_data[offset + local_id * pitch_x() + attr * pitch_y(p_id)];
+#else
+        assert(local_id < size(p_id));
+        const uint32_t offset = m_h_offsets[p_id];
+        return m_h_data[offset + local_id * pitch_x() + attr * pitch_y(p_id)];
+#endif
+    }
 
 
     /**

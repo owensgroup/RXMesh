@@ -808,9 +808,10 @@ void compute_projection(MaxMatchTree<integer_t>& max_match_tree)
 namespace detail {
 
 template <uint32_t blockThreads>
-__global__ static void compute_patch_graph_edge_weight(const Context context,
-                                                       int* d_edge_weight,
-                                                       int* d_vertex_weight)
+__global__ static void compute_patch_graph_edge_weight(
+    const __grid_constant__ Context context,
+    int*                            d_edge_weight,
+    int*                            d_vertex_weight)
 {
     __shared__ int s_owned_vertex_sum;
     if (threadIdx.x == 0) {
@@ -1119,28 +1120,28 @@ inline void single_patch_nd_permute(RXMeshStatic&              rx,
         false,
         [&](uint32_t v, uint32_t e, uint32_t f) {
             return
-                //TODO fix memory calculation
-                // 
-                // active_v_mis, v_mis, candidate_v_mis
-                2*(6 * detail::mask_num_bytes(v) +
+                // TODO fix memory calculation
+                //
+                //  active_v_mis, v_mis, candidate_v_mis
+                2 * (6 * detail::mask_num_bytes(v) +
 
-                // FM locked vertices
-                detail::mask_num_bytes(v) +
+                     // FM locked vertices
+                     detail::mask_num_bytes(v) +
 
-                // FM gain and cumulative gain
-                2 * v * sizeof(int16_t) +
+                     // FM gain and cumulative gain
+                     2 * v * sizeof(int16_t) +
 
-                // EV for vv
-                (2 * e + std::max(v + 1, 2 * e)) * sizeof(uint16_t) +
+                     // EV for vv
+                     (2 * e + std::max(v + 1, 2 * e)) * sizeof(uint16_t) +
 
-                // index (overlap with max gain vertex in FM)
-                v * sizeof(uint16_t) +
+                     // index (overlap with max gain vertex in FM)
+                     v * sizeof(uint16_t) +
 
-                // memory used in v_v and v_e
-                (2 * v + 1) * sizeof(uint16_t) +
+                     // memory used in v_v and v_e
+                     (2 * v + 1) * sizeof(uint16_t) +
 
-                // padding
-                15 * ShmemAllocator::default_alignment);
+                     // padding
+                     15 * ShmemAllocator::default_alignment);
         },
         NULL,
         v_local_permute,
