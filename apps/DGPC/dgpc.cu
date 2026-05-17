@@ -177,7 +177,7 @@ __device__ __forceinline__ bool try_compute_dgpc(
 // per-triangle update is unchanged and monotone in dist(vi).
 template <uint32_t blockThreads>
 __global__ static void relax_dgpc_rxmesh(
-    const rxmesh::Context              context,
+    const __grid_constant__ rxmesh::Context   context,
     const rxmesh::VertexAttribute<rx_coord_t> coords,
     rxmesh::VertexAttribute<rx_coord_t>       dist,
     rxmesh::VertexAttribute<rx_coord_t>       theta,
@@ -330,9 +330,8 @@ void dgpc(RXMeshStatic& rx)
     // Active-set masks for frontier-driven relaxation. active_mask drives
     // Query::dispatch's active_set predicate; next_mask collects vertices
     // that need to be revisited in the next sweep.
-    auto active_mask =
-        *rx.add_vertex_attribute<uint8_t>("dgpc_active_mask", 1);
-    auto next_mask = *rx.add_vertex_attribute<uint8_t>("dgpc_next_mask", 1);
+    auto active_mask = *rx.add_vertex_attribute<uint8_t>("dgpc_active_mask", 1);
+    auto next_mask   = *rx.add_vertex_attribute<uint8_t>("dgpc_next_mask", 1);
 
     dist.reset(DGPC_INVALID, DEVICE);
     theta.reset(rx_coord_t(0), DEVICE);
@@ -692,7 +691,7 @@ void dgpc(RXMeshStatic& rx)
     //    next sweep. The fixed point and final values are identical to
     //    the previous full-sweep loop.
     // ------------------------------------------------------------------
-    constexpr uint32_t blockThreads = 256;
+    constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> lb;
     rx.prepare_launch_box({Op::VV},
                           lb,
