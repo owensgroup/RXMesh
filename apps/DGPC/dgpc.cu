@@ -351,6 +351,9 @@ void dgpc(RXMeshStatic& rx)
     // ------------------------------------------------------------------
     // 1. Per-face normals.
     // ------------------------------------------------------------------
+    RXMESH_INFO("1. Per-face normals");
+    GPUTimer t0;
+    t0.start();
     rx.for_each<Op::FV, 256>(
         [=] __device__(const FaceHandle& fh, const VertexIterator& fv) mutable {
             const vec3<rx_coord_t> v0 = coords.to_glm<3>(fv[0]);
@@ -358,7 +361,8 @@ void dgpc(RXMeshStatic& rx)
             const vec3<rx_coord_t> v2 = coords.to_glm<3>(fv[2]);
             fnormal.from_glm(fh, glm::normalize(glm::cross(v1 - v0, v2 - v0)));
         });
-
+    t0.stop();
+    RXMESH_INFO("1. Per-face normals took= {}", t0.elapsed_millis());
     // ------------------------------------------------------------------
     // 2. Resolve seed face vertices: write the three VertexHandle unique_ids
     //    of the seed face into seed_v_buf, and copy its normal into
@@ -369,6 +373,9 @@ void dgpc(RXMeshStatic& rx)
     //          writes its three vertex uids + normal into the buffers.
     // ------------------------------------------------------------------
     {
+        RXMESH_INFO("2a. Resolve seed face vertices");
+        GPUTimer t1;
+        t1.start();
         FaceHandle seed_fh;
         rx.for_each_face(
             HOST,
@@ -379,6 +386,9 @@ void dgpc(RXMeshStatic& rx)
             },
             NULL,
             /*with_omp=*/false);
+        t1.stop();
+        RXMESH_INFO("2a. Resolve seed face vertices took= {}",
+                    t1.elapsed_millis());
 
         if (!seed_fh.is_valid()) {
             RXMESH_ERROR(
@@ -390,6 +400,9 @@ void dgpc(RXMeshStatic& rx)
 
         // Step B: device pass to write vertex uids + normal of that face
         // into the dense buffers.
+        RXMESH_INFO("2b. Resolve seed face vertices");
+        GPUTimer t2;
+        t2.start();
         rx.for_each<Op::FV, 256>(
             [=] __device__(const FaceHandle&     fh,
                            const VertexIterator& fv) mutable {
@@ -404,6 +417,9 @@ void dgpc(RXMeshStatic& rx)
                 seed_normal_buf(1, 0)    = n.y;
                 seed_normal_buf(2, 0)    = n.z;
             });
+        t2.stop();
+        RXMESH_INFO("2b. Resolve seed face vertices took= {}",
+                    t2.elapsed_millis());
     }
 
     // ------------------------------------------------------------------
@@ -420,6 +436,9 @@ void dgpc(RXMeshStatic& rx)
         const bool             seed_is_vertex_c = seed_is_vertex;
         const int              seed_corner_c    = seed_corner;
 
+        RXMESH_INFO("3. Seed initialization");
+        GPUTimer t3;
+        t3.start();
         rx.for_each<Op::VV, 256>(
             [=] __device__(const VertexHandle&   vh,
                            const VertexIterator& nbrs) mutable {
@@ -660,6 +679,8 @@ void dgpc(RXMeshStatic& rx)
                                      glm::dot(ref, d));
             },
             /*oriented=*/true);
+        t3.stop();
+        RXMESH_INFO("3. Seed initialization took= {}", t3.elapsed_millis());
     }
 
     // ------------------------------------------------------------------
@@ -671,6 +692,9 @@ void dgpc(RXMeshStatic& rx)
     //     this with a single Op::VV pass: a vertex is active iff at
     //     least one of its one-ring neighbors has a valid dist.
     // ------------------------------------------------------------------
+    RXMESH_INFO("3b. Initialize the active set");
+    GPUTimer t4;
+    t4.start();
     rx.for_each<Op::VV, 256>(
         [=] __device__(const VertexHandle&   vh,
                        const VertexIterator& nbrs) mutable {
@@ -681,6 +705,8 @@ void dgpc(RXMeshStatic& rx)
                 }
             }
         });
+    t4.stop();
+    RXMESH_INFO("3b. Initialize the active set took= {}", t4.elapsed_millis());
 
     // ------------------------------------------------------------------
     // 4. Iterative parallel relaxation (frontier-driven).
@@ -693,6 +719,7 @@ void dgpc(RXMeshStatic& rx)
     // ------------------------------------------------------------------
     constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> lb;
+    RXMESH_INFO("4. Iterative parallel relaxation");
     rx.prepare_launch_box({Op::VV},
                           lb,
                           (void*)relax_dgpc_rxmesh<blockThreads>,
@@ -706,7 +733,10 @@ void dgpc(RXMeshStatic& rx)
     int                       cur         = 0;
 
     const int max_outer = 1024;
-    for (int it = 0; it < max_outer; ++it) {
+    GPUTimer  t5;
+    t5.start();
+    int it = 0;
+    for (it = 0; it < max_outer; ++it) {
         d_changed.reset(0, DEVICE);
         mask_buf[1 - cur]->reset(uint8_t(0), DEVICE);
 
@@ -729,6 +759,10 @@ void dgpc(RXMeshStatic& rx)
 
         cur = 1 - cur;
     }
+    t5.stop();
+    RXMESH_INFO("4. Iterative parallel relaxation took= {}, avg= {}",
+                t5.elapsed_millis(),
+                t5.elapsed_millis() / float(it));
 
     dist.move(DEVICE, HOST);
     rx.get_polyscope_mesh()->addVertexScalarQuantity("Geo", dist);
