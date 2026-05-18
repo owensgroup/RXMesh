@@ -177,14 +177,14 @@ __device__ __forceinline__ bool try_compute_dgpc(
 // per-triangle update is unchanged and monotone in dist(vi).
 template <uint32_t blockThreads>
 __global__ static void relax_dgpc_rxmesh(
-    const __grid_constant__ rxmesh::Context   context,
-    const rxmesh::VertexAttribute<rx_coord_t> coords,
-    rxmesh::VertexAttribute<rx_coord_t>       dist,
-    rxmesh::VertexAttribute<rx_coord_t>       theta,
-    const rxmesh::VertexAttribute<uint8_t>    active_mask,
-    rxmesh::VertexAttribute<uint8_t>          next_mask,
-    int*                                      d_changed,
-    const rx_coord_t                          radius)
+    const __grid_constant__ rxmesh::Context context,
+    const __grid_constant__ rxmesh::VertexAttribute<rx_coord_t> coords,
+    rxmesh::VertexAttribute<rx_coord_t>                         dist,
+    rxmesh::VertexAttribute<rx_coord_t>                         theta,
+    const rxmesh::VertexAttribute<uint8_t>                      active_mask,
+    rxmesh::VertexAttribute<uint8_t>                            next_mask,
+    int*                                                        d_changed,
+    const rx_coord_t                                            radius)
 {
     using namespace rxmesh;
 
@@ -642,23 +642,25 @@ void dgpc(RXMeshStatic& rx)
                 // VertexHandle's neighbors -- the other two seed-face
                 // vertices appear in `nbrs` (consecutive in the oriented
                 // ring because they share a face with vh).
-                vec3<rx_coord_t> v[3];
-                v[corner]    = coords.to_glm<3>(vh);
-                bool found_a = false, found_b = false;
+                const vec3<rx_coord_t> corner_v = coords.to_glm<3>(vh);
+                vec3<rx_coord_t>       v0       = corner_v;
+                vec3<rx_coord_t>       v1       = corner_v;
+                vec3<rx_coord_t>       v2       = corner_v;
+                bool                   found_a = false, found_b = false;
                 for (uint32_t i = 0; i < nbrs.size(); ++i) {
                     const uint64_t nuid = nbrs[i].unique_id();
                     if (corner != 0 && nuid == uid0) {
-                        v[0]    = coords.to_glm<3>(nbrs[i]);
+                        v0      = coords.to_glm<3>(nbrs[i]);
                         found_a = (corner == 1) ? true : found_a;
                         found_b = (corner == 2) ? true : found_b;
                     } else if (corner != 1 && nuid == uid1) {
-                        v[1] = coords.to_glm<3>(nbrs[i]);
+                        v1 = coords.to_glm<3>(nbrs[i]);
                         if (corner == 0)
                             found_a = true;
                         if (corner == 2)
                             found_b = true;
                     } else if (corner != 2 && nuid == uid2) {
-                        v[2] = coords.to_glm<3>(nbrs[i]);
+                        v2 = coords.to_glm<3>(nbrs[i]);
                         if (corner == 0)
                             found_b = true;
                         if (corner == 1)
@@ -671,9 +673,8 @@ void dgpc(RXMeshStatic& rx)
                     // up from the other two seeded corners.
                 }
 
-                const vec3<rx_coord_t> p =
-                    bc0_c * v[0] + bc1_c * v[1] + bc2_c * v[2];
-                const vec3<rx_coord_t> d = v[corner] - p;
+                const vec3<rx_coord_t> p = bc0_c * v0 + bc1_c * v1 + bc2_c * v2;
+                const vec3<rx_coord_t> d = corner_v - p;
                 dist(vh, 0)              = glm::length(d);
                 theta(vh, 0) = atan2(glm::dot(glm::cross(ref, d), seed_normal),
                                      glm::dot(ref, d));
