@@ -471,34 +471,6 @@ void Attribute<T, HandleT>::copy_from(Attribute<T, HandleT>& source,
 
 template <class T, typename HandleT>
 template <int N>
-__host__ __device__ __inline__ vec<T, N> Attribute<T, HandleT>::to_glm(
-    const HandleT& handle) const
-{
-    assert(N <= get_num_attributes());
-
-    vec<T, N> ret;
-
-    for (int i = 0; i < N; ++i) {
-        ret[i] = this->operator()(handle, i);
-    }
-    return ret;
-}
-
-template <class T, typename HandleT>
-template <int N>
-__host__ __device__ __inline__ void Attribute<T, HandleT>::from_glm(
-    const HandleT&   handle,
-    const vec<T, N>& in)
-{
-    assert(N <= get_num_attributes());
-
-    for (int i = 0; i < N; ++i) {
-        this->operator()(handle, i) = in[i];
-    }
-}
-
-template <class T, typename HandleT>
-template <int N>
 __host__ __device__ __inline__ Eigen::Matrix<T, N, 1>
          Attribute<T, HandleT>::to_eigen(const HandleT& handle) const
 {

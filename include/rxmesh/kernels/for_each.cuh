@@ -27,9 +27,9 @@ __device__ __inline__ void for_each_vertex(const PatchInfo patch_info,
 }
 namespace detail {
 template <typename LambdaT>
-__global__ void for_each_vertex(const uint32_t   num_patches,
-                                const PatchInfo* patch_info,
-                                LambdaT          apply)
+__global__ void for_each_vertex(const __grid_constant__ uint32_t   num_patches,
+                                const __grid_constant__ PatchInfo* patch_info,
+                                __grid_constant__ LambdaT          apply)
 {
     const uint32_t p_id = blockIdx.x;
     if (p_id < num_patches) {
@@ -59,9 +59,9 @@ __device__ __inline__ void for_each_edge(const PatchInfo patch_info,
 }
 namespace detail {
 template <typename LambdaT>
-__global__ void for_each_edge(const uint32_t   num_patches,
-                              const PatchInfo* patch_info,
-                              LambdaT          apply)
+__global__ void for_each_edge(const __grid_constant__ uint32_t   num_patches,
+                              const __grid_constant__ PatchInfo* patch_info,
+                              __grid_constant__ LambdaT          apply)
 {
     const uint32_t p_id = blockIdx.x;
     if (p_id < num_patches) {
@@ -91,9 +91,9 @@ __device__ __inline__ void for_each_face(const PatchInfo patch_info,
 
 namespace detail {
 template <typename LambdaT>
-__global__ void for_each_face(const uint32_t   num_patches,
-                              const PatchInfo* patch_info,
-                              LambdaT          apply)
+__global__ void for_each_face(const __grid_constant__ uint32_t   num_patches,
+                              const __grid_constant__ PatchInfo* patch_info,
+                              __grid_constant__ LambdaT          apply)
 {
     const uint32_t p_id = blockIdx.x;
     if (p_id < num_patches) {

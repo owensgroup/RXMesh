@@ -278,8 +278,18 @@ class Attribute : public AttributeBase
      * @tparam N dimension of the vector
      */
     template <int N>
-    __host__ __device__ __inline__ vec<T, N> to_glm(
-        const HandleT& handle) const;
+    __host__ __device__ __forceinline__ vec<T, N> to_glm(
+        const HandleT& handle) const
+    {
+        assert(N <= get_num_attributes());
+
+        vec<T, N> ret;
+
+        for (int i = 0; i < N; ++i) {
+            ret[i] = this->operator()(handle, i);
+        }
+        return ret;
+    }
 
     /**
      * @brief store a glm vector in this attribute. The size of glm vector
@@ -287,8 +297,15 @@ class Attribute : public AttributeBase
      * @tparam N dimension of the vector
      */
     template <int N>
-    __host__ __device__ __inline__ void from_glm(const HandleT&   handle,
-                                                 const vec<T, N>& in);
+    __host__ __device__ __forceinline__ void from_glm(const HandleT&   handle,
+                                                      const vec<T, N>& in)
+    {
+        assert(N <= get_num_attributes());
+
+        for (int i = 0; i < N; ++i) {
+            this->operator()(handle, i) = in[i];
+        }
+    }
 
     /**
      * @brief Accessing the attribute as an Eigen matrix. This is used for read
