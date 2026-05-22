@@ -96,6 +96,9 @@ void geodesic_ptp_openmesh(const rxmesh::DenseMatrix<int>& h_seeds,
     float compute_toplesets_time = compute_toplesets(
         input_mesh, sorted_index, limits, limits_size, toplesets, h_seeds);
 
-    RXMESH_INFO("OpenMesh: Computing toplesets took {} (ms)",
-                compute_toplesets_time);
+    const uint32_t num_levels =
+        (limits_size >= 2) ? static_cast<uint32_t>(limits_size - 2) : 0u;
+    RXMESH_INFO("CPU topleset BFS took {} (ms), {} levels",
+                compute_toplesets_time,
+                num_levels);
 }
