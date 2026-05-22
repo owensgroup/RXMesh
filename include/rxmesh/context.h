@@ -21,7 +21,7 @@ class Context
     /**
      * @brief Default constructor
      */
-    __host__ __device__ Context()
+    __host__ __device__ __forceinline__ Context()
         : m_num_edges(nullptr),
           m_num_faces(nullptr),
           m_num_vertices(nullptr),
@@ -45,10 +45,10 @@ class Context
     {
     }
 
-    __device__          Context(const Context&)   = default;
-    __device__          Context(Context&&)        = default;
-    __device__ Context& operator=(const Context&) = default;
-    __device__ Context& operator=(Context&&)      = default;
+    __device__ __forceinline__          Context(const Context&)   = default;
+    __device__ __forceinline__          Context(Context&&)        = default;
+    __device__ __forceinline__ Context& operator=(const Context&) = default;
+    __device__ __forceinline__ Context& operator=(Context&&)      = default;
 
     /**
      * @brief Total number of edges in mesh
@@ -78,7 +78,7 @@ class Context
      * @brief give a linear id, return the corresponding Vertex/Edge/FaceHandle
      */
     template <typename HandleT>
-    __device__ __inline__ HandleT get_handle(uint32_t i)
+    __device__ __forceinline__ HandleT get_handle(uint32_t i)
     {
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
             return get_vertex_handle(i);
@@ -97,7 +97,7 @@ class Context
      * @brief given a linear vertex index [0, num_vertices - 1], return the
      * corresponding VertexHandle
      */
-    __device__ __inline__ VertexHandle get_vertex_handle(uint32_t i)
+    __device__ __forceinline__ VertexHandle get_vertex_handle(uint32_t i)
     {
         assert(i < m_num_vertices[0]);
         return m_d_v_handles[i];
@@ -107,7 +107,7 @@ class Context
      * @brief given a linear edge index [0, num_edges - 1], return the
      * corresponding EdgeHandle
      */
-    __device__ __inline__ EdgeHandle get_edge_handle(uint32_t i)
+    __device__ __forceinline__ EdgeHandle get_edge_handle(uint32_t i)
     {
         assert(i < m_num_edges[0]);
         return m_d_e_handles[i];
@@ -117,7 +117,7 @@ class Context
      * @brief given a linear face index [0, num_faces - 1], return the
      * corresponding FaceHandle
      */
-    __device__ __inline__ FaceHandle get_face_handle(uint32_t i)
+    __device__ __forceinline__ FaceHandle get_face_handle(uint32_t i)
     {
         assert(i < m_num_faces[0]);
         return m_d_f_handles[i];
@@ -165,7 +165,7 @@ class Context
         edge = edge_dir >> 1;
     }
 
-    __device__ __host__ __inline__ const uint32_t* vertex_prefix() const
+    __device__ __host__ __forceinline__ const uint32_t* vertex_prefix() const
     {
 #ifdef __CUDA_ARCH__
         return m_d_vertex_prefix;
@@ -174,7 +174,7 @@ class Context
 #endif
     }
 
-    __device__ __host__ __inline__ const uint32_t* edge_prefix() const
+    __device__ __host__ __forceinline__ const uint32_t* edge_prefix() const
     {
 #ifdef __CUDA_ARCH__
         return m_d_edge_prefix;
@@ -183,7 +183,7 @@ class Context
 #endif
     }
 
-    __device__ __host__ __inline__ const uint32_t* face_prefix() const
+    __device__ __host__ __forceinline__ const uint32_t* face_prefix() const
     {
 #ifdef __CUDA_ARCH__
         return m_d_face_prefix;
@@ -193,7 +193,7 @@ class Context
     }
 
     template <typename HandleT>
-    __device__ __host__ __inline__ const uint32_t* prefix() const
+    __device__ __host__ __forceinline__ const uint32_t* prefix() const
     {
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
             return vertex_prefix();
@@ -272,7 +272,7 @@ class Context
      * @brief fast and unsafe method to returnt the linear id.
      */
     template <typename HandleT>
-    __device__ __inline__ uint32_t linear_id_fast(HandleT input) const
+    __device__ __forceinline__ uint32_t linear_id_fast(HandleT input) const
     {
 
         if constexpr (std::is_same_v<typename HandleT::Handle, VertexHandle>) {
@@ -295,7 +295,7 @@ class Context
      * @param input handle
      */
     template <typename HandleT>
-    __device__ __inline__ uint32_t linear_id(HandleT input) const
+    __device__ __forceinline__ uint32_t linear_id(HandleT input) const
     {
         assert(input.is_valid());
 
@@ -342,26 +342,26 @@ class Context
      * @param patches pointer to PatchInfo that contains different info about
      * the patches
      */
-    void init(const uint32_t num_vertices,
-              const uint32_t num_edges,
-              const uint32_t num_faces,
-              const uint32_t max_num_vertices,
-              const uint32_t max_num_edges,
-              const uint32_t max_num_faces,
-              const uint32_t num_patches,
-              const uint32_t max_num_patches,
-              const float    capacity_factor,
-              uint32_t*      d_vertex_prefix,
-              uint32_t*      d_edge_prefix,
-              uint32_t*      d_face_prefix,
-              uint32_t*      h_vertex_prefix,
-              uint32_t*      h_edge_prefix,
-              uint32_t*      h_face_prefix,
-              VertexHandle*  d_v_handles,
-              EdgeHandle*    d_e_handles,
-              FaceHandle*    d_f_handles,
-              PatchInfo*     d_patches,
-              PatchScheduler scheduler)
+    __host__ void init(const uint32_t num_vertices,
+                       const uint32_t num_edges,
+                       const uint32_t num_faces,
+                       const uint32_t max_num_vertices,
+                       const uint32_t max_num_edges,
+                       const uint32_t max_num_faces,
+                       const uint32_t num_patches,
+                       const uint32_t max_num_patches,
+                       const float    capacity_factor,
+                       uint32_t*      d_vertex_prefix,
+                       uint32_t*      d_edge_prefix,
+                       uint32_t*      d_face_prefix,
+                       uint32_t*      h_vertex_prefix,
+                       uint32_t*      h_edge_prefix,
+                       uint32_t*      h_face_prefix,
+                       VertexHandle*  d_v_handles,
+                       EdgeHandle*    d_e_handles,
+                       FaceHandle*    d_f_handles,
+                       PatchInfo*     d_patches,
+                       PatchScheduler scheduler)
     {
         uint32_t* buffer = nullptr;
         CUDA_ERROR(cudaMalloc((void**)&buffer, 7 * sizeof(uint32_t)));
@@ -418,7 +418,7 @@ class Context
         m_patch_scheduler = scheduler;
     }
 
-    void release()
+    __host__ void release()
     {
         CUDA_ERROR(cudaFree(m_num_vertices));
     }

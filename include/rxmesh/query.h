@@ -15,8 +15,8 @@ namespace rxmesh {
 template <uint32_t blockThreads>
 struct Query
 {
-    Query(const Query&)            = delete;
-    Query& operator=(const Query&) = delete;
+    __device__ __forceinline__        Query(const Query&)     = delete;
+    __device__ __forceinline__ Query& operator=(const Query&) = delete;
 
     __device__ __forceinline__ Query(const Context& context,
                                      const uint32_t pid = blockIdx.x);
@@ -34,7 +34,7 @@ struct Query
     /**
      * @brief compute the vertex valence
      */
-    __device__ __inline__ void compute_vertex_valence(
+    __device__ __forceinline__ void compute_vertex_valence(
         cooperative_groups::thread_block& block,
         ShmemAllocator&                   shrd_alloc);
 
@@ -56,48 +56,52 @@ struct Query
      * @brief The query dispatch function to be called by the whole block.
      */
     template <Op op, typename computeT>
-    __device__ __inline__ void dispatch(cooperative_groups::thread_block& block,
-                                        ShmemAllocator& shrd_alloc,
-                                        computeT        compute_op,
-                                        const bool      oriented = false);
+    __device__ __forceinline__ void dispatch(
+        cooperative_groups::thread_block& block,
+        ShmemAllocator&                   shrd_alloc,
+        computeT                          compute_op,
+        const bool                        oriented = false);
 
     /**
      * @brief The query dispatch function with active set predicate.
      */
     template <Op op, typename computeT, typename activeSetT>
-    __device__ __inline__ void dispatch(cooperative_groups::thread_block& block,
-                                        ShmemAllocator& shrd_alloc,
-                                        computeT        compute_op,
-                                        activeSetT      compute_active_set,
-                                        const bool      oriented   = false,
-                                        const bool allow_not_owned = false);
+    __device__ __forceinline__ void dispatch(
+        cooperative_groups::thread_block& block,
+        ShmemAllocator&                   shrd_alloc,
+        computeT                          compute_op,
+        activeSetT                        compute_active_set,
+        const bool                        oriented        = false,
+        const bool                        allow_not_owned = false);
 
     /**
      * @brief run the query and prepare internal data structure to run the
      * computation on top of the queries
      */
     template <Op op>
-    __device__ __inline__ void prologue(cooperative_groups::thread_block& block,
-                                        ShmemAllocator& shrd_alloc,
-                                        const bool      oriented        = false,
-                                        const bool      allow_not_owned = true);
+    __device__ __forceinline__ void prologue(
+        cooperative_groups::thread_block& block,
+        ShmemAllocator&                   shrd_alloc,
+        const bool                        oriented        = false,
+        const bool                        allow_not_owned = true);
 
     /**
      * @brief run the query and prepare internal data structure to run the
      * computation on top of the queries
      */
     template <Op op, typename activeSetT>
-    __device__ __inline__ void prologue(cooperative_groups::thread_block& block,
-                                        ShmemAllocator& shrd_alloc,
-                                        activeSetT      compute_active_set,
-                                        const bool      oriented        = false,
-                                        const bool      allow_not_owned = true);
+    __device__ __forceinline__ void prologue(
+        cooperative_groups::thread_block& block,
+        ShmemAllocator&                   shrd_alloc,
+        activeSetT                        compute_active_set,
+        const bool                        oriented        = false,
+        const bool                        allow_not_owned = true);
 
     /**
      * @brief run the computation on the query operations.
      */
     template <typename computeT>
-    __device__ __inline__ void run_compute(
+    __device__ __forceinline__ void run_compute(
         cooperative_groups::thread_block& block,
         computeT                          compute_op);
 
@@ -106,7 +110,7 @@ struct Query
      * a source element
      */
     template <typename IteratorT>
-    __device__ __inline__ IteratorT get_iterator(uint16_t local_id) const;
+    __device__ __forceinline__ IteratorT get_iterator(uint16_t local_id) const;
 
     /**
      * @brief free up shared memory allocated to store the query operations.
@@ -118,19 +122,18 @@ struct Query
    private:
     __device__ __forceinline__ void reset_query_storage();
 
-    const Context& m_context;
-    // PatchInfo  m_patch_info;
-    int         m_pid;
-    uint32_t    m_shmem_before;
-    uint32_t    m_num_src_in_patch;
-    uint32_t*   m_s_participant_bitmask;
-    uint32_t*   m_s_output_owned_bitmask;
-    uint16_t*   m_s_output_offset;
-    uint16_t*   m_s_output_value;
-    uint8_t*    m_s_valence;
-    LPHashTable m_output_lp_hashtable;
-    LPPair*     m_s_table;
-    Op          m_op;
+    const PatchInfo* m_patch_info;
+    int              m_pid;
+    uint32_t         m_shmem_before;
+    uint32_t         m_num_src_in_patch;
+    uint32_t*        m_s_participant_bitmask;
+    uint32_t*        m_s_output_owned_bitmask;
+    uint16_t*        m_s_output_offset;
+    uint16_t*        m_s_output_value;
+    uint8_t*         m_s_valence;
+    LPHashTable      m_output_lp_hashtable;
+    LPPair*          m_s_table;
+    Op               m_op;
 };
 
 }  // namespace rxmesh

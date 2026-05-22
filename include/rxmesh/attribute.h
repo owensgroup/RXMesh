@@ -283,10 +283,15 @@ class Attribute : public AttributeBase
     {
         assert(N <= get_num_attributes());
 
+        const auto     pl  = handle.unpack();
+        const uint32_t p   = pl.first;
+        const uint16_t lid = pl.second;
+
         vec<T, N> ret;
 
+#pragma unroll
         for (int i = 0; i < N; ++i) {
-            ret[i] = this->operator()(handle, i);
+            ret[i] = this->operator()(p, lid, i);
         }
         return ret;
     }
@@ -302,8 +307,13 @@ class Attribute : public AttributeBase
     {
         assert(N <= get_num_attributes());
 
+        const auto     pl  = handle.unpack();
+        const uint32_t p   = pl.first;
+        const uint16_t lid = pl.second;
+
+#pragma unroll
         for (int i = 0; i < N; ++i) {
-            this->operator()(handle, i) = in[i];
+            this->operator()(p, lid, i) = in[i];
         }
     }
 

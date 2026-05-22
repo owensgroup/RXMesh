@@ -19,8 +19,7 @@ __global__ static void test_iterator(uint32_t*       suceess,
     if (local_id >= num_elements) {
         LPHashTable       ht;
         PatchStash        stash = PatchStash();
-        Iterator<HandleT> iter(
-            context,
+        Iterator<HandleT> iter(            
             local_id,
             reinterpret_cast<const typename HandleT::LocalT*>(patch_output),
             nullptr,

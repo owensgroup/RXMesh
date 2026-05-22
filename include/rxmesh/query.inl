@@ -4,9 +4,7 @@ namespace rxmesh {
 template <uint32_t blockThreads>
 __device__ __forceinline__ Query<blockThreads>::Query(const Context& context,
                                                       const uint32_t pid)
-    : m_context(context),
-      // m_patch_info(context.m_patches_info[pid]),
-      m_pid(pid)
+    : m_patch_info((context.m_patches_info) + pid), m_pid(pid)
 {
     reset_query_storage();
 }
@@ -26,11 +24,40 @@ __device__ __forceinline__ void Query<blockThreads>::reset_query_storage()
 }
 
 template <uint32_t blockThreads>
+__device__ __forceinline__ void Query<blockThreads>::compute_vertex_valence(
+    cooperative_groups::thread_block& block,
+    ShmemAllocator&                   shrd_alloc)
+{
+    if (get_patch_id() == INVALID32) {
+        return;
+    }
+
+    const uint16_t num_vertices = m_patch_info->num_vertices[0];
+    const uint16_t num_edges    = m_patch_info->num_edges[0];
+
+    m_s_valence = shrd_alloc.alloc<uint8_t>(num_vertices);
+
+    fill_n<blockThreads>(m_s_valence, num_vertices, uint8_t(0));
+    block.sync();
+
+    for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
+        if (!m_patch_info->is_deleted(LocalEdgeT(e))) {
+            auto [v0, v1] = m_patch_info->get_edge_vertices(e);
+            atomicAdd(m_s_valence + v0, uint8_t(1));
+            atomicAdd(m_s_valence + v1, uint8_t(1));
+            assert(m_s_valence[v0] < 255);
+            assert(m_s_valence[v1] < 255);
+        }
+    }
+    block.sync();
+}
+
+template <uint32_t blockThreads>
 __device__ __forceinline__ uint16_t
 Query<blockThreads>::vertex_valence(uint16_t v) const
 {
     assert(m_s_valence);
-    assert(v < m_context.m_patches_info[m_pid].num_vertices[0]);
+    assert(v < m_patch_info->num_vertices[0]);
     return m_s_valence[v];
 }
 
@@ -40,7 +67,7 @@ Query<blockThreads>::vertex_valence(VertexHandle vh) const
 {
     assert(m_s_valence);
     assert(vh.patch_id() == m_pid);
-    assert(vh.local_id() < m_context.m_patches_info[m_pid].num_vertices[0]);
+    assert(vh.local_id() < m_patch_info->num_vertices[0]);
     return m_s_valence[vh.local_id()];
 }
 
@@ -73,12 +100,12 @@ template <uint32_t blockThreads>
 __device__ __forceinline__ const PatchInfo&
 Query<blockThreads>::get_patch_info() const
 {
-    return m_context.m_patches_info[m_pid];
+    return *m_patch_info;
 }
 
 template <uint32_t blockThreads>
 template <Op op, typename computeT>
-__device__ __inline__ void Query<blockThreads>::dispatch(
+__device__ __forceinline__ void Query<blockThreads>::dispatch(
     cooperative_groups::thread_block& block,
     ShmemAllocator&                   shrd_alloc,
     computeT                          compute_op,
@@ -98,7 +125,7 @@ __device__ __inline__ void Query<blockThreads>::dispatch(
 
 template <uint32_t blockThreads>
 template <Op op, typename computeT, typename activeSetT>
-__device__ __inline__ void Query<blockThreads>::dispatch(
+__device__ __forceinline__ void Query<blockThreads>::dispatch(
     cooperative_groups::thread_block& block,
     ShmemAllocator&                   shrd_alloc,
     computeT                          compute_op,
@@ -130,7 +157,7 @@ __device__ __inline__ void Query<blockThreads>::dispatch(
 
 template <uint32_t blockThreads>
 template <Op op>
-__device__ __inline__ void Query<blockThreads>::prologue(
+__device__ __forceinline__ void Query<blockThreads>::prologue(
     cooperative_groups::thread_block& block,
     ShmemAllocator&                   shrd_alloc,
     const bool                        oriented,
@@ -146,7 +173,7 @@ __device__ __inline__ void Query<blockThreads>::prologue(
 
 template <uint32_t blockThreads>
 template <Op op, typename activeSetT>
-__device__ __inline__ void Query<blockThreads>::prologue(
+__device__ __forceinline__ void Query<blockThreads>::prologue(
     cooperative_groups::thread_block& block,
     ShmemAllocator&                   shrd_alloc,
     activeSetT                        compute_active_set,
@@ -160,25 +187,24 @@ __device__ __inline__ void Query<blockThreads>::prologue(
     m_op           = op;
     m_shmem_before = shrd_alloc.get_allocated_size_bytes();
 
-    detail::query_block_dispatcher<op, blockThreads>(
-        block,
-        shrd_alloc,
-        m_context.m_patches_info[m_pid],
-        compute_active_set,
-        oriented,
-        m_num_src_in_patch,
-        m_s_output_offset,
-        m_s_output_value,
-        m_s_participant_bitmask,
-        m_s_output_owned_bitmask,
-        m_output_lp_hashtable,
-        m_s_table,
-        allow_not_owned);
+    detail::query_block_dispatcher<op, blockThreads>(block,
+                                                     shrd_alloc,
+                                                     *m_patch_info,
+                                                     compute_active_set,
+                                                     oriented,
+                                                     m_num_src_in_patch,
+                                                     m_s_output_offset,
+                                                     m_s_output_value,
+                                                     m_s_participant_bitmask,
+                                                     m_s_output_owned_bitmask,
+                                                     m_output_lp_hashtable,
+                                                     m_s_table,
+                                                     allow_not_owned);
 }
 
 template <uint32_t blockThreads>
 template <typename computeT>
-__device__ __inline__ void Query<blockThreads>::run_compute(
+__device__ __forceinline__ void Query<blockThreads>::run_compute(
     cooperative_groups::thread_block& block,
     computeT                          compute_op)
 {
@@ -206,8 +232,8 @@ __device__ __inline__ void Query<blockThreads>::run_compute(
 
 template <uint32_t blockThreads>
 template <typename IteratorT>
-__device__ __inline__ IteratorT Query<blockThreads>::get_iterator(
-    uint16_t local_id) const
+__device__ __forceinline__ IteratorT
+Query<blockThreads>::get_iterator(uint16_t local_id) const
 {
     const uint32_t fixed_offset =
         ((m_op == Op::EV) ? 2 :
@@ -218,8 +244,7 @@ __device__ __inline__ IteratorT Query<blockThreads>::get_iterator(
     using LocalT = typename IteratorT::LocalT;
 
     if (detail::is_set_bit(local_id, m_s_participant_bitmask)) {
-        return IteratorT(m_context,
-                         local_id,
+        return IteratorT(local_id,
                          reinterpret_cast<LocalT*>(m_s_output_value),
                          m_s_output_offset,
                          fixed_offset,
@@ -227,10 +252,10 @@ __device__ __inline__ IteratorT Query<blockThreads>::get_iterator(
                          m_s_output_owned_bitmask,
                          m_output_lp_hashtable,
                          m_s_table,
-                         m_context.m_patches_info[m_pid].patch_stash,
+                         m_patch_info->patch_stash,
                          int(m_op == Op::FE));
     } else {
-        return IteratorT(m_context, local_id, m_pid);
+        return IteratorT(local_id, m_pid);
     }
 }
 

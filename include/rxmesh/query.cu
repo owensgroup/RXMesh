@@ -5,37 +5,6 @@
 
 namespace rxmesh {
 
-template <uint32_t blockThreads>
-__device__ void Query<blockThreads>::compute_vertex_valence(
-    cooperative_groups::thread_block& block,
-    ShmemAllocator&                   shrd_alloc)
-{
-    if (get_patch_id() == INVALID32) {
-        return;
-    }
-
-    const uint16_t num_vertices =
-        m_context.m_patches_info[m_pid].num_vertices[0];
-    const uint16_t num_edges = m_context.m_patches_info[m_pid].num_edges[0];
-
-    m_s_valence = shrd_alloc.alloc<uint8_t>(num_vertices);
-
-    fill_n<blockThreads>(m_s_valence, num_vertices, uint8_t(0));
-    block.sync();
-
-    for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
-        if (!m_context.m_patches_info[m_pid].is_deleted(LocalEdgeT(e))) {
-            auto [v0, v1] =
-                m_context.m_patches_info[m_pid].get_edge_vertices(e);
-            atomicAdd(m_s_valence + v0, uint8_t(1));
-            atomicAdd(m_s_valence + v1, uint8_t(1));
-            assert(m_s_valence[v0] < 255);
-            assert(m_s_valence[v1] < 255);
-        }
-    }
-    block.sync();
-}
-
 // ---- Explicit instantiations
 template struct Query<128>;
 template struct Query<256>;

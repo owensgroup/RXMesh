@@ -112,12 +112,12 @@ __device__ __inline__ void query_block_dispatcher(
         output_lp_hashtable.load_in_shared_memory(s_table, with_wait);
     };
 
-    //if constexpr (op != Op::FV && op != Op::VV && op != Op::FF &&
-    //              op != Op::EVDiamond) {
-    //    if (op != Op::EV && oriented) {
-    //        alloc_then_load_table(false);
-    //    }
-    //}
+    // if constexpr (op != Op::FV && op != Op::VV && op != Op::FF &&
+    //               op != Op::EVDiamond) {
+    //     if (op != Op::EV && oriented) {
+    //         alloc_then_load_table(false);
+    //     }
+    // }
 
 
     // we  cache the result of (is_active && is_owned && is_compute_set) in
@@ -163,16 +163,16 @@ __device__ __inline__ void query_block_dispatcher(
     block.sync();
     alloc_then_load_table(true);
 
-    //if constexpr (op == Op::FV || op == Op::VV || op == Op::FF ||
-    //              op == Op::EVDiamond || op == Op::VE || op == Op::VF) {
-    //    block.sync();
-    //    alloc_then_load_table(true);
-    //}
-    //if (op == Op::EV && oriented) {
-    //    printf("\n YESS \n");
-    //    block.sync();
-    //    alloc_then_load_table(true);
-    //}
+    // if constexpr (op == Op::FV || op == Op::VV || op == Op::FF ||
+    //               op == Op::EVDiamond || op == Op::VE || op == Op::VF) {
+    //     block.sync();
+    //     alloc_then_load_table(true);
+    // }
+    // if (op == Op::EV && oriented) {
+    //     printf("\n YESS \n");
+    //     block.sync();
+    //     alloc_then_load_table(true);
+    // }
     block.sync();
 }
 
@@ -249,8 +249,7 @@ __device__ __inline__ void query_block_dispatcher(
         if (is_set_bit(local_id, s_participant_bitmask)) {
 
             ComputeHandleT   handle(patch_id, local_id);
-            ComputeIteratorT iter(context,
-                                  local_id,
+            ComputeIteratorT iter(local_id,
                                   reinterpret_cast<LocalT*>(s_output_value),
                                   s_output_offset,
                                   fixed_offset,
@@ -546,8 +545,7 @@ __device__ __inline__ void higher_query_block_dispatcher(
                                        3 :
                                        ((op == Op::EVDiamond) ? 4 : 0)));
 
-            ComputeIteratorT iter(
-                context,
+            ComputeIteratorT iter(                
                 pl.second,
                 reinterpret_cast<typename ComputeIteratorT::LocalT*>(
                     s_output_value),

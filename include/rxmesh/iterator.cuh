@@ -54,8 +54,7 @@ struct Iterator
     using Handle = HandleT;
 
     __device__ __forceinline__ Iterator()
-        : m_context(Context()),
-          m_local_id(INVALID16),
+        : m_local_id(INVALID16),
           m_patch_output(nullptr),
           m_patch_id(INVALID32),
           m_output_owned_bitmask(nullptr),
@@ -69,11 +68,9 @@ struct Iterator
     {
     }
 
-    __device__ __forceinline__ Iterator(const Context& context,
-                                        const uint16_t local_id,
+    __device__ __forceinline__ Iterator(const uint16_t local_id,
                                         const uint32_t patch_id)
-        : m_context(context),
-          m_local_id(local_id),
+        : m_local_id(local_id),
           m_patch_output(nullptr),
           m_patch_id(patch_id),
           m_output_owned_bitmask(nullptr),
@@ -87,8 +84,7 @@ struct Iterator
     {
     }
 
-    __device__ __forceinline__ Iterator(const Context&     context,
-                                        const uint16_t     local_id,
+    __device__ __forceinline__ Iterator(const uint16_t     local_id,
                                         const LocalT*      patch_output,
                                         const uint16_t*    patch_offset,
                                         const uint32_t     offset_size,
@@ -98,8 +94,7 @@ struct Iterator
                                         const LPPair*      s_table,
                                         const PatchStash   patch_stash,
                                         int                shift = 0)
-        : m_context(context),
-          m_local_id(local_id),
+        : m_local_id(local_id),
           m_patch_output(patch_output),
           m_patch_id(patch_id),
           m_output_owned_bitmask(output_owned_bitmask),
@@ -170,7 +165,6 @@ struct Iterator
 
 
    private:
-    const Context&     m_context;
     uint16_t           m_local_id;
     const LocalT*      m_patch_output;
     const uint32_t     m_patch_id;
