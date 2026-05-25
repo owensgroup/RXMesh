@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -465,8 +466,7 @@ class RXMesh
      */
     void build_supporting_structures(
         const std::vector<std::vector<uint32_t>>& fv,
-        std::vector<std::vector<uint32_t>>&       ev,
-        std::vector<std::vector<uint32_t>>&       ef,
+        std::vector<std::array<uint32_t, 2>>&     ev,
         std::vector<uint32_t>&                    ff_offset,
         std::vector<uint32_t>&                    ff_values);
 
@@ -531,8 +531,8 @@ class RXMesh
     void build(const std::vector<std::vector<uint32_t>>& fv,
                const std::string                         patcher_file);
 
-    void build_single_patch_ltog(const std::vector<std::vector<uint32_t>>& fv,
-                                 const std::vector<std::vector<uint32_t>>& ev,
+    void build_single_patch_ltog(const std::vector<std::vector<uint32_t>>&   fv,
+                                 const std::vector<std::array<uint32_t, 2>>& ev,
                                  const uint32_t patch_id);
 
     void build_single_patch_topology(
@@ -627,8 +627,7 @@ class RXMesh
 
     uint32_t* m_d_patch_stashes_all;
     LPPair *  m_d_lp_v_tables_all, *m_d_lp_e_tables_all, *m_d_lp_f_tables_all;
-    LPPair *  m_d_lp_v_stashes_all, *m_d_lp_e_stashes_all,
-        *m_d_lp_f_stashes_all;
+    LPPair *m_d_lp_v_stashes_all, *m_d_lp_e_stashes_all, *m_d_lp_f_stashes_all;
     uint32_t *m_d_patch_locks_all, *m_d_patch_spins_all;
 
     uint32_t m_ev_stride_elems;

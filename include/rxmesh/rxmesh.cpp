@@ -445,17 +445,16 @@ RXMesh::~RXMesh()
 void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
                    const std::string                         patcher_file)
 {
-    std::vector<uint32_t>              ff_values;
-    std::vector<uint32_t>              ff_offset;
-    std::vector<std::vector<uint32_t>> ef;
-    std::vector<std::vector<uint32_t>> ev;
+    std::vector<uint32_t>                ff_values;
+    std::vector<uint32_t>                ff_offset;
+    std::vector<std::array<uint32_t, 2>> ev;
 
     m_max_capacity_lp_v = 0;
     m_max_capacity_lp_e = 0;
     m_max_capacity_lp_f = 0;
 
     m_timers.start("build.supporting_structures");
-    build_supporting_structures(fv, ev, ef, ff_offset, ff_values);
+    build_supporting_structures(fv, ev, ff_offset, ff_values);
     m_timers.stop("build.supporting_structures");
 
     m_timers.start("build.patcher");
@@ -625,10 +624,6 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
                           cudaMemcpyHostToDevice));
     m_timers.stop("build.prefix.cudaMemcpy");
     m_timers.stop("cudaMemcpy");
-
-    m_timers.start("build.input_stats");
-    calc_input_statistics(fv, ef);
-    m_timers.stop("build.input_stats");
 }
 
 void RXMesh::create_handles()
@@ -715,25 +710,74 @@ void RXMesh::create_handles()
 }
 void RXMesh::build_supporting_structures(
     const std::vector<std::vector<uint32_t>>& fv,
-    std::vector<std::vector<uint32_t>>&       ev,
-    std::vector<std::vector<uint32_t>>&       ef,
+    std::vector<std::array<uint32_t, 2>>&     ev,
     std::vector<uint32_t>&                    ff_offset,
     std::vector<uint32_t>&                    ff_values)
 {
+    struct EdgeFaces
+    {
+        uint32_t              faces[2] = {0, 0};
+        uint32_t              count    = 0;
+        std::vector<uint32_t> extra;
+
+        explicit EdgeFaces(uint32_t f)
+        {
+            push_back(f);
+        }
+
+        void push_back(uint32_t f)
+        {
+            if (count < 2) {
+                faces[count] = f;
+            } else {
+                extra.push_back(f);
+            }
+            ++count;
+        }
+
+        uint32_t size() const
+        {
+            return count;
+        }
+
+        uint32_t operator[](uint32_t i) const
+        {
+            return (i < 2) ? faces[i] : extra[i - 2];
+        }
+    };
+
     m_num_faces    = static_cast<uint32_t>(fv.size());
     m_num_vertices = 0;
     m_num_edges    = 0;
     m_edges_map.clear();
+    m_edges_map.max_load_factor(0.7f);
+
+    m_input_max_edge_incident_faces = 0;
+    m_input_max_face_adjacent_faces = 0;
+    m_input_max_valence             = 0;
+    m_is_input_closed               = true;
+    m_is_input_edge_manifold        = true;
 
     // assuming manifold mesh i.e., #E = 1.5#F
-    ef.clear();
-    uint32_t reserve_size =
+    std::vector<EdgeFaces> edge_faces;
+    const size_t           reserve_size =
         static_cast<size_t>(1.5f * static_cast<float>(m_num_faces));
-    ef.reserve(reserve_size);
+    edge_faces.reserve(reserve_size);
     m_edges_map.reserve(reserve_size);
-    ev.reserve(2 * reserve_size);
+    ev.clear();
+    ev.reserve(reserve_size);
 
     std::vector<uint32_t> ff_size(m_num_faces, 0);
+    std::vector<uint32_t> vv_count;
+    vv_count.reserve(std::max<size_t>(m_num_faces / 2, 1));
+    uint32_t num_open_edges = 0;
+
+    auto add_vertex_valence = [&](uint32_t v) {
+        if (v >= vv_count.size()) {
+            vv_count.resize(static_cast<size_t>(v) + 1, 0);
+        }
+        m_input_max_valence = std::max(m_input_max_valence, ++vv_count[v]);
+    };
 
     m_timers.start("support.first_pass");
     for (uint32_t f = 0; f < fv.size(); ++f) {
@@ -750,33 +794,45 @@ void RXMesh::build_supporting_structures(
             uint32_t v1 = fv[f][(v + 1) % 3];
 
             m_num_vertices = std::max(m_num_vertices, v0);
+            m_num_vertices = std::max(m_num_vertices, v1);
 
-            std::pair<uint32_t, uint32_t> edge   = detail::edge_key(v0, v1);
-            auto                          e_iter = m_edges_map.find(edge);
-            if (e_iter == m_edges_map.end()) {
-                uint32_t edge_id = m_num_edges++;
-                m_edges_map.insert(std::make_pair(edge, edge_id));
-
-                std::vector<uint32_t> evv = {v0, v1};
-                ev.push_back(evv);
-
-                std::vector<uint32_t> tmp(1, f);
-                ef.push_back(tmp);
+            std::pair<uint32_t, uint32_t> edge = detail::edge_key(v0, v1);
+            auto [e_iter, inserted] = m_edges_map.emplace(edge, m_num_edges);
+            if (inserted) {
+                ++m_num_edges;
+                ev.push_back({v0, v1});
+                edge_faces.emplace_back(f);
+                ++num_open_edges;
+                m_input_max_edge_incident_faces =
+                    std::max(m_input_max_edge_incident_faces, 1u);
+                add_vertex_valence(v0);
+                add_vertex_valence(v1);
             } else {
-                uint32_t edge_id = (*e_iter).second;
+                uint32_t edge_id        = (*e_iter).second;
+                uint32_t incident_faces = edge_faces[edge_id].size();
 
-                for (uint32_t f0 = 0; f0 < ef[edge_id].size(); ++f0) {
-                    uint32_t other_face = ef[edge_id][f0];
+                for (uint32_t f0 = 0; f0 < incident_faces; ++f0) {
+                    uint32_t other_face = edge_faces[edge_id][f0];
                     ++ff_size[other_face];
                 }
-                ff_size[f] += ef[edge_id].size();
+                ff_size[f] += incident_faces;
 
-                ef[edge_id].push_back(f);
+                edge_faces[edge_id].push_back(f);
+                uint32_t new_incident_faces = incident_faces + 1;
+                if (incident_faces == 1) {
+                    --num_open_edges;
+                }
+                if (new_incident_faces > 2) {
+                    m_is_input_edge_manifold = false;
+                }
+                m_input_max_edge_incident_faces = std::max(
+                    m_input_max_edge_incident_faces, new_incident_faces);
             }
         }
     }
     m_timers.stop("support.first_pass");
     ++m_num_vertices;
+    m_is_input_closed = (num_open_edges == 0);
 
     if (m_num_edges != static_cast<uint32_t>(m_edges_map.size())) {
         RXMESH_ERROR(
@@ -788,19 +844,25 @@ void RXMesh::build_supporting_structures(
     }
 
     ff_offset.resize(m_num_faces + 1);
-    std::exclusive_scan(ff_size.begin(), ff_size.end(), ff_offset.begin(), 0);
-    ff_offset[m_num_faces] =
-        ff_offset[m_num_faces - 1] + ff_size[m_num_faces - 1];
+    uint32_t ff_count = 0;
+    for (uint32_t f = 0; f < m_num_faces; ++f) {
+        ff_offset[f] = ff_count;
+        ff_count += ff_size[f];
+        m_input_max_face_adjacent_faces =
+            std::max(m_input_max_face_adjacent_faces, ff_size[f]);
+    }
+    ff_offset[m_num_faces] = ff_count;
     ff_values.clear();
     ff_values.resize(ff_offset.back());
     std::fill(ff_size.begin(), ff_size.end(), 0);
 
     m_timers.start("support.ff_values");
     for (uint32_t e = 0; e < m_num_edges; ++e) {
-        for (uint32_t i = 0; i < ef[e].size(); ++i) {
-            uint32_t f0 = ef[e][i];
-            for (uint32_t j = i + 1; j < ef[e].size(); ++j) {
-                uint32_t f1 = ef[e][j];
+        const uint32_t incident_faces = edge_faces[e].size();
+        for (uint32_t i = 0; i < incident_faces; ++i) {
+            uint32_t f0 = edge_faces[e][i];
+            for (uint32_t j = i + 1; j < incident_faces; ++j) {
+                uint32_t f1 = edge_faces[e][j];
 
                 uint32_t f0_offset = ff_size[f0]++;
                 uint32_t f1_offset = ff_size[f1]++;
@@ -891,9 +953,9 @@ void RXMesh::calc_max_elements()
 }
 
 void RXMesh::build_single_patch_ltog(
-    const std::vector<std::vector<uint32_t>>& fv,
-    const std::vector<std::vector<uint32_t>>& ev,
-    const uint32_t                            patch_id)
+    const std::vector<std::vector<uint32_t>>&   fv,
+    const std::vector<std::array<uint32_t, 2>>& ev,
+    const uint32_t                              patch_id)
 {
     double profile_start = omp_get_wtime();
 
