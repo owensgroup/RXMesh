@@ -1,7 +1,13 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include <string>
 #include <vector>
+
+#include <rapidobj/rapidobj.hpp>
+
 #include "rxmesh/util/log.h"
 
 /**
@@ -27,18 +33,12 @@ bool import_obj(const std::string                 file_name,
                 std::vector<std::vector<IndexT>>& face_normal,
                 bool                              append)
 {
+    RXMESH_INFO("Reading {}", file_name);
 
-    FILE* Objfile = fopen(file_name.c_str(), "r");
-    if (NULL == Objfile) {
-        RXMESH_ERROR("importOBJ() can not open {}", file_name);
-        return false;
-    } else {
-        RXMESH_INFO("Reading {}", file_name);
-    }
+    const std::size_t vertex_offset = append ? vertices.size() : 0;
+    const std::size_t tex_offset    = append ? tex.size() : 0;
+    const std::size_t normal_offset = append ? normals.size() : 0;
 
-
-    // make sure everything is clean
-    int start_num_vertices = 0;
     if (!append) {
         vertices.clear();
         faces.clear();
@@ -46,153 +46,143 @@ bool import_obj(const std::string                 file_name,
         face_tex.clear();
         normals.clear();
         face_normal.clear();
-    } else {
-        start_num_vertices = vertices.size();
     }
 
-    constexpr uint32_t max_line_length = 2048;
-    char               line[max_line_length];
-    uint32_t           lineNum = 1;
-    while (fgets(line, max_line_length, Objfile) != NULL) {
+    rapidobj::Result result = rapidobj::ParseFile(
+        std::filesystem::path(file_name), rapidobj::MaterialLibrary::Ignore());
 
-        char type[max_line_length];
+    if (result.error) {
+        RXMESH_ERROR("importOBJ() could not read {}: {}",
+                     file_name,
+                     result.error.code.message());
+        return false;
+    }
 
-        if (sscanf(line, "%s", type) == 1) {
-            // read only the first letter of the line
+    const auto& positions = result.attributes.positions;
+    const auto& texcoords = result.attributes.texcoords;
+    const auto& norms     = result.attributes.normals;
 
-            char* l = &line[strlen(type)];  // next thing after the type
-            if (strcmp(type, "v") == 0) {
-                // vertex
-                std::istringstream ls(&line[1]);
-                std::vector<DataT> vert{std::istream_iterator<DataT>(ls),
-                                        std::istream_iterator<DataT>()};
-                if (vert.size() < 3) {
-                    // vertex has less than coordinates
-                    RXMESH_ERROR(
-                        "importOBJ() vertex has less than 3 "
-                        "coordinates Line[{}]\n",
-                        lineNum);
-                    fclose(Objfile);
-                    return false;
-                }
-                vertices.push_back(vert);
-            } else if (strcmp(type, "vn") == 0) {
-                // normal
-                DataT    x[3];
-                uint32_t count = sscanf(l, "%f %f %f\n", &x[0], &x[1], &x[2]);
+    if (positions.size() % 3 != 0) {
+        RXMESH_ERROR("importOBJ() malformed vertex position array in {}",
+                     file_name);
+        return false;
+    }
+    if (texcoords.size() % 2 != 0) {
+        RXMESH_ERROR("importOBJ() malformed texture coordinate array in {}",
+                     file_name);
+        return false;
+    }
+    if (norms.size() % 3 != 0) {
+        RXMESH_ERROR("importOBJ() malformed normal array in {}", file_name);
+        return false;
+    }
 
-                if (count != 3) {
-                    RXMESH_ERROR(
-                        "importOBJ() normals does not have 3 coordinates "
-                        "Line[{}]\n",
-                        lineNum);
-                    fclose(Objfile);
-                    return false;
-                }
-                std::vector<DataT> normal_v(3);
-                normal_v[0] = x[0];
-                normal_v[1] = x[1];
-                normal_v[2] = x[2];
-                normals.push_back(normal_v);
-            } else if (strcmp(type, "vt") == 0) {
-                // texture
-                DataT    x[3];
-                uint32_t count = sscanf(l, "%f %f %f\n", &x[0], &x[1], &x[2]);
+    vertices.reserve(vertex_offset + positions.size() / 3);
+    for (std::size_t i = 0; i < positions.size(); i += 3) {
+        vertices.push_back({static_cast<DataT>(positions[i]),
+                            static_cast<DataT>(positions[i + 1]),
+                            static_cast<DataT>(positions[i + 2])});
+    }
 
-                if (count != 2 && count != 3) {
-                    RXMESH_ERROR(
-                        "importOBJ() texture coordinates are not 2 "
-                        "or 3 coordinates Line[{}]",
-                        lineNum);
-                    fclose(Objfile);
-                    return false;
-                }
-                std::vector<DataT> tx(count);
-                for (uint32_t i = 0; i < count; i++) {
-                    tx[i] = x[i];
-                }
-                tex.push_back(tx);
-            } else if (strcmp(type, "f") == 0) {
-                // face (read vert id, norm id, tex id)
+    tex.reserve(tex_offset + texcoords.size() / 2);
+    for (std::size_t i = 0; i < texcoords.size(); i += 2) {
+        tex.push_back({static_cast<DataT>(texcoords[i]),
+                       static_cast<DataT>(texcoords[i + 1])});
+    }
 
-                // const auto & shift = [&vertices](const int i)->int{return i<0
-                // ? i+vertices.size():i-1;}; const auto & shift_t =
-                // [&Tex](const int i)->int{return i<0 ? i+Tex.size():i-1;};
-                // const auto & shift_n = [&normals ](const int i)->int{return
-                // i<0 ? i+normals .size():i-1;};
+    normals.reserve(normal_offset + norms.size() / 3);
+    for (std::size_t i = 0; i < norms.size(); i += 3) {
+        normals.push_back({static_cast<DataT>(norms[i]),
+                           static_cast<DataT>(norms[i + 1]),
+                           static_cast<DataT>(norms[i + 2])});
+    }
 
-                std::vector<IndexT> f;
-                std::vector<IndexT> ft;
-                std::vector<IndexT> fn;
-                char                word[max_line_length];
-                uint32_t            offset;
-                while (sscanf(l, "%s%n", word, &offset) == 1) {
-                    l += offset;
-                    long int i, it, in;
-                    if (sscanf(word, "%ld/%ld/%ld", &i, &it, &in) == 3) {
-                        // face, norm, tex
-                        f.push_back(i < 0 ? i + vertices.size() : i - 1);
-                        ft.push_back(i < 0 ? i + tex.size() : i - 1);
-                        fn.push_back(i < 0 ? i + normals.size() : i - 1);
+    std::size_t total_faces = 0;
+    for (const auto& shape : result.shapes) {
+        total_faces += shape.mesh.num_face_vertices.size();
+    }
+    faces.reserve(faces.size() + total_faces);
+    face_tex.reserve(face_tex.size() + total_faces);
+    face_normal.reserve(face_normal.size() + total_faces);
 
-                        f.back() += start_num_vertices;
-                        ft.back() += start_num_vertices;
-                        fn.back() += start_num_vertices;
-                    } else if (sscanf(word, "%ld/%ld", &i, &it) == 2) {
-                        // face, tex
-                        f.push_back(i < 0 ? i + vertices.size() : i - 1);
-                        ft.push_back(i < 0 ? i + tex.size() : i - 1);
+    auto offset_index = [&](int               index,
+                            std::size_t       offset,
+                            const char* const kind) -> IndexT {
+        if (index < 0) {
+            RXMESH_ERROR("importOBJ() face has missing {} index in {}",
+                         kind,
+                         file_name);
+            return static_cast<IndexT>(0);
+        }
+        return static_cast<IndexT>(static_cast<std::size_t>(index) + offset);
+    };
 
-                        f.back() += start_num_vertices;
-                        ft.back() += start_num_vertices;
-                    } else if (sscanf(word, "%ld", &i) == 1) {
-                        // face
-                        f.push_back(i < 0 ? i + vertices.size() : i - 1);
-                        f.back() += start_num_vertices;
-                    } else {
-                        RXMESH_ERROR(
-                            "importOBJ() face has wrong format Line[{}]",
-                            lineNum);
-                        fclose(Objfile);
-                        return false;
-                    }
-                }
-                if ((f.size() > 0 && fn.size() == 0 && ft.size() == 0) ||
-                    (f.size() > 0 && fn.size() == f.size() && ft.size() == 0) ||
-                    (f.size() > 0 && fn.size() == 0 && ft.size() == f.size()) ||
-                    (f.size() > 0 && fn.size() == f.size() &&
-                     ft.size() == f.size())) {
+    for (const auto& shape : result.shapes) {
+        std::size_t index_offset = 0;
+        for (std::size_t f = 0; f < shape.mesh.num_face_vertices.size(); ++f) {
+            const std::size_t face_degree =
+                static_cast<std::size_t>(shape.mesh.num_face_vertices[f]);
 
-                    faces.push_back(f);
-                    face_tex.push_back(ft);
-                    face_normal.push_back(fn);
-                } else {
-                    RXMESH_ERROR("importOBJ() face has wrong format Line[{}]",
-                                 lineNum);
-                    fclose(Objfile);
-                    return false;
-                }
-            } else if (strlen(type) >= 1 &&
-                       (type[0] == '#' || type[0] == 'g' || type[0] == 'l' ||
-                        type[0] == 's' || strcmp("usemtl", type) == 0 ||
-                        strcmp("mtllib", type) == 0)) {
-                // materials, comments, groups, shading, or lines -> do nothing
+            std::size_t num_tex_indices    = 0;
+            std::size_t num_normal_indices = 0;
+            for (std::size_t i = 0; i < face_degree; ++i) {
+                const rapidobj::Index& idx =
+                    shape.mesh.indices[index_offset + i];
+                num_tex_indices += idx.texcoord_index >= 0 ? 1 : 0;
+                num_normal_indices += idx.normal_index >= 0 ? 1 : 0;
+            }
 
-            } else {
-                // others
+            if (num_tex_indices != 0 && num_tex_indices != face_degree) {
                 RXMESH_ERROR(
-                    "importOBJ() invalid Line[{}] File[{}]\n", lineNum, line);
-                fclose(Objfile);
+                    "importOBJ() face has incomplete texture indices in {}",
+                    file_name);
+                return false;
+            }
+            if (num_normal_indices != 0 && num_normal_indices != face_degree) {
+                RXMESH_ERROR(
+                    "importOBJ() face has incomplete normal indices in {}",
+                    file_name);
                 return false;
             }
 
-        } else {
-            // empty line
-        }
-        lineNum++;
-    }
-    fclose(Objfile);
+            std::vector<IndexT> face;
+            std::vector<IndexT> face_t;
+            std::vector<IndexT> face_n;
+            face.reserve(face_degree);
+            if (num_tex_indices == face_degree) {
+                face_t.reserve(face_degree);
+            }
+            if (num_normal_indices == face_degree) {
+                face_n.reserve(face_degree);
+            }
 
+            for (std::size_t i = 0; i < face_degree; ++i) {
+                const rapidobj::Index& idx =
+                    shape.mesh.indices[index_offset + i];
+                if (idx.position_index < 0) {
+                    RXMESH_ERROR(
+                        "importOBJ() face has missing vertex index in {}",
+                        file_name);
+                    return false;
+                }
+                face.push_back(offset_index(
+                    idx.position_index, vertex_offset, "vertex"));
+                if (num_tex_indices == face_degree) {
+                    face_t.push_back(
+                        offset_index(idx.texcoord_index, tex_offset, "texture"));
+                }
+                if (num_normal_indices == face_degree) {
+                    face_n.push_back(offset_index(
+                        idx.normal_index, normal_offset, "normal"));
+                }
+            }
+
+            faces.push_back(std::move(face));
+            face_tex.push_back(std::move(face_t));
+            face_normal.push_back(std::move(face_n));
+            index_offset += face_degree;
+        }
+    }
 
     RXMESH_INFO("import_obj() #vertices= {} ", vertices.size());
     RXMESH_INFO("import_obj() #faces= {} ", faces.size());
@@ -219,7 +209,6 @@ bool import_obj(const std::string                 file_name,
                 std::vector<std::vector<IndexT>>& faces,
                 bool                              append = false)
 {
-
     std::vector<std::vector<DataT>>  tex;
     std::vector<std::vector<IndexT>> face_tex;
     std::vector<std::vector<DataT>>  normals;

@@ -2,6 +2,7 @@ include_guard(GLOBAL)
 
 
 include("${CMAKE_CURRENT_LIST_DIR}/rapidjson.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/rapidobj.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/openmesh.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/spdlog.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/glm.cmake")

@@ -67,6 +67,7 @@ target_include_directories(RXMesh
 )
 
 target_link_libraries(RXMesh PUBLIC cuBQL cuBQL_queries)
+target_link_libraries(RXMesh PUBLIC rapidobj::rapidobj)
 
 # CUDA and C++ compiler flags
 set(cxx_flags
