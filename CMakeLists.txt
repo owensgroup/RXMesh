@@ -66,6 +66,7 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 # RXMesh target definition and core wiring.
 include(cmake/RXMeshTarget.cmake)
+include(cmake/RXMeshInstall.cmake)
 
 
 if(${RX_BUILD_TESTS})

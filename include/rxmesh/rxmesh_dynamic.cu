@@ -139,7 +139,8 @@ __device__ __inline__ void hashtable_calibration(const Context context,
 }
 
 template <uint32_t blockThreads>
-__global__ static void hashtable_calibration(const Context context)
+__global__ static void hashtable_calibration(
+    const __grid_constant__ Context context)
 {
     const uint32_t pid = blockIdx.x;
     if (pid >= context.m_num_patches[0]) {
@@ -2000,8 +2001,9 @@ __global__ static void compute_vf(const Context               context,
 
 
 template <uint32_t blockThreads>
-__global__ static void compute_max_valence(const Context context,
-                                           uint32_t*     d_max_valence)
+__global__ static void compute_max_valence(const __grid_constant__ Context
+                                                     context,
+                                           uint32_t* d_max_valence)
 {
     using namespace rxmesh;
 

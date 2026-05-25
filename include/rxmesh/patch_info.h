@@ -11,6 +11,10 @@
 
 #include "rxmesh/lp_hashtable.h"
 
+#ifdef __CUDA_ARCH__
+#include "rxmesh/kernels/util.cuh"
+#endif
+
 namespace rxmesh {
 
 /**
@@ -19,7 +23,7 @@ namespace rxmesh {
  */
 struct ALIGN(16) PatchInfo
 {
-    __device__ __host__ PatchInfo()
+    __device__ __host__ __forceinline__ PatchInfo()
         : ev(nullptr),
           fe(nullptr),
           active_mask_v(nullptr),
@@ -92,7 +96,7 @@ struct ALIGN(16) PatchInfo
      * thread should have locked the patch before updating
      * @return
      */
-    __device__ __inline__ void set_dirty()
+    __device__ __forceinline__ void set_dirty()
     {
 #ifdef __CUDA_ARCH__
         assert(lock.is_locked());
@@ -104,7 +108,7 @@ struct ALIGN(16) PatchInfo
     /**
      * @brief clear up the dirty flag
      */
-    __device__ __inline__ void clear_dirty()
+    __device__ __forceinline__ void clear_dirty()
     {
         dirty[0] = 0;
     }
@@ -112,32 +116,77 @@ struct ALIGN(16) PatchInfo
     /**
      * @brief check if the patch is dirty (ew!)
      */
-    __device__ bool is_dirty() const;
+    __device__ __forceinline__ bool is_dirty() const
+    {
+#ifdef __CUDA_ARCH__
+        return atomic_read(dirty) != 0;
+#else
+        return dirty[0] != 0;
+#endif
+    }
 
     template <typename HandleT>
-    __device__ __host__ HandleT find(const LPPair::KeyT key,
-                                     const LPPair*      table,
-                                     const LPPair*      stash,
-                                     const PatchStash&  pstash) const;
+    __device__ __host__ __inline__ HandleT find(const LPPair::KeyT key,
+                                                const LPPair*      table,
+                                                const LPPair*      stash,
+                                                const PatchStash&  pstash) const
+    {
+        LPPair lp = get_lp<HandleT>().find(key, table, stash);
+        if (lp.is_sentinel()) {
+            return HandleT();
+        } else {
+            return HandleT(pstash.get_patch(lp),
+                           {lp.local_id_in_owner_patch()});
+        }
+    }
 
     template <typename HandleT>
-    __device__ __host__ HandleT find(const LPPair::KeyT key,
-                                     const LPPair*      table = nullptr,
-                                     const LPPair*      stash = nullptr) const;
+    __device__ __host__ __inline__ HandleT find(
+        const LPPair::KeyT key,
+        const LPPair*      table = nullptr,
+        const LPPair*      stash = nullptr) const
+    {
+        if (is_owned(typename HandleT::LocalT(key))) {
+            return HandleT(patch_id, key);
+        }
+        LPPair lp = get_lp<HandleT>().find(key, table, stash);
+
+        if (lp.is_sentinel()) {
+            return HandleT();
+        } else {
+            return get_handle<HandleT>(lp);
+        }
+    }
 
     /**
      * @brief return the edge two vertices by reading them from memory as a
      * single 32-bit
      */
-    __device__ std::pair<uint16_t, uint16_t> get_edge_vertices(
-        const uint16_t e_id) const;
+    __device__ __forceinline__ std::pair<uint16_t, uint16_t> get_edge_vertices(
+        const uint16_t e_id) const
+    {
+        const uint32_t uin32_val = reinterpret_cast<const uint32_t*>(ev)[e_id];
+
+        uint16_t v0 = detail::extract_low_bits<16>(uin32_val);
+        uint16_t v1 = detail::extract_high_bits<16>(uin32_val);
+
+        assert(v0 == ev[2 * e_id + 0].id);
+        assert(v1 == ev[2 * e_id + 1].id);
+
+        return std::make_pair(v0, v1);
+    }
 
     /**
      * @brief convert an LPPair to a handle. The LPPair should be generated but
      * one of the LPHashTable stored here
      */
     template <typename HandleT>
-    __device__ __host__ HandleT get_handle(const LPPair lp) const;
+    __device__ __host__ __forceinline__ HandleT
+    get_handle(const LPPair lp) const
+    {
+        return HandleT(patch_stash.get_patch(lp),
+                       {lp.local_id_in_owner_patch()});
+    }
 
     /**
      * @brief return pointer to the number of elements corresponding  to the
@@ -145,61 +194,157 @@ struct ALIGN(16) PatchInfo
      * @tparam HandleT
      */
     template <typename HandleT>
-    __device__ __host__ const uint16_t* get_num_elements() const;
+    __device__ __host__ __forceinline__ const uint16_t* get_num_elements() const
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return num_vertices;
+        }
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return num_edges;
+        }
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return num_faces;
+        }
+        return nullptr;
+    }
 
     /**
      * @brief return the capacity corresponding to the handle type
      * @tparam HandleT
      */
     template <typename HandleT>
-    __device__ __host__ uint16_t get_capacity() const;
+    __device__ __host__ __forceinline__ uint16_t get_capacity() const
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return vertices_capacity;
+        }
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return edges_capacity;
+        }
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return faces_capacity;
+        }
+        return 0;
+    }
 
     /**
      * @brief return the active mask corresponding to the handle type
      * @tparam HandleT
      */
     template <typename HandleT>
-    __device__ __host__ const uint32_t* get_active_mask() const;
+    __device__ __host__ __forceinline__ const uint32_t* get_active_mask() const
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return active_mask_v;
+        }
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return active_mask_e;
+        }
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return active_mask_f;
+        }
+        return nullptr;
+    }
 
     /**
      * @brief return the active mask corresponding to the handle type
      * @tparam HandleT
      */
     template <typename HandleT>
-    __device__ __host__ uint32_t* get_active_mask();
+    __device__ __host__ __forceinline__ uint32_t* get_active_mask()
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return active_mask_v;
+        }
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return active_mask_e;
+        }
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return active_mask_f;
+        }
+        return nullptr;
+    }
 
     /**
      * @brief return the owned mask corresponding to the handle type
      * @tparam HandleT
      */
     template <typename HandleT>
-    __device__ __host__ const uint32_t* get_owned_mask() const;
+    __device__ __host__ __forceinline__ const uint32_t* get_owned_mask() const
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return owned_mask_v;
+        }
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return owned_mask_e;
+        }
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return owned_mask_f;
+        }
+        return nullptr;
+    }
 
     /**
      * @brief return the owned mask corresponding to the handle type
      * @tparam HandleT
      */
     template <typename HandleT>
-    __device__ __host__ uint32_t* get_owned_mask();
+    __device__ __host__ __forceinline__ uint32_t* get_owned_mask()
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return owned_mask_v;
+        }
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return owned_mask_e;
+        }
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return owned_mask_f;
+        }
+        return nullptr;
+    }
 
     /**
      * @brief return LP hashtable corresponding to the handle type
      * @tparam HandleT
      */
     template <typename HandleT>
-    __device__ __host__ const LPHashTable& get_lp() const;
+    __device__ __host__ __forceinline__ const LPHashTable& get_lp() const
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return lp_v;
+        }
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return lp_e;
+        }
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return lp_f;
+        }
+        return lp_v;
+    }
 
     /**
      * @brief return LP hashtable corresponding to the handle type
      * @tparam HandleT
      */
     template <typename HandleT>
-    __device__ __host__ LPHashTable& get_lp();
+    __device__ __host__ __forceinline__ LPHashTable& get_lp()
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return lp_v;
+        }
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return lp_e;
+        }
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return lp_f;
+        }
+        return lp_v;
+    }
 
     /**
      * @brief check if a vertex within this patch is owned by it
      */
-    __device__ __host__ __inline__ bool is_owned(LocalVertexT vh) const
+    __device__ __host__ __forceinline__ bool is_owned(LocalVertexT vh) const
     {
         assert(vh.id != INVALID16);
         return detail::is_owned(vh.id, get_owned_mask<VertexHandle>());
@@ -208,7 +353,7 @@ struct ALIGN(16) PatchInfo
     /**
      * @brief check if an edge within this patch is owned by it
      */
-    __device__ __host__ __inline__ bool is_owned(LocalEdgeT eh) const
+    __device__ __host__ __forceinline__ bool is_owned(LocalEdgeT eh) const
     {
         assert(eh.id != INVALID16);
         return detail::is_owned(eh.id, get_owned_mask<EdgeHandle>());
@@ -217,7 +362,7 @@ struct ALIGN(16) PatchInfo
     /**
      * @brief check if a face within this patch is owned by it
      */
-    __device__ __host__ __inline__ bool is_owned(LocalFaceT fh) const
+    __device__ __host__ __forceinline__ bool is_owned(LocalFaceT fh) const
     {
         assert(fh.id != INVALID16);
         return detail::is_owned(fh.id, get_owned_mask<FaceHandle>());
@@ -226,7 +371,7 @@ struct ALIGN(16) PatchInfo
     /**
      * @brief check if a vertex within this patch is deleted
      */
-    __device__ __host__ __inline__ bool is_deleted(LocalVertexT vh) const
+    __device__ __host__ __forceinline__ bool is_deleted(LocalVertexT vh) const
     {
         assert(vh.id != INVALID16);
         return detail::is_deleted(vh.id, get_active_mask<VertexHandle>());
@@ -235,7 +380,8 @@ struct ALIGN(16) PatchInfo
     /**
      * @brief check if an edge within this patch is deleted
      */
-    __device__ __host__ __inline__ bool is_deleted(LocalEdgeT eh) const
+    __device__ __host__ __forceinline__ bool is_deleted(
+        LocalEdgeT eh) const
     {
         assert(eh.id != INVALID16);
         return detail::is_deleted(eh.id, get_active_mask<EdgeHandle>());
@@ -244,7 +390,7 @@ struct ALIGN(16) PatchInfo
     /**
      * @brief check if a face within this patch is deleted
      */
-    __device__ __host__ __inline__ bool is_deleted(LocalFaceT fh) const
+    __device__ __host__ __forceinline__ bool is_deleted(LocalFaceT fh) const
     {
         assert(fh.id != INVALID16);
         return detail::is_deleted(fh.id, get_active_mask<FaceHandle>());
@@ -254,10 +400,33 @@ struct ALIGN(16) PatchInfo
      * @brief count number of owned active elements with type HandleT
      */
     template <typename HandleT>
-    __host__ __device__ uint16_t get_num_owned() const;
+    __host__ __device__ __forceinline__ uint16_t get_num_owned() const
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            return count_num_owned(
+                owned_mask_v, active_mask_v, num_vertices[0]);
+        }
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            return count_num_owned(owned_mask_e, active_mask_e, num_edges[0]);
+        }
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            return count_num_owned(owned_mask_f, active_mask_f, num_faces[0]);
+        }
+        return 0;
+    }
 
     __host__ __device__ uint16_t count_num_owned(const uint32_t* owned_bitmask,
                                                  const uint32_t* active_bitmask,
-                                                 const uint16_t  size) const;
+                                                 const uint16_t  size) const
+    {
+        uint16_t ret = 0;
+        for (uint16_t i = 0; i < size; ++i) {
+            if (detail::is_owned(i, owned_bitmask) &&
+                !detail::is_deleted(i, active_bitmask)) {
+                ret++;
+            }
+        }
+        return ret;
+    }
 };
 }  // namespace rxmesh

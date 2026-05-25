@@ -12,15 +12,6 @@
 
 namespace rxmesh {
 
-__device__ __host__ LPHashTable::LPHashTable()
-    : m_table(nullptr),
-      m_stash(nullptr),
-      m_capacity(0),
-      m_max_cuckoo_chains(0),
-      m_is_on_device(false)
-{
-}
-
 LPHashTable::LPHashTable(const uint16_t capacity, bool is_on_device)
     : m_capacity(std::max(capacity, uint16_t(2))), m_is_on_device(is_on_device)
 {
@@ -44,11 +35,6 @@ LPHashTable::LPHashTable(const uint16_t capacity, bool is_on_device)
 
     MarsRng32 rng;
     randomize_hash_functions(rng);
-}
-
-__host__ __device__ uint16_t LPHashTable::get_capacity() const
-{
-    return m_capacity;
 }
 
 __host__ void LPHashTable::clear()
@@ -87,10 +73,6 @@ __host__ void LPHashTable::free()
     }
 }
 
-__host__ __device__ uint32_t LPHashTable::num_bytes() const
-{
-    return m_capacity * sizeof(LPPair);
-}
 
 template <typename RNG>
 void LPHashTable::randomize_hash_functions(RNG& rng)
@@ -173,18 +155,6 @@ __host__ void LPHashTable::move(const LPHashTable src)
         CUDA_ERROR(cudaMemcpy(
             m_stash, src.m_stash, stash_num_bytes, cudaMemcpyHostToDevice));
     }
-}
-
-__device__ void LPHashTable::load_in_shared_memory(LPPair* s_table,
-                                                   bool    with_wait,
-                                                   LPPair* s_stash) const
-{
-#ifdef __CUDA_ARCH__
-    if (s_stash != nullptr) {
-        detail::load_async(m_stash, stash_size, s_stash, false);
-    }
-    detail::load_async(m_table, m_capacity, s_table, with_wait);
-#endif
 }
 
 template <uint32_t blockSize>
@@ -283,15 +253,6 @@ __host__ __device__ bool LPHashTable::insert(LPPair           pair,
     return false;
 }
 
-__host__ __device__ LPPair LPHashTable::find(const typename LPPair::KeyT key,
-                                             const LPPair*               table,
-                                             const LPPair* stash) const
-{
-    uint32_t bucket_id(0);
-    bool     in_stash(false);
-    return find(key, bucket_id, in_stash, table, stash);
-}
-
 __host__ __device__ void LPHashTable::replace(const LPPair new_pair)
 {
     uint32_t bucket_id(0);
@@ -330,63 +291,6 @@ __host__ __device__ void LPHashTable::remove(const typename LPPair::KeyT key,
             m_stash[bucket_id].m_pair = INVALID32;
         }
     }
-}
-
-__host__ __device__ LPPair LPHashTable::find(const typename LPPair::KeyT key,
-                                             uint32_t&     bucket_id,
-                                             bool&         in_stash,
-                                             const LPPair* table,
-                                             const LPPair* stash) const
-{
-#ifndef __CUDA_ARCH__
-    assert(stash == nullptr);
-    assert(table == nullptr);
-#endif
-
-    constexpr int num_hfs = 4;
-    in_stash              = false;
-    bucket_id             = m_hasher0(key) % m_capacity;
-    for (int hf = 0; hf < num_hfs; ++hf) {
-
-        LPPair found;
-        if (table != nullptr) {
-            found = table[bucket_id];
-        } else {
-#ifdef __CUDA_ARCH__
-            uint32_t* ptr = reinterpret_cast<uint32_t*>(m_table + bucket_id);
-            found         = LPPair(atomic_read(ptr));
-#else
-            found = m_table[bucket_id];
-#endif
-        }
-
-        if (found.key() == key) {
-            return found;
-        } else {
-            if (hf == 0) {
-                bucket_id = m_hasher1(key) % m_capacity;
-            } else if (hf == 1) {
-                bucket_id = m_hasher2(key) % m_capacity;
-            } else if (hf == 2) {
-                bucket_id = m_hasher3(key) % m_capacity;
-            }
-        }
-    }
-
-    for (bucket_id = 0; bucket_id < stash_size; ++bucket_id) {
-        LPPair st_pair;
-        if (stash != nullptr) {
-            st_pair = stash[bucket_id];
-        } else {
-            st_pair = m_stash[bucket_id];
-        }
-
-        if (st_pair.key() == key) {
-            in_stash = true;
-            return st_pair;
-        }
-    }
-    return LPPair::sentinel_pair();
 }
 
 // Explicit instantiations: blockSize/blockThreads = 128, 256, 320, 384, 512,

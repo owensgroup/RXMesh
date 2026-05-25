@@ -12,10 +12,11 @@ namespace detail {
 
 // this is the function for the CSR calculation
 template <Op op, uint32_t blockThreads, typename IndexT = int>
-__global__ static void sparse_mat_prescan(const rxmesh::Context context,
-                                          IndexT*               row_ptr,
-                                          BlockShape            block_shape,
-                                          bool                  add_diagonal)
+__global__ static void sparse_mat_prescan(
+    const __grid_constant__ rxmesh::Context context,
+    IndexT*                                 row_ptr,
+    BlockShape                              block_shape,
+    bool                                    add_diagonal)
 {
     bool is_aos = true;
 
@@ -71,11 +72,12 @@ __global__ static void sparse_mat_prescan(const rxmesh::Context context,
 
 
 template <Op op, uint32_t blockThreads, typename IndexT = int>
-__global__ static void sparse_mat_col_fill(const rxmesh::Context context,
-                                           IndexT*               row_ptr,
-                                           IndexT*               col_idx,
-                                           BlockShape            block_shape,
-                                           bool                  add_diagonal)
+__global__ static void sparse_mat_col_fill(
+    const __grid_constant__ rxmesh::Context context,
+    IndexT*                                 row_ptr,
+    IndexT*                                 col_idx,
+    BlockShape                              block_shape,
+    bool                                    add_diagonal)
 {
     using namespace rxmesh;
 

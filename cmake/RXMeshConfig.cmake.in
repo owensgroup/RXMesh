@@ -1,0 +1,125 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+find_dependency(CUDAToolkit REQUIRED)
+find_package(OpenMP QUIET)
+
+set(_RXMESH_INCLUDE_DIR "${PACKAGE_PREFIX_DIR}/@RXMESH_INSTALL_INCLUDEDIR@")
+set(_RXMESH_THIRD_PARTY_INCLUDE_DIR "${PACKAGE_PREFIX_DIR}/@RXMESH_INSTALL_THIRD_PARTY_INCLUDEDIR@")
+set(_RXMESH_LIBRARY_DIR "${PACKAGE_PREFIX_DIR}/@RXMESH_INSTALL_LIBDIR@")
+
+function(_rxmesh_import_static_target target_name library_name)
+    if(TARGET "${target_name}")
+        return()
+    endif()
+
+    set(_library_path "${_RXMESH_LIBRARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}${library_name}${CMAKE_STATIC_LIBRARY_SUFFIX}")
+    if(EXISTS "${_library_path}")
+        add_library("${target_name}" STATIC IMPORTED)
+        set_target_properties("${target_name}" PROPERTIES
+            IMPORTED_LOCATION "${_library_path}"
+            INTERFACE_INCLUDE_DIRECTORIES "${_RXMESH_THIRD_PARTY_INCLUDE_DIR}")
+    endif()
+endfunction()
+
+_rxmesh_import_static_target(RXMesh::GKlib GKlib)
+_rxmesh_import_static_target(RXMesh::metis metis)
+_rxmesh_import_static_target(RXMesh::polyscope polyscope)
+_rxmesh_import_static_target(RXMesh::imgui imgui)
+_rxmesh_import_static_target(RXMesh::glad glad)
+_rxmesh_import_static_target(RXMesh::stb stb)
+_rxmesh_import_static_target(RXMesh::glm glm)
+
+if(NOT TARGET RXMesh::glfw)
+    _rxmesh_import_static_target(RXMesh::glfw glfw3)
+endif()
+if(NOT TARGET RXMesh::glfw)
+    _rxmesh_import_static_target(RXMesh::glfw glfw)
+endif()
+
+if(TARGET RXMesh::metis)
+    set_target_properties(RXMesh::metis PROPERTIES
+        INTERFACE_COMPILE_DEFINITIONS "IDXTYPEWIDTH=32;REALTYPEWIDTH=32")
+endif()
+
+if(TARGET RXMesh::metis AND TARGET RXMesh::GKlib)
+    set_target_properties(RXMesh::metis PROPERTIES
+        INTERFACE_LINK_LIBRARIES RXMesh::GKlib)
+endif()
+
+if(TARGET RXMesh::polyscope)
+    set(_rxmesh_polyscope_libraries)
+    foreach(_rxmesh_polyscope_dep IN ITEMS RXMesh::imgui RXMesh::glad RXMesh::glfw RXMesh::stb)
+        if(TARGET "${_rxmesh_polyscope_dep}")
+            list(APPEND _rxmesh_polyscope_libraries "${_rxmesh_polyscope_dep}")
+        endif()
+    endforeach()
+    set_target_properties(RXMesh::polyscope PROPERTIES
+        INTERFACE_LINK_LIBRARIES "${_rxmesh_polyscope_libraries}")
+endif()
+
+_rxmesh_import_static_target(RXMesh::RXMesh RXMesh)
+
+if(NOT TARGET RXMesh::RXMesh)
+    message(FATAL_ERROR "RXMesh library was not found in ${_RXMESH_LIBRARY_DIR}")
+endif()
+
+set(_rxmesh_compile_definitions
+    "INPUT_DIR=${PACKAGE_PREFIX_DIR}/input/"
+    "OUTPUT_DIR=${PACKAGE_PREFIX_DIR}/output/"
+    EIGEN_ALLOW_UNALIGNED_SCALARS
+    EIGEN_DEFAULT_DENSE_INDEX_TYPE=int)
+
+if(@RX_USE_POLYSCOPE@)
+    list(APPEND _rxmesh_compile_definitions USE_POLYSCOPE)
+endif()
+
+if(@RX_USE_DOUBLE@)
+    list(APPEND _rxmesh_compile_definitions RXMESH_USE_DOUBLE)
+endif()
+
+if(@RX_USE_SUITESPARSE@)
+    list(APPEND _rxmesh_compile_definitions USE_SUITESPARSE)
+endif()
+
+if(@RX_USE_CUDSS@)
+    list(APPEND _rxmesh_compile_definitions USE_CUDSS)
+endif()
+
+set(_rxmesh_link_libraries
+    CUDA::cusparse
+    CUDA::cusolver)
+
+if(TARGET RXMesh::metis)
+    list(APPEND _rxmesh_link_libraries RXMesh::metis)
+endif()
+
+if(@RX_USE_POLYSCOPE@ AND TARGET RXMesh::polyscope)
+    list(APPEND _rxmesh_link_libraries RXMesh::polyscope)
+endif()
+
+if(TARGET RXMesh::glm)
+    list(APPEND _rxmesh_link_libraries RXMesh::glm)
+endif()
+
+if(OpenMP_CXX_FOUND)
+    list(APPEND _rxmesh_link_libraries OpenMP::OpenMP_CXX)
+endif()
+
+set_target_properties(RXMesh::RXMesh PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${_RXMESH_INCLUDE_DIR};${_RXMESH_THIRD_PARTY_INCLUDE_DIR};${CUDAToolkit_INCLUDE_DIRS}"
+    INTERFACE_COMPILE_FEATURES cxx_std_17
+    INTERFACE_COMPILE_DEFINITIONS "${_rxmesh_compile_definitions}"
+    INTERFACE_LINK_LIBRARIES "${_rxmesh_link_libraries}"
+    INTERFACE_POSITION_INDEPENDENT_CODE ON)
+
+if(NOT TARGET RXMesh)
+    add_library(RXMesh INTERFACE IMPORTED)
+    set_target_properties(RXMesh PROPERTIES
+        INTERFACE_LINK_LIBRARIES RXMesh::RXMesh)
+endif()
+
+unset(_rxmesh_compile_definitions)
+unset(_rxmesh_link_libraries)
+unset(_rxmesh_polyscope_libraries)

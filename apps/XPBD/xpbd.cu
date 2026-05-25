@@ -335,15 +335,15 @@ int main(int argc, char** argv)
     polyscope::options::openImGuiWindowForUserCallback = false;
 #endif
 
-    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "cloth.obj");
+    // RXMeshStatic rx(STRINGIFY(INPUT_DIR) "cloth.obj");
 
-    // std::vector<std::vector<float>>    verts;
-    // std::vector<std::vector<uint32_t>> fv;
-    // const int                          nnn = 540;
-    // const float                        dxx = 1.0f / float(nnn);
-    // rxmesh::create_plane(verts, fv, nnn, nnn, 2, dxx);
-    // RXMeshStatic rx(fv);
-    // rx.add_vertex_coordinates(verts, "Coords");
+    std::vector<std::vector<float>>    verts;
+    std::vector<std::vector<uint32_t>> fv;
+    const int                          nnn = 140;
+    const float                        dxx = 1.0f / float(nnn);
+    rxmesh::create_plane(verts, fv, nnn, nnn, 2, dxx);
+    RXMeshStatic rx(fv);
+    rx.add_vertex_coordinates(verts, "Coords");
 
     // scale mesh info unit bounding box
     rx.scale({0.f, 0.f, 0.f}, {1.f, 1.f, 1.f});
@@ -423,180 +423,176 @@ int main(int argc, char** argv)
     int frame      = 0;
     int max_frames = 100;
 
-    bool  test = false;
-    float mean(0.f);
-    float mean2(0.f);
-
-
-    // solve
-    bool started = false;
-
     float total_time = 0;
 
-    auto polyscope_callback = [&]() mutable {
-        bool button = false;
+    auto step_forward = [&]() mutable {
+        GPUTimer timer;
+        timer.start();
 
-#if USE_POLYSCOPE
-        if (ImGui::Button("Pause")) {
-            started = false;
-        }
-        button = ImGui::Button("Start Simulation");
-#endif
-        if (button || started) {
-            started = true;
+        float frame_time_left = frame_dt;
+        while (frame_time_left > 0.0f) {
+            float dt0 = std::min(dt, frame_time_left);
+            frame_time_left -= dt0;
 
-            GPUTimer timer;
-            timer.start();
-            float frame_time_left = frame_dt;
-            while (frame_time_left > 0.0) {
-                float dt0 = std::min(dt, frame_time_left);
-                frame_time_left -= dt0;
+            // applyExtForce
+            rx.for_each_vertex(DEVICE,
+                               [dt0,
+                                gravity,
+                                invM  = *invM,
+                                v     = *v,
+                                new_x = *new_x,
+                                x     = *x] __device__(VertexHandle vh) {
+                                   if (invM(vh, 0) > 0.0) {
+                                       v(vh, 0) += gravity[0] * dt0;
+                                       v(vh, 1) += gravity[1] * dt0;
+                                       v(vh, 2) += gravity[2] * dt0;
+                                   }
+                                   new_x(vh, 0) = x(vh, 0) + v(vh, 0) * dt0;
+                                   new_x(vh, 1) = x(vh, 1) + v(vh, 1) * dt0;
+                                   new_x(vh, 2) = x(vh, 2) + v(vh, 2) * dt0;
+                               });
 
-                // applyExtForce
-                rx.for_each_vertex(DEVICE,
-                                   [dt0,
-                                    gravity,
-                                    invM  = *invM,
-                                    v     = *v,
-                                    new_x = *new_x,
-                                    x     = *x] __device__(VertexHandle vh) {
-                                       if (invM(vh, 0) > 0.0) {
-                                           v(vh, 0) += gravity[0] * dt0;
-                                           v(vh, 1) += gravity[1] * dt0;
-                                           v(vh, 2) += gravity[2] * dt0;
-                                       }
-                                       new_x(vh, 0) = x(vh, 0) + v(vh, 0) * dt0;
-                                       new_x(vh, 1) = x(vh, 1) + v(vh, 1) * dt0;
-                                       new_x(vh, 2) = x(vh, 2) + v(vh, 2) * dt0;
-                                   });
+            if (XPBD) {
+                la_s->reset(0.0, DEVICE);
+                la_b->reset(0.0, DEVICE);
+            }
 
-                if (XPBD) {
-                    la_s->reset(0.0, DEVICE);
-                    la_b->reset(0.0, DEVICE);
-                }
+            for (uint32_t iter = 0; iter < rest_iter; ++iter) {
+                // preSolve
+                dp->reset(0, DEVICE);
 
-                for (uint32_t iter = 0; iter < rest_iter; ++iter) {
-                    // preSolve
-                    dp->reset(0, DEVICE);
+                // solveStretch
+                // rx.run_kernel(solve_stretch_lb,
+                //              solve_stretch<blockThreads>,
+                //              *dp,
+                //              *la_s,
+                //              *invM,
+                //              *new_x,
+                //              *rest_len,
+                //              XPBD,
+                //              stretch_compliance,
+                //              stretch_relaxation,
+                //              dt0 * dt0);
+                //
+                //
+                ////  solveBending
+                // rx.run_kernel(solve_bending_lb,
+                //               solve_bending<blockThreads>,
+                //               *dp,
+                //               *la_b,
+                //               *invM,
+                //               *new_x,
+                //               XPBD,
+                //               bending_compliance,
+                //               bending_relaxation,
+                //               dt0 * dt0);
 
-                    // solveStretch
-                    // rx.run_kernel(solve_stretch_lb,
-                    //              solve_stretch<blockThreads>,
-                    //              *dp,
-                    //              *la_s,
-                    //              *invM,
-                    //              *new_x,
-                    //              *rest_len,
-                    //              XPBD,
-                    //              stretch_compliance,
-                    //              stretch_relaxation,
-                    //              dt0 * dt0);
-                    //
-                    //
-                    ////  solveBending
-                    // rx.run_kernel(solve_bending_lb,
-                    //               solve_bending<blockThreads>,
-                    //               *dp,
-                    //               *la_b,
-                    //               *invM,
-                    //               *new_x,
-                    //               XPBD,
-                    //               bending_compliance,
-                    //               bending_relaxation,
-                    //               dt0 * dt0);
+                // solve Stretch and bending
+                rx.run_kernel(solve_lb,
+                              solve_stretch_and_bending<blockThreads, XPBD>,
+                              *dp,
+                              *la_b,
+                              *la_s,
+                              *invM,
+                              *new_x,
+                              *rest_len,
+                              stretch_compliance,
+                              stretch_relaxation,
+                              bending_compliance,
+                              bending_relaxation,
+                              1.0f / (dt0 * dt0));
 
-                    // solve Stretch and bending
-                    rx.run_kernel(solve_lb,
-                                  solve_stretch_and_bending<blockThreads, XPBD>,
-                                  *dp,
-                                  *la_b,
-                                  *la_s,
-                                  *invM,
-                                  *new_x,
-                                  *rest_len,
-                                  stretch_compliance,
-                                  stretch_relaxation,
-                                  bending_compliance,
-                                  bending_relaxation,
-                                  1.0f / (dt0 * dt0));
-
-                    // postSolve
-                    rx.for_each_vertex(
-                        DEVICE,
-                        [dp = *dp, new_x = *new_x] __device__(VertexHandle vh) {
-                            new_x(vh, 0) += dp(vh, 0);
-                            new_x(vh, 1) += dp(vh, 1);
-                            new_x(vh, 2) += dp(vh, 2);
-                        });
-                }
-
-                // update;
+                // postSolve
                 rx.for_each_vertex(
                     DEVICE,
-                    [dt0,
-                     invM  = *invM,
-                     v     = *v,
-                     new_x = *new_x,
-                     x     = *x] __device__(VertexHandle vh) {
-                        if (invM(vh, 0) <= 0.0) {
-                            new_x(vh, 0) = x(vh, 0);
-                            new_x(vh, 1) = x(vh, 1);
-                            new_x(vh, 2) = x(vh, 2);
-                        } else {
-                            v(vh, 0) = (new_x(vh, 0) - x(vh, 0)) / dt0;
-                            v(vh, 1) = (new_x(vh, 1) - x(vh, 1)) / dt0;
-                            v(vh, 2) = (new_x(vh, 2) - x(vh, 2)) / dt0;
-
-                            x(vh, 0) = new_x(vh, 0);
-                            x(vh, 1) = new_x(vh, 1);
-                            x(vh, 2) = new_x(vh, 2);
-                        }
+                    [dp = *dp, new_x = *new_x] __device__(VertexHandle vh) {
+                        new_x(vh, 0) += dp(vh, 0);
+                        new_x(vh, 1) += dp(vh, 1);
+                        new_x(vh, 2) += dp(vh, 2);
                     });
             }
 
-            timer.stop();
-            RXMESH_INFO(
-                "Frame {}, time= {}(ms)", frame, timer.elapsed_millis());
-            total_time += timer.elapsed_millis();
+            // update;
+            rx.for_each_vertex(
+                DEVICE,
+                [dt0, invM = *invM, v = *v, new_x = *new_x, x = *x] __device__(
+                    VertexHandle vh) {
+                    if (invM(vh, 0) <= 0.0) {
+                        new_x(vh, 0) = x(vh, 0);
+                        new_x(vh, 1) = x(vh, 1);
+                        new_x(vh, 2) = x(vh, 2);
+                    } else {
+                        v(vh, 0) = (new_x(vh, 0) - x(vh, 0)) / dt0;
+                        v(vh, 1) = (new_x(vh, 1) - x(vh, 1)) / dt0;
+                        v(vh, 2) = (new_x(vh, 2) - x(vh, 2)) / dt0;
 
-#if USE_POLYSCOPE
-            x->move(DEVICE, HOST);
-            rx.get_polyscope_mesh()->updateVertexPositions(*x);
-#endif
-            frame++;
-            if (test) {
-                if (frame == 99) {
-                    rx.for_each_vertex(HOST, [&](VertexHandle vh) {
-                        for (int i = 0; i < 3; ++i) {
-                            mean += (*x)(vh, i);
-                            mean2 += (*x)(vh, i) * (*x)(vh, i);
-                        }
-                    });
-                    mean /= (3.f * rx.get_num_vertices());
-                    mean2 /= (3.f * rx.get_num_vertices());
-                }
-            }
-            // if (frame >= max_frames) {
-            //     RXMESH_INFO("fps = {}", (frame * 100.f) / total_time);
-            //     exit(0);
-            // }
+                        x(vh, 0) = new_x(vh, 0);
+                        x(vh, 1) = new_x(vh, 1);
+                        x(vh, 2) = new_x(vh, 2);
+                    }
+                });
         }
+
+        timer.stop();
+        RXMESH_INFO("Frame {}, time= {}(ms)", frame, timer.elapsed_millis());
+        total_time += timer.elapsed_millis();
+
+        frame++;
     };
 
 #if !USE_POLYSCOPE
-    started = true;
-    while (true) {
-        polyscope_callback();
+    while (frame <= max_frames) {
+        step_forward();
     }
-#endif
+#else
+    bool is_running = false;
+    bool is_export  = false;
 
-#if USE_POLYSCOPE
-    polyscope::state::userCallback = polyscope_callback;
+
+    auto ps_callback = [&]() mutable {
+        auto step_and_update = [&]() {
+            step_forward();
+
+            x->move(DEVICE, HOST);
+            rx.get_polyscope_mesh()->updateVertexPositions(*x);
+        };
+        if (ImGui::Button("Step")) {
+            step_and_update();
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Start")) {
+            is_running = true;
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Pause")) {
+            is_running = false;
+        }
+
+        ImGui::SameLine();
+        if (is_export) {
+            rx.export_obj("XPBD_" + std::to_string(frame) + ".obj", *x);
+            is_export = false;
+        }
+
+        if (ImGui::Button("Export")) {
+            is_export = true;
+        }
+        if (is_running) {
+            step_and_update();
+        }
+        ImGui::Separator();
+        ImGui::Text("Frame: %d", frame);
+        ImGui::Text("Total time: %.2f ms", total_time);
+        if (frame > 0) {
+            ImGui::Text("Avg fps: %.2f", (frame * 1000.f) / total_time);
+        }
+    };
+
+    polyscope::state::userCallback = ps_callback;
     polyscope::show();
 #endif
 
-    if (test) {
-        RXMESH_INFO("mean= {}, mean2= {}", mean, mean2);
-    }
-    return 0;
+    return EXIT_SUCCESS;
 }

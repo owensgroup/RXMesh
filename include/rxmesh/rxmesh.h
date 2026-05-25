@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -465,8 +466,7 @@ class RXMesh
      */
     void build_supporting_structures(
         const std::vector<std::vector<uint32_t>>& fv,
-        std::vector<std::vector<uint32_t>>&       ev,
-        std::vector<std::vector<uint32_t>>&       ef,
+        std::vector<std::array<uint32_t, 2>>&     ev,
         std::vector<uint32_t>&                    ff_offset,
         std::vector<uint32_t>&                    ff_values);
 
@@ -495,7 +495,7 @@ class RXMesh
      * increases. We allocate these patches space such that they can occupy the
      * same size as the largest patch in the input mesh
      */
-    void allocate_extra_patches();
+    void compute_max_lp_capacity();
 
     template <typename HandleT>
     const std::pair<uint32_t, uint16_t> map_to_local(
@@ -531,8 +531,8 @@ class RXMesh
     void build(const std::vector<std::vector<uint32_t>>& fv,
                const std::string                         patcher_file);
 
-    void build_single_patch_ltog(const std::vector<std::vector<uint32_t>>& fv,
-                                 const std::vector<std::vector<uint32_t>>& ev,
+    void build_single_patch_ltog(const std::vector<std::vector<uint32_t>>&   fv,
+                                 const std::vector<std::array<uint32_t, 2>>& ev,
                                  const uint32_t patch_id);
 
     void build_single_patch_topology(
@@ -546,23 +546,7 @@ class RXMesh
     uint16_t get_per_patch_max_face_capacity() const;
 
     void build_device();
-    void build_device_single_patch(const uint32_t patch_slot_index,
-                                   const uint32_t patch_id,
-                                   const uint16_t p_num_vertices,
-                                   const uint16_t p_num_edges,
-                                   const uint16_t p_num_faces,
-                                   const uint16_t p_vertices_capacity,
-                                   const uint16_t p_edges_capacity,
-                                   const uint16_t p_faces_capacity,
-                                   const uint16_t p_num_owned_vertices,
-                                   const uint16_t p_num_owned_edges,
-                                   const uint16_t p_num_owned_faces,
-                                   const std::vector<uint32_t>& ltog_v,
-                                   const std::vector<uint32_t>& ltog_e,
-                                   const std::vector<uint32_t>& ltog_f,
-                                   PatchInfo&                   h_patch_info,
-                                   PatchInfo&                   d_patch_info);
-
+    
     void patch_graph_coloring();
 
     void populate_patch_stash();
@@ -640,6 +624,11 @@ class RXMesh
     uint32_t* m_d_owned_mask_f_all;
     uint16_t* m_d_counts_all;
     int*      m_d_dirty_all;
+
+    uint32_t* m_d_patch_stashes_all;
+    LPPair *  m_d_lp_v_tables_all, *m_d_lp_e_tables_all, *m_d_lp_f_tables_all;
+    LPPair *m_d_lp_v_stashes_all, *m_d_lp_e_stashes_all, *m_d_lp_f_stashes_all;
+    uint32_t *m_d_patch_locks_all, *m_d_patch_spins_all;
 
     uint32_t m_ev_stride_elems;
     uint32_t m_fe_stride_elems;

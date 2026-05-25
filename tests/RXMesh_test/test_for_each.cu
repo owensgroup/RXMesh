@@ -31,7 +31,8 @@ TEST(RXMeshStatic, ForEach)
 
 
 template <uint32_t blockThreads, rxmesh::Op op, typename HandleT>
-__global__ static void for_each_kernel(const rxmesh::Context context)
+__global__ static void for_each_kernel(
+    const __grid_constant__ rxmesh::Context context)
 {
     using namespace rxmesh;
 

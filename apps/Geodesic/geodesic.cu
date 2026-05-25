@@ -17,12 +17,13 @@
 
 struct arg
 {
-    std::string obj_file_name = STRINGIFY(INPUT_DIR) "sphere3.obj";
-    std::string output_folder = STRINGIFY(OUTPUT_DIR);
-    uint32_t    device_id     = 0;
+    std::string obj_file_name    = STRINGIFY(INPUT_DIR) "sphere3.obj";
+    std::string output_folder    = STRINGIFY(OUTPUT_DIR);
+    std::string topleset_backend = "gpu";  // "gpu" or "cpu"
+    uint32_t    device_id        = 0;
     char**      argv;
     int         argc;
-    uint32_t    num_seeds = 1;
+    int         num_seeds = 1;
     int         seed_id   = -1;
 
 } Arg;
@@ -35,7 +36,7 @@ struct arg
 void geodesic()
 {
     using namespace rxmesh;
-    
+
     RXMeshStatic rx(Arg.obj_file_name);
     if (!rx.is_closed()) {
         RXMESH_ERROR(
@@ -52,31 +53,30 @@ void geodesic()
 
 
     // Generate Seeds
-    std::vector<uint32_t> h_seeds(Arg.num_seeds);
+    DenseMatrix<int> h_seeds(Arg.num_seeds, 1, HOST);
     if (Arg.seed_id < 0) {
         std::random_device                                       dev;
         std::mt19937                                             rng(dev());
         std::uniform_int_distribution<std::mt19937::result_type> dist(
             0, rx.get_num_vertices());
-        for (auto& s : h_seeds) {
-            s = dist(rng);
-            // s = 0;
+        for (int i = 0; i < Arg.num_seeds; ++i) {
+            h_seeds(i, 0) = dist(rng);
         }
     } else {
         assert(Arg.num_seeds == 1);
-        h_seeds[0] = Arg.seed_id;
+        h_seeds(0, 0) = Arg.seed_id;
     }
 
 
-    // Save a map from vertex id to topleset (number of hops from
-    // (closest?) source). It's used by OpenMesh to help construct
-    // sorted_index and limit. We keep it for RXMesh because it is
-    // used to quickly determine whether or not a vertex is within
-    // the "update band".
-    std::vector<uint32_t> toplesets(rx.get_num_vertices(), 1u);
-    std::vector<uint32_t> sorted_index;
-    std::vector<uint32_t> limits;
-    geodesic_ptp_openmesh<rx_coord_t>(h_seeds, sorted_index, limits, toplesets);
+    // Build the per-vertex topleset (BFS level from the seed set) and
+    // the matching band-offset `limits` array. The PTP kernel uses
+    // topleset as the active-set predicate and limits as its (i, j)
+    // band window. Two backends are supported, selected via
+    // --topleset_backend: "gpu" (RXMesh device BFS, no OpenMesh) or
+    // "cpu" (OpenMesh BFS, original implementation).
+    std::shared_ptr<VertexAttribute<int>> d_toplesets;
+    DenseMatrix<int>                      limits;
+    int                                   limits_size = 0;
 
 
     // RXMesh Impl
@@ -125,9 +125,7 @@ void geodesic()
         return;
     }
 
-    geodesic_rxmesh_graph<rx_coord_t>(
-        rx, h_seeds, limits, limits_size, *d_toplesets);
-
+    geodesic_rxmesh<rx_coord_t>(rx, h_seeds, limits, limits_size, *d_toplesets);
 }
 
 int main(int argc, char** argv)
@@ -151,12 +149,19 @@ int main(int argc, char** argv)
     app.add_option("-d,--device_id", Arg.device_id, "GPU device ID")
         ->default_val(0u);
 
+    app.add_option("--topleset_backend",
+                   Arg.topleset_backend,
+                   "Topleset BFS backend: 'gpu' (RXMesh device) or 'cpu' "
+                   "(OpenMesh)")
+        ->default_val("gpu")
+        ->check(CLI::IsMember({"gpu", "cpu"}));
+
     // num_seeds is commented out in the original, keeping it for now but not
     // exposing it app.add_option("--num_seeds", Arg.num_seeds, "Number of input
     // seeds")
     //     ->default_val(1u);
 
-    rx_init(Arg.device_id);
+    rx_init(Arg.device_id, spdlog::level::trace);
     try {
         app.parse(argc, argv);
     } catch (const CLI::ParseError& e) {
@@ -171,6 +176,7 @@ int main(int argc, char** argv)
     RXMESH_TRACE("num_seeds= {}", Arg.num_seeds);
     RXMESH_TRACE("num_seeds= {}", Arg.num_seeds);
     RXMESH_TRACE("source = {}", Arg.seed_id);
+    RXMESH_TRACE("topleset_backend = {}", Arg.topleset_backend);
 
     geodesic();
 }

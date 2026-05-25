@@ -49,7 +49,7 @@ int main(int argc, char** argv)
         return app.exit(e);
     }
 
-    rx_init(rxmesh_args.device_id);
+    rx_init(rxmesh_args.device_id, spdlog::level::trace);
 
     rxmesh_args.argc = argc;
     rxmesh_args.argv = argv;

@@ -42,6 +42,15 @@ struct PatchLock
     __host__ void init();
 
     /**
+     * @brief bind the lock to memory allocated and initialized elsewhere
+     */
+    __host__ __forceinline__ void bind(uint32_t* lock_ptr, uint32_t* spin_ptr)
+    {
+        lock = lock_ptr;
+        spin = spin_ptr;
+    }
+
+    /**
      * @brief free the memory allocated for the lock. Should be only called from
      * the host
      */

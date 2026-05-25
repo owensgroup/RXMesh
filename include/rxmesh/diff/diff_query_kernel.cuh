@@ -32,7 +32,7 @@ template <uint32_t blockThreads,
           int  VariableDim,
           typename LambdaT>
 __global__ static void hess_matvec_scalar_kernel(
-    const Context context,
+    const __grid_constant__ Context context,
     const DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor>
                                                                   input_vector,
     DenseMatrix<typename ScalarT::PassiveType, Eigen::RowMajor>   output_vector,

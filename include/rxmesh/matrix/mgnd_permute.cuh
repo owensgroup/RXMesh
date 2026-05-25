@@ -26,9 +26,10 @@ __inline__ __device__ bool is_v_on_separator(const VertexHandle    v_id,
 }
 
 template <uint32_t blockThreads>
-__global__ static void extract_separartor(const Context context,
-                                          int*          d_permute,
-                                          uint32_t*     d_v_ordering_prefix_sum)
+__global__ static void extract_separartor(const __grid_constant__ Context
+                                                    context,
+                                          int*      d_permute,
+                                          uint32_t* d_v_ordering_prefix_sum)
 {
 
     // VV query to extract the vertex separators
@@ -59,9 +60,10 @@ __global__ static void extract_separartor(const Context context,
 }
 
 template <uint32_t blockThreads>
-__global__ static void assign_permutation(const Context context,
-                                          int*          d_permute,
-                                          uint32_t*     d_v_ordering_prefix_sum)
+__global__ static void assign_permutation(const __grid_constant__ Context
+                                                    context,
+                                          int*      d_permute,
+                                          uint32_t* d_v_ordering_prefix_sum)
 {
     auto assign = [&](VertexHandle v_id, VertexIterator& iter) {
         if (is_v_on_separator(v_id, iter)) {
