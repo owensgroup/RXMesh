@@ -101,8 +101,8 @@ if(RX_USE_POLYSCOPE AND DEFINED polyscope_SOURCE_DIR)
     if(EXISTS "${polyscope_SOURCE_DIR}/deps/stb")
         install(DIRECTORY "${polyscope_SOURCE_DIR}/deps/stb/"
                 DESTINATION "${RXMESH_INSTALL_THIRD_PARTY_INCLUDEDIR}"
-                FILES_MATCHING PATTERN "*.h"
-                ${_RXMESH_INSTALL_COMPONENT_ARGS})
+                ${_RXMESH_INSTALL_COMPONENT_ARGS}
+                FILES_MATCHING PATTERN "*.h")
     endif()
 endif()
 
