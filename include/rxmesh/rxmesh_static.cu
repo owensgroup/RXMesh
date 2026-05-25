@@ -179,7 +179,7 @@ void RXMeshStatic::add_vertex_coordinates(
         render_edge_patch();
         render_face_patch();
         polyscope_timer.stop();
-        RXMESH_INFO("RXMeshStatic: Polyscope took= {} (ms)",
+        RXMESH_INFO("RXMeshStatic: Register Polyscope took= {} (ms)",
                     polyscope_timer.elapsed_millis());
 #endif
     }

@@ -42,6 +42,7 @@ source_group(
 
 # Required for targets that compile CUDA sources.
 set_property(TARGET RXMesh PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+set_property(TARGET RXMesh PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 target_compile_features(RXMesh PUBLIC cxx_std_17)
 target_compile_definitions(RXMesh
@@ -90,7 +91,8 @@ set(cuda_flags
     -use_fast_math
     $<$<CXX_COMPILER_ID:GNU>:-O3>
     --expt-relaxed-constexpr
-    -Xptxas -warn-spills -res-usage
+    -Xptxas -warn-spills
+    --resource-usage
     #-Xptxas -dlcm=cg -dscm=cg
     --ptxas-options=-v
 )
