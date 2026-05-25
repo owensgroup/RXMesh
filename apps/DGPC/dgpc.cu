@@ -1,6 +1,6 @@
 // Implementation of:
-// Eivind Lyche Melv�r and Martin Reimers
-// "Geodesic polar coordinates on polygonal meshes."
+// Eivind Lyche Melvær and Martin Reimers
+// "Geodesic Polar Coordinates on Polygonal Meshes"
 //
 // Reference
 // https://github.com/adobe/lagrange/blob/main/modules/geodesic/src/GeodesicEngineDGPC.cpp
@@ -8,10 +8,11 @@
 // The Lagrange CPU implementation uses a serial Dijkstra with a priority
 // queue. Here we replace the queue with iterative parallel vertex relaxation
 // until no vertex's distance changes. The triangle update rule
-// (Heron-area based unfolding) is identical to Lagrange's try_compute_dgpc,
-// ported to use rx_coord_t.
+// (Heron-area based unfolding) is identical to Lagrange's try_compute_dgpc
 
 #include <CLI/CLI.hpp>
+
+#include <glm/gtc/constants.hpp>
 
 #include "rxmesh/query.h"
 #include "rxmesh/rxmesh_static.h"
@@ -23,7 +24,6 @@ namespace {
 
 constexpr rx_coord_t DGPC_INVALID = rx_coord_t(-1);
 constexpr rx_coord_t DGPC_EPS     = rx_coord_t(1e-12);
-constexpr rx_coord_t DGPC_PI      = rx_coord_t(3.14159265358979323846);
 
 __device__ __host__ __forceinline__ rx_coord_t heron_area_stable(rx_coord_t e0,
                                                                  rx_coord_t e1,
@@ -150,12 +150,12 @@ __device__ __forceinline__ bool try_compute_dgpc(
     const rx_coord_t tj = theta(vj, 0);
     const rx_coord_t tk = theta(vk, 0);
     rx_coord_t       new_theta;
-    if (fabs(tk - tj) > DGPC_PI) {
+    if (fabs(tk - tj) > glm::pi<rx_coord_t>()) {
         new_theta = (rx_coord_t(1) - alpha) * tj + alpha * tk +
                     ((tj < tk) ? (rx_coord_t(1) - alpha) : alpha) *
-                        rx_coord_t(2) * DGPC_PI;
-        if (new_theta > DGPC_PI) {
-            new_theta -= rx_coord_t(2) * DGPC_PI;
+                        rx_coord_t(2) * glm::pi<rx_coord_t>();
+        if (new_theta > glm::pi<rx_coord_t>()) {
+            new_theta -= rx_coord_t(2) * glm::pi<rx_coord_t>();
         }
     } else {
         new_theta = (rx_coord_t(1) - alpha) * tj + alpha * tk;
@@ -172,19 +172,20 @@ __device__ __forceinline__ bool try_compute_dgpc(
 // with an active_set predicate so only vertices currently in the frontier
 // run the per-triangle DGPC update. On a successful update we mark the
 // vertex AND each of its one-ring neighbors in next_mask so they are
-// revisited in the next sweep. The fixed point is identical to
-// the previous full-sweep loop (and to Lagrange's Dijkstra), since the
-// per-triangle update is unchanged and monotone in dist(vi).
+// revisited in the next sweep. The per-triangle update is unchanged and
+// monotone in dist(vi).
 template <uint32_t blockThreads>
 __global__ static void relax_dgpc_rxmesh(
-    const __grid_constant__ rxmesh::Context context,
-    const __grid_constant__ rxmesh::VertexAttribute<rx_coord_t> coords,
-    rxmesh::VertexAttribute<rx_coord_t>                         dist,
-    rxmesh::VertexAttribute<rx_coord_t>                         theta,
-    const rxmesh::VertexAttribute<uint8_t>                      active_mask,
-    rxmesh::VertexAttribute<uint8_t>                            next_mask,
-    int*                                                        d_changed,
-    const rx_coord_t                                            radius)
+    const __grid_constant__ Context context,
+    const __grid_constant__ VertexAttribute<rx_coord_t> coords,
+    VertexAttribute<rx_coord_t>                         dist,
+    VertexAttribute<rx_coord_t>                         theta,
+    const VertexAttribute<int>                          active_mask,
+    VertexAttribute<int>                                next_mask,
+    DenseMatrix<int>                                    d_changed,
+    const rx_coord_t                                    radius,
+    const uint32_t                                      active_epoch,
+    const uint32_t                                      next_epoch)
 {
     using namespace rxmesh;
 
@@ -193,7 +194,11 @@ __global__ static void relax_dgpc_rxmesh(
     };
 
     auto relax = [&](VertexHandle& vi, const VertexIterator& nbrs) {
-        const uint32_t n = nbrs.size();
+        if (active_mask(vi, 0) != active_epoch) {
+            return;
+        }
+
+        const int n = static_cast<int>(nbrs.size());
         if (n < 2) {
             return;
         }
@@ -202,7 +207,7 @@ __global__ static void relax_dgpc_rxmesh(
         rx_coord_t best_theta = theta(vi, 0);
         bool       improved   = false;
 
-        for (uint32_t v = 0; v < n; ++v) {
+        for (int v = 0; v < n; ++v) {
             const VertexHandle vj = nbrs[v];
             const VertexHandle vk = nbrs[(v + 1) % n];
 
@@ -230,26 +235,26 @@ __global__ static void relax_dgpc_rxmesh(
             theta(vi, 0) = best_theta;
 
             // Mark vi and its one-ring as live for the next sweep.
-            // Concurrent writers all write the same value (1) so the race
-            // is benign and no atomic is required.
-            next_mask(vi, 0) = uint8_t(1);
+            // Concurrent writers all write the same epoch so the race is
+            // benign and no atomic is required.
+            next_mask(vi, 0) = next_epoch;
             for (uint32_t v = 0; v < n; ++v) {
-                next_mask(nbrs[v], 0) = uint8_t(1);
+                next_mask(nbrs[v], 0) = next_epoch;
             }
 
-            ::atomicAdd(d_changed, 1);
+            // race condition but it is fine
+            d_changed(0, 0) = 1;
         }
     };
 
-    auto block = cooperative_groups::this_thread_block();
-
+    auto                block = cooperative_groups::this_thread_block();
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
     query.dispatch<Op::VV>(
         block, shrd_alloc, relax, in_active_set, /*oriented=*/true);
 }
 
-void dgpc(RXMeshStatic& rx)
+void dgpc(RXMeshStatic& rx, VertexAttribute<rx_coord_t>& dist)
 {
     // ------------------------------------------------------------------
     // Seed parameters. TODO(user): wire to CLI flags.
@@ -324,19 +329,18 @@ void dgpc(RXMeshStatic& rx)
     // ------------------------------------------------------------------
     auto coords  = *rx.get_input_vertex_coordinates();
     auto fnormal = *rx.add_face_attribute<rx_coord_t>("dgpc_fNormal", 3);
-    auto dist    = *rx.add_vertex_attribute<rx_coord_t>("dgpc_dist", 1);
     auto theta   = *rx.add_vertex_attribute<rx_coord_t>("dgpc_theta", 1);
 
     // Active-set masks for frontier-driven relaxation. active_mask drives
     // Query::dispatch's active_set predicate; next_mask collects vertices
     // that need to be revisited in the next sweep.
-    auto active_mask = *rx.add_vertex_attribute<uint8_t>("dgpc_active_mask", 1);
-    auto next_mask   = *rx.add_vertex_attribute<uint8_t>("dgpc_next_mask", 1);
+    auto active_mask = *rx.add_vertex_attribute<int>("dgpc_active_mask", 1);
+    auto next_mask   = *rx.add_vertex_attribute<int>("dgpc_next_mask", 1);
 
     dist.reset(DGPC_INVALID, DEVICE);
     theta.reset(rx_coord_t(0), DEVICE);
-    active_mask.reset(uint8_t(0), DEVICE);
-    next_mask.reset(uint8_t(0), DEVICE);
+    active_mask.reset(0, DEVICE);
+    next_mask.reset(0, DEVICE);
 
     DenseMatrix<int> d_changed(rx, 1, 1, LOCATION_ALL);
 
@@ -364,7 +368,8 @@ void dgpc(RXMeshStatic& rx)
     t0.stop();
     RXMESH_INFO("1. Per-face normals took= {}", t0.elapsed_millis());
     // ------------------------------------------------------------------
-    // 2. Resolve seed face vertices: write the three VertexHandle unique_ids
+    // 2. Resolve seed face vertices: write the three VertexHandle
+    // unique_ids
     //    of the seed face into seed_v_buf, and copy its normal into
     //    seed_normal_buf. Two steps:
     //      (a) Resolve the seed FaceHandle on the host by global id
@@ -512,8 +517,8 @@ void dgpc(RXMeshStatic& rx)
 
                     const vec3<rx_coord_t> p = coords.to_glm<3>(vh);
 
-                    // Pick start vertex: a face vertex of the seed face that
-                    // is NOT the seed itself (matches Lagrange's
+                    // Pick start vertex: a face vertex of the seed face
+                    // that is NOT the seed itself (matches Lagrange's
                     // start_vertex_id).
                     uint64_t start_uid = uid0;
                     if (start_uid == seed_uid) {
@@ -560,7 +565,8 @@ void dgpc(RXMeshStatic& rx)
                     }
                     const rx_coord_t scale =
                         on_boundary ? rx_coord_t(1) :
-                                      (rx_coord_t(2) * DGPC_PI / total_angle);
+                                      (rx_coord_t(2) * glm::pi<rx_coord_t>() /
+                                       total_angle);
 
                     const vec3<rx_coord_t> start_v =
                         coords.to_glm<3>(nbrs[start_local]);
@@ -585,10 +591,10 @@ void dgpc(RXMeshStatic& rx)
                     rx_coord_t angle_cumu = start_theta - pre_sum;
 
                     for (uint32_t i = 0; i < n; ++i) {
-                        if (angle_cumu > DGPC_PI) {
-                            angle_cumu -= rx_coord_t(2) * DGPC_PI;
-                        } else if (angle_cumu < -DGPC_PI) {
-                            angle_cumu += rx_coord_t(2) * DGPC_PI;
+                        if (angle_cumu > glm::pi<rx_coord_t>()) {
+                            angle_cumu -= rx_coord_t(2) * glm::pi<rx_coord_t>();
+                        } else if (angle_cumu < -glm::pi<rx_coord_t>()) {
+                            angle_cumu += rx_coord_t(2) * glm::pi<rx_coord_t>();
                         }
 
                         const vec3<rx_coord_t> rv = coords.to_glm<3>(nbrs[i]);
@@ -699,9 +705,9 @@ void dgpc(RXMeshStatic& rx)
     rx.for_each<Op::VV, 256>(
         [=] __device__(const VertexHandle&   vh,
                        const VertexIterator& nbrs) mutable {
-            for (uint32_t i = 0; i < nbrs.size(); ++i) {
+            for (int i = 0; i < nbrs.size(); ++i) {
                 if (dist(nbrs[i], 0) != DGPC_INVALID) {
-                    active_mask(vh, 0) = uint8_t(1);
+                    active_mask(vh, 0) = 1;
                     return;
                 }
             }
@@ -715,8 +721,7 @@ void dgpc(RXMeshStatic& rx)
     //    predicate so only vertices currently in active_mask execute the
     //    per-triangle DGPC update. On a successful update we mark vi and
     //    its one-ring in next_mask -- those are the candidates for the
-    //    next sweep. The fixed point and final values are identical to
-    //    the previous full-sweep loop.
+    //    next sweep. Epoch tags avoid clearing next_mask every sweep.
     // ------------------------------------------------------------------
     constexpr uint32_t      blockThreads = 256;
     LaunchBox<blockThreads> lb;
@@ -730,43 +735,47 @@ void dgpc(RXMeshStatic& rx)
     // each sweep. Uses raw pointers (mirroring apps/Geodesic/geodesic_ptp_
     // rxmesh.h's double_buffer pattern) so we don't copy/swap attribute
     // bookkeeping.
-    VertexAttribute<uint8_t>* mask_buf[2] = {&active_mask, &next_mask};
-    int                       cur         = 0;
+    VertexAttribute<int>* mask_buf[2] = {&active_mask, &next_mask};
 
-    const int max_outer = 1024;
-    GPUTimer  t5;
+    int cur = 0;
+
+    GPUTimer t5;
     t5.start();
     int it = 0;
-    for (it = 0; it < max_outer; ++it) {
+
+
+    do {
         d_changed.reset(0, DEVICE);
-        mask_buf[1 - cur]->reset(uint8_t(0), DEVICE);
+        const uint32_t active_epoch = uint32_t(it + 1);
+        const uint32_t next_epoch   = uint32_t(it + 2);
 
         relax_dgpc_rxmesh<blockThreads>
-            <<<lb.blocks, blockThreads, lb.smem_bytes_dyn>>>(
-                rx.get_context(),
-                coords,
-                dist,
-                theta,
-                *mask_buf[cur],
-                *mask_buf[1 - cur],
-                d_changed.data(DEVICE),
-                radius);
+            <<<lb.blocks, blockThreads, lb.smem_bytes_dyn>>>(rx.get_context(),
+                                                             coords,
+                                                             dist,
+                                                             theta,
+                                                             *mask_buf[cur],
+                                                             *mask_buf[1 - cur],
+                                                             d_changed,
+                                                             radius,
+                                                             active_epoch,
+                                                             next_epoch);
 
         d_changed.move(DEVICE, HOST);
-        if (d_changed(0, 0) == 0) {
-            RXMESH_INFO("DGPC: converged after {} relaxation sweeps.", it + 1);
+        cur = 1 - cur;
+        it++;
+        if (it > 1024) {
             break;
         }
-
-        cur = 1 - cur;
-    }
+    } while (d_changed(0, 0) != 0);
     t5.stop();
+
+    RXMESH_INFO("DGPC: converged after {} relaxation sweeps.", it + 1);
     RXMESH_INFO("4. Iterative parallel relaxation took= {}, avg= {}",
                 t5.elapsed_millis(),
                 t5.elapsed_millis() / float(it));
 
     dist.move(DEVICE, HOST);
-    rx.get_polyscope_mesh()->addVertexScalarQuantity("Geo", dist);
 }
 
 int main(int argc, char** argv)
@@ -792,14 +801,20 @@ int main(int argc, char** argv)
 
     RXMeshStatic rx(mesh_path);
 
+    auto dist = *rx.add_vertex_attribute<rx_coord_t>("geodesic", 1);
+
     GPUTimer timer;
     timer.start();
-    dgpc(rx);
+    dgpc(rx, dist);
     timer.stop();
 
     RXMESH_INFO("DGPC took {} (ms) ", timer.elapsed_millis());
 
 #if USE_POLYSCOPE
+    auto ps_geo =
+        rx.get_polyscope_mesh()->addVertexScalarQuantity("geodesic", dist);
+    ps_geo->setEnabled(true);
+    ps_geo->setIsolinesEnabled(true);
     polyscope::show();
 #endif
 }
