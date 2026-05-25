@@ -17,7 +17,13 @@ RXMeshStatic::RXMeshStatic(const std::string file_path,
 
     std::vector<std::vector<uint32_t>>   fv;
     std::vector<std::vector<rx_coord_t>> vertices;
-    if (!import_obj(file_path, vertices, fv)) {
+    CPUTimer load_obj_timer;
+    load_obj_timer.start();
+    const bool loaded = import_obj(file_path, vertices, fv);
+    load_obj_timer.stop();
+    RXMESH_INFO("RXMeshStatic: load_obj took= {} (ms)",
+                load_obj_timer.elapsed_millis());
+    if (!loaded) {
         RXMESH_ERROR(
             "RXMeshStatic::RXMeshStatic could not read the input file {}",
             file_path);
@@ -69,8 +75,13 @@ RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
     std::vector<int> region_num_faces;
     std::vector<int> region_num_vertices;
 
+    CPUTimer load_obj_timer;
+    load_obj_timer.start();
     for (auto path : files_path) {
         if (!import_obj(path, vertices, fv, true)) {
+            load_obj_timer.stop();
+            RXMESH_INFO("RXMeshStatic: load_obj took= {} (ms)",
+                        load_obj_timer.elapsed_millis());
             RXMESH_ERROR(
                 "RXMeshStatic::RXMeshStatic could not read the input file "
                 "{}",
@@ -80,6 +91,9 @@ RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
         region_num_faces.push_back(static_cast<int>(fv.size()));
         region_num_vertices.push_back(static_cast<int>(vertices.size()));
     }
+    load_obj_timer.stop();
+    RXMESH_INFO("RXMeshStatic: load_obj took= {} (ms)",
+                load_obj_timer.elapsed_millis());
 
     this->init(fv, "", 1.0, 1.0, 0.8);
 
@@ -155,6 +169,8 @@ void RXMeshStatic::add_vertex_coordinates(
             this->add_vertex_attribute<rx_coord_t>(vertices, "rx:vertices");
 
 #if USE_POLYSCOPE
+        CPUTimer polyscope_timer;
+        polyscope_timer.start();
         polyscope::init();
         m_polyscope_mesh_name = mesh_name.empty() ? "RXMesh" : mesh_name;
         m_polyscope_mesh_name += std::to_string(rand());
@@ -162,6 +178,9 @@ void RXMeshStatic::add_vertex_coordinates(
         render_vertex_patch();
         render_edge_patch();
         render_face_patch();
+        polyscope_timer.stop();
+        RXMESH_INFO("RXMeshStatic: Polyscope took= {} (ms)",
+                    polyscope_timer.elapsed_millis());
 #endif
     }
 }

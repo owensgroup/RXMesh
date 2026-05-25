@@ -642,16 +642,6 @@ class RXMesh
 
     uint32_t m_num_colors;
 
-    // Temporary profiling counters. Values are accumulated per patch, so they
-    // measure total work rather than wall-clock time for OpenMP loops.
-    double m_profile_ltog_setup_ms;
-    double m_profile_ltog_faces_ms;
-    double m_profile_ltog_edge_scan_ms;
-    double m_profile_ltog_vertex_scan_ms;
-    double m_profile_ltog_partition_ms;
-    double m_profile_topology_alloc_ms;
-    double m_profile_topology_faces_ms;
-
     Timers<CPUTimer> m_timers;
 };
 }  // namespace rxmesh
