@@ -99,9 +99,9 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                   const float                               patch_alloc_factor,
                   const float lp_hashtable_load_factor)
 {
-    m_capacity_factor          = capacity_factor;
-    m_lp_hashtable_load_factor = lp_hashtable_load_factor;
-    m_patch_alloc_factor       = patch_alloc_factor;
+    m_capacity_factor             = capacity_factor;
+    m_lp_hashtable_load_factor    = lp_hashtable_load_factor;
+    m_patch_alloc_factor          = patch_alloc_factor;
     m_profile_ltog_setup_ms       = 0.0;
     m_profile_ltog_faces_ms       = 0.0;
     m_profile_ltog_edge_scan_ms   = 0.0;
@@ -282,13 +282,14 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                 m_timers.elapsed_millis("build.patch_arrays"));
     RXMESH_INFO("   --ltog loop time = {} (ms)",
                 m_timers.elapsed_millis("build.ltog"));
-    RXMESH_INFO("      ---ltog accumulated setup/faces/edge_scan/"
-                "vertex_scan/partition = {}/{}/{}/{}/{} (ms)",
-                m_profile_ltog_setup_ms,
-                m_profile_ltog_faces_ms,
-                m_profile_ltog_edge_scan_ms,
-                m_profile_ltog_vertex_scan_ms,
-                m_profile_ltog_partition_ms);
+    RXMESH_INFO(
+        "      ---ltog accumulated setup/faces/edge_scan/"
+        "vertex_scan/partition = {}/{}/{}/{}/{} (ms)",
+        m_profile_ltog_setup_ms,
+        m_profile_ltog_faces_ms,
+        m_profile_ltog_edge_scan_ms,
+        m_profile_ltog_vertex_scan_ms,
+        m_profile_ltog_partition_ms);
     RXMESH_INFO("   --max/capacity time = {} (ms)",
                 m_timers.elapsed_millis("build.max_capacity"));
     RXMESH_INFO("   --topology loop time = {} (ms)",
@@ -343,13 +344,14 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                 m_timers.elapsed_millis("bitmask.owned_f"));
     RXMESH_INFO("   --bitmask.cudaMemcpy time = {} (ms)",
                 m_timers.elapsed_millis("bitmask.cudaMemcpy"));
-    RXMESH_INFO(" -patch counts/topology/dirty/stash/info copies = "
-                "{}/{}/{}/{}/{} (ms)",
-                m_timers.elapsed_millis("patch.counts.cudaMemcpy"),
-                m_timers.elapsed_millis("patch.topology.cudaMemcpy"),
-                m_timers.elapsed_millis("patch.dirty.cudaMemset"),
-                m_timers.elapsed_millis("patch.patch_stash.cudaMemcpy"),
-                m_timers.elapsed_millis("patch.patch_info.cudaMemcpy"));
+    RXMESH_INFO(
+        " -patch counts/topology/dirty/stash/info copies = "
+        "{}/{}/{}/{}/{} (ms)",
+        m_timers.elapsed_millis("patch.counts.cudaMemcpy"),
+        m_timers.elapsed_millis("patch.topology.cudaMemcpy"),
+        m_timers.elapsed_millis("patch.dirty.cudaMemset"),
+        m_timers.elapsed_millis("patch.patch_stash.cudaMemcpy"),
+        m_timers.elapsed_millis("patch.patch_info.cudaMemcpy"));
     RXMESH_INFO(" -patch device stash/lock init = {}/{} (ms)",
                 m_timers.elapsed_millis("patch.patch_stash.init"),
                 m_timers.elapsed_millis("patch.lock.init"));
@@ -360,12 +362,13 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                 m_timers.elapsed_millis("compute_max_lp_capacity"));
     RXMESH_INFO("7) create_handles time = {} (ms)",
                 m_timers.elapsed_millis("create_handles"));
-    RXMESH_INFO("   --create_handles malloc/cudaMalloc/populate/cudaMemcpy = "
-                "{}/{}/{}/{} (ms)",
-                m_timers.elapsed_millis("create_handles.malloc"),
-                m_timers.elapsed_millis("create_handles.cudaMalloc"),
-                m_timers.elapsed_millis("create_handles.populate"),
-                m_timers.elapsed_millis("create_handles.cudaMemcpy"));
+    RXMESH_INFO(
+        "   --create_handles malloc/cudaMalloc/populate/cudaMemcpy = "
+        "{}/{}/{}/{} (ms)",
+        m_timers.elapsed_millis("create_handles.malloc"),
+        m_timers.elapsed_millis("create_handles.cudaMalloc"),
+        m_timers.elapsed_millis("create_handles.populate"),
+        m_timers.elapsed_millis("create_handles.cudaMemcpy"));
     RXMESH_INFO("8) context.init time = {} (ms)",
                 m_timers.elapsed_millis("context.init"));
 
@@ -914,7 +917,7 @@ void RXMesh::build_single_patch_ltog(
 
     std::vector<bool> is_vertex_added(m_num_vertices, false);
     std::vector<bool> is_edge_added(m_num_edges, false);
-    const double setup_ms = 1000.0 * (omp_get_wtime() - profile_start);
+    const double      setup_ms = 1000.0 * (omp_get_wtime() - profile_start);
 
     // add faces owned by this patch
     auto add_new_face = [&](uint32_t global_face_id, uint16_t local_face_id) {
@@ -1004,7 +1007,7 @@ void RXMesh::build_single_patch_ltog(
         return static_cast<uint16_t>(part_end - ltog_map.begin());
     };
 
-    profile_start = omp_get_wtime();
+    profile_start             = omp_get_wtime();
     m_h_num_owned_f[patch_id] = create_unique_mapping(
         m_h_patches_ltog_f[patch_id], m_patcher->get_face_patch());
 
@@ -1054,7 +1057,7 @@ void RXMesh::build_single_patch_topology(
         (LocalEdgeT*)malloc(faces_cap * 3 * sizeof(LocalEdgeT));
 
     std::vector<bool> is_added_edge(patch_num_edges, false);
-    const double alloc_ms = 1000.0 * (omp_get_wtime() - profile_start);
+    const double      alloc_ms = 1000.0 * (omp_get_wtime() - profile_start);
 
     auto find_local_index = [&patch_id](
                                 const uint32_t               global_id,
@@ -1365,30 +1368,30 @@ void RXMesh::build_device()
     CUDA_ERROR(
         cudaMalloc((void**)&m_d_owned_mask_f_all,
                    max_num_patches * m_mask_f_stride_words * sizeof(uint32_t)));
-    CUDA_ERROR(cudaMalloc((void**)&m_d_counts_all,
-                          max_num_patches * m_counts_stride_elems *
-                              sizeof(uint16_t)));
-    CUDA_ERROR(cudaMalloc((void**)&m_d_dirty_all,
-                          max_num_patches * m_dirty_stride_elems *
-                              sizeof(int)));
-    CUDA_ERROR(cudaMalloc((void**)&m_d_patch_stashes_all,
-                          max_num_patches * PatchStash::stash_size *
-                              sizeof(uint32_t)));
+    CUDA_ERROR(
+        cudaMalloc((void**)&m_d_counts_all,
+                   max_num_patches * m_counts_stride_elems * sizeof(uint16_t)));
+    CUDA_ERROR(
+        cudaMalloc((void**)&m_d_dirty_all,
+                   max_num_patches * m_dirty_stride_elems * sizeof(int)));
+    CUDA_ERROR(cudaMalloc(
+        (void**)&m_d_patch_stashes_all,
+        max_num_patches * PatchStash::stash_size * sizeof(uint32_t)));
     CUDA_ERROR(cudaMalloc((void**)&m_d_lp_v_tables_all,
                           max_num_patches * lp_v_capacity * sizeof(LPPair)));
     CUDA_ERROR(cudaMalloc((void**)&m_d_lp_e_tables_all,
                           max_num_patches * lp_e_capacity * sizeof(LPPair)));
     CUDA_ERROR(cudaMalloc((void**)&m_d_lp_f_tables_all,
                           max_num_patches * lp_f_capacity * sizeof(LPPair)));
-    CUDA_ERROR(cudaMalloc((void**)&m_d_lp_v_stashes_all,
-                          max_num_patches * LPHashTable::stash_size *
-                              sizeof(LPPair)));
-    CUDA_ERROR(cudaMalloc((void**)&m_d_lp_e_stashes_all,
-                          max_num_patches * LPHashTable::stash_size *
-                              sizeof(LPPair)));
-    CUDA_ERROR(cudaMalloc((void**)&m_d_lp_f_stashes_all,
-                          max_num_patches * LPHashTable::stash_size *
-                              sizeof(LPPair)));
+    CUDA_ERROR(
+        cudaMalloc((void**)&m_d_lp_v_stashes_all,
+                   max_num_patches * LPHashTable::stash_size * sizeof(LPPair)));
+    CUDA_ERROR(
+        cudaMalloc((void**)&m_d_lp_e_stashes_all,
+                   max_num_patches * LPHashTable::stash_size * sizeof(LPPair)));
+    CUDA_ERROR(
+        cudaMalloc((void**)&m_d_lp_f_stashes_all,
+                   max_num_patches * LPHashTable::stash_size * sizeof(LPPair)));
     CUDA_ERROR(cudaMalloc((void**)&m_d_patch_locks_all,
                           max_num_patches * sizeof(uint32_t)));
     CUDA_ERROR(cudaMalloc((void**)&m_d_patch_spins_all,
@@ -1418,33 +1421,25 @@ void RXMesh::build_device()
     }
     m_timers.stop("build_device.sym_stash");
 
-    std::vector<PatchInfo>    h_d_patches(max_num_patches);
-    std::vector<uint16_t>     h_counts_all(max_num_patches *
-                                       m_counts_stride_elems,
-                                   0);
-    std::vector<int>          h_dirty_all(max_num_patches * m_dirty_stride_elems,
-                                 0);
+    std::vector<PatchInfo> h_d_patches(max_num_patches);
+    std::vector<uint16_t>  h_counts_all(max_num_patches * m_counts_stride_elems,
+                                       0);
+    std::vector<int> h_dirty_all(max_num_patches * m_dirty_stride_elems, 0);
     std::vector<LocalVertexT> h_evs_all(max_num_patches * m_ev_stride_elems);
     std::vector<LocalEdgeT>   h_fes_all(max_num_patches * m_fe_stride_elems);
-    std::vector<uint32_t>     h_active_v_all(max_num_patches *
-                                             m_mask_v_stride_words,
-                                         0);
-    std::vector<uint32_t>     h_active_e_all(max_num_patches *
-                                             m_mask_e_stride_words,
-                                         0);
-    std::vector<uint32_t>     h_active_f_all(max_num_patches *
-                                             m_mask_f_stride_words,
-                                         0);
-    std::vector<uint32_t>     h_owned_v_all(max_num_patches *
-                                            m_mask_v_stride_words,
+    std::vector<uint32_t>     h_active_v_all(
+        max_num_patches * m_mask_v_stride_words, 0);
+    std::vector<uint32_t> h_active_e_all(
+        max_num_patches * m_mask_e_stride_words, 0);
+    std::vector<uint32_t> h_active_f_all(
+        max_num_patches * m_mask_f_stride_words, 0);
+    std::vector<uint32_t> h_owned_v_all(max_num_patches * m_mask_v_stride_words,
                                         0);
-    std::vector<uint32_t>     h_owned_e_all(max_num_patches *
-                                            m_mask_e_stride_words,
+    std::vector<uint32_t> h_owned_e_all(max_num_patches * m_mask_e_stride_words,
                                         0);
-    std::vector<uint32_t>     h_owned_f_all(max_num_patches *
-                                            m_mask_f_stride_words,
+    std::vector<uint32_t> h_owned_f_all(max_num_patches * m_mask_f_stride_words,
                                         0);
-    std::vector<uint32_t>     h_patch_stashes_all(
+    std::vector<uint32_t> h_patch_stashes_all(
         max_num_patches * PatchStash::stash_size, INVALID32);
     std::vector<LPPair> h_lp_v_tables_all(max_num_patches * lp_v_capacity);
     std::vector<LPPair> h_lp_e_tables_all(max_num_patches * lp_e_capacity);
@@ -1456,11 +1451,11 @@ void RXMesh::build_device()
     std::vector<LPPair> h_lp_f_stashes_all(max_num_patches *
                                            LPHashTable::stash_size);
 
-    auto fill_mask = [&](uint32_t*&            h_mask,
+    auto fill_mask = [&](uint32_t*&             h_mask,
                          std::vector<uint32_t>& slab,
-                         const uint32_t        slot_offset,
-                         const uint16_t        capacity,
-                         const uint16_t        num_set) {
+                         const uint32_t         slot_offset,
+                         const uint16_t         capacity,
+                         const uint16_t         num_set) {
         const size_t num_bytes = detail::mask_num_bytes(capacity);
         m_timers.start("malloc");
         h_mask = static_cast<uint32_t*>(malloc(num_bytes));
@@ -1472,7 +1467,7 @@ void RXMesh::build_device()
         memcpy(slab.data() + slot_offset, h_mask, num_bytes);
     };
 
-    auto bind_device_lp = [](LPHashTable& d_hashtable,
+    auto bind_device_lp = [](LPHashTable&       d_hashtable,
                              const LPHashTable& h_hashtable,
                              LPPair*            d_table,
                              LPPair*            d_stash) {
@@ -1560,26 +1555,26 @@ void RXMesh::build_device()
         PatchInfo& h_patch_info = m_h_patches_info[p];
         h_patch_info.num_faces =
             static_cast<uint16_t*>(malloc(3 * sizeof(uint16_t)));
-        h_patch_info.num_edges       = h_patch_info.num_faces + 1;
-        h_patch_info.num_vertices    = h_patch_info.num_faces + 2;
-        h_patch_info.num_faces[0]    = p_num_faces;
-        h_patch_info.num_edges[0]    = p_num_edges;
-        h_patch_info.num_vertices[0] = p_num_vertices;
+        h_patch_info.num_edges         = h_patch_info.num_faces + 1;
+        h_patch_info.num_vertices      = h_patch_info.num_faces + 2;
+        h_patch_info.num_faces[0]      = p_num_faces;
+        h_patch_info.num_edges[0]      = p_num_edges;
+        h_patch_info.num_vertices[0]   = p_num_vertices;
         h_patch_info.vertices_capacity = p_vertices_capacity;
         h_patch_info.edges_capacity    = p_edges_capacity;
         h_patch_info.faces_capacity    = p_faces_capacity;
         h_patch_info.patch_id          = valid_patch ? p : INVALID32;
         h_patch_info.child_id          = INVALID32;
         h_patch_info.should_slice      = false;
-        h_patch_info.dirty            = static_cast<int*>(malloc(sizeof(int)));
-        h_patch_info.dirty[0]         = 0;
+        h_patch_info.dirty             = static_cast<int*>(malloc(sizeof(int)));
+        h_patch_info.dirty[0]          = 0;
 
         h_patch_info.ev = static_cast<LocalVertexT*>(realloc(
             h_patch_info.ev, p_edges_capacity * 2 * sizeof(LocalVertexT)));
         h_patch_info.fe = static_cast<LocalEdgeT*>(realloc(
             h_patch_info.fe, p_faces_capacity * 3 * sizeof(LocalEdgeT)));
 
-        const uint32_t counts_offset = p * m_counts_stride_elems;
+        const uint32_t counts_offset    = p * m_counts_stride_elems;
         h_counts_all[counts_offset + 0] = p_num_faces;
         h_counts_all[counts_offset + 1] = p_num_edges;
         h_counts_all[counts_offset + 2] = p_num_vertices;
@@ -1700,20 +1695,17 @@ void RXMesh::build_device()
                LPHashTable::stash_size * sizeof(LPPair));
 
         PatchInfo& d_patch = h_d_patches[p];
-        d_patch.ev = m_d_evs_all + p * m_ev_stride_elems;
-        d_patch.fe = m_d_fes_all + p * m_fe_stride_elems;
+        d_patch.ev         = m_d_evs_all + p * m_ev_stride_elems;
+        d_patch.fe         = m_d_fes_all + p * m_fe_stride_elems;
         d_patch.active_mask_v =
             m_d_active_mask_v_all + p * m_mask_v_stride_words;
         d_patch.active_mask_e =
             m_d_active_mask_e_all + p * m_mask_e_stride_words;
         d_patch.active_mask_f =
             m_d_active_mask_f_all + p * m_mask_f_stride_words;
-        d_patch.owned_mask_v =
-            m_d_owned_mask_v_all + p * m_mask_v_stride_words;
-        d_patch.owned_mask_e =
-            m_d_owned_mask_e_all + p * m_mask_e_stride_words;
-        d_patch.owned_mask_f =
-            m_d_owned_mask_f_all + p * m_mask_f_stride_words;
+        d_patch.owned_mask_v = m_d_owned_mask_v_all + p * m_mask_v_stride_words;
+        d_patch.owned_mask_e = m_d_owned_mask_e_all + p * m_mask_e_stride_words;
+        d_patch.owned_mask_f = m_d_owned_mask_f_all + p * m_mask_f_stride_words;
         d_patch.num_faces    = m_d_counts_all + counts_offset;
         d_patch.num_edges    = d_patch.num_faces + 1;
         d_patch.num_vertices = d_patch.num_faces + 2;
@@ -1738,8 +1730,8 @@ void RXMesh::build_device()
                        m_d_lp_f_tables_all + p * lp_f_capacity,
                        m_d_lp_f_stashes_all + p * LPHashTable::stash_size);
         d_patch.lock.bind(m_d_patch_locks_all + p, m_d_patch_spins_all + p);
-        d_patch.dirty       = m_d_dirty_all + p * m_dirty_stride_elems;
-        d_patch.child_id    = INVALID32;
+        d_patch.dirty        = m_d_dirty_all + p * m_dirty_stride_elems;
+        d_patch.child_id     = INVALID32;
         d_patch.should_slice = false;
     }
     m_timers.stop("build_device.real_patches");
@@ -1819,8 +1811,8 @@ void RXMesh::build_device()
                           cudaMemcpyHostToDevice));
     m_timers.stop("cudaMemcpy");
 
-    CUDA_ERROR(cudaMemset(
-        m_d_patch_locks_all, 0, max_num_patches * sizeof(uint32_t)));
+    CUDA_ERROR(
+        cudaMemset(m_d_patch_locks_all, 0, max_num_patches * sizeof(uint32_t)));
     CUDA_ERROR(cudaMemset(
         m_d_patch_spins_all, INVALID8, max_num_patches * sizeof(uint32_t)));
 }
