@@ -31,16 +31,16 @@ Patcher::Patcher(std::string filename)
     print_statistics();
 }
 
-Patcher::Patcher(uint32_t                                        patch_size,
-                 const std::vector<uint32_t>&                    ff_offset,
-                 const std::vector<uint32_t>&                    ff_values,
-                 const std::vector<std::vector<uint32_t>>&       fv,
+Patcher::Patcher(uint32_t                                         patch_size,
+                 const std::vector<uint32_t>&                     ff_offset,
+                 const std::vector<uint32_t>&                     ff_values,
+                 const std::vector<std::vector<uint32_t>>&        fv,
                  const std::unordered_map<std::pair<uint32_t, uint32_t>,
                                           uint32_t,
-                                          detail::edge_key_hash> edges_map,
-                 const uint32_t                                  num_vertices,
-                 const uint32_t                                  num_edges,
-                 bool                                            use_metis)
+                                          detail::edge_key_hash>& edges_map,
+                 const uint32_t                                   num_vertices,
+                 const uint32_t                                   num_edges,
+                 bool                                             use_metis)
     : m_patch_size(patch_size),
       m_num_patches(0),
       m_num_vertices(num_vertices),
@@ -159,7 +159,7 @@ Patcher::Patcher(uint32_t                                        patch_size,
     }
 
 
-    calc_edge_cut(fv, ff_offset, ff_values);
+    // calc_edge_cut(fv, ff_offset, ff_values);
 
     print_statistics();
 
@@ -717,10 +717,10 @@ void Patcher::extract_ribbons(const std::vector<std::vector<uint32_t>>& fv)
 }
 
 void Patcher::assign_patch(
-    const std::vector<std::vector<uint32_t>>&                 fv,
+    const std::vector<std::vector<uint32_t>>&        fv,
     const std::unordered_map<std::pair<uint32_t, uint32_t>,
                              uint32_t,
-                             ::rxmesh::detail::edge_key_hash> edges_map)
+                             detail::edge_key_hash>& edges_map)
 {
     // For every patch p, for every face in the patch, find the three edges
     // that bound that face, and assign them to the patch. For boundary vertices
@@ -740,9 +740,8 @@ void Patcher::assign_patch(
             for (uint32_t v = 0; v < fv[face].size(); ++v) {
                 uint32_t v0 = fv[face][v];
 
-                std::pair<uint32_t, uint32_t> key =
-                    ::rxmesh::detail::edge_key(v0, v1);
-                uint32_t edge_id = edges_map.at(key);
+                std::pair<uint32_t, uint32_t> key = detail::edge_key(v0, v1);
+                uint32_t                      edge_id = edges_map.at(key);
 
                 if (m_vertex_patch[v0] == INVALID32) {
                     m_vertex_patch[v0] = cur_p;

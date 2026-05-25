@@ -32,16 +32,16 @@ class Patcher
    public:
     Patcher() = default;
 
-    Patcher(uint32_t                                  patch_size,
-            const std::vector<uint32_t>&              ff_offset,
-            const std::vector<uint32_t>&              ff_values,
-            const std::vector<std::vector<uint32_t>>& fv,
+    Patcher(uint32_t                                         patch_size,
+            const std::vector<uint32_t>&                     ff_offset,
+            const std::vector<uint32_t>&                     ff_values,
+            const std::vector<std::vector<uint32_t>>&        fv,
             const std::unordered_map<std::pair<uint32_t, uint32_t>,
                                      uint32_t,
-                                     ::rxmesh::detail::edge_key_hash> edges_map,
-            const uint32_t num_vertices,
-            const uint32_t num_edges,
-            bool           use_metis);
+                                     detail::edge_key_hash>& edges_map,
+            const uint32_t                                   num_vertices,
+            const uint32_t                                   num_edges,
+            bool                                             use_metis);
 
     Patcher(std::string filename);
 
@@ -224,10 +224,10 @@ class Patcher
     void compute_inital_compressed_patches();
 
     void assign_patch(
-        const std::vector<std::vector<uint32_t>>&                 fv,
+        const std::vector<std::vector<uint32_t>>&        fv,
         const std::unordered_map<std::pair<uint32_t, uint32_t>,
                                  uint32_t,
-                                 ::rxmesh::detail::edge_key_hash> edges_map);
+                                 detail::edge_key_hash>& edges_map);
 
     void initialize_random_seeds(std::vector<uint32_t>&       seeds,
                                  const std::vector<uint32_t>& ff_offset,
