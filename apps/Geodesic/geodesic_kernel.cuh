@@ -1,5 +1,10 @@
 #pragma once
 
+#include <cuda_runtime_api.h>
+#if CUDART_VERSION >= 12030
+#include <cuda_device_runtime_api.h>
+#endif
+
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
 #include "rxmesh/query.h"
@@ -74,18 +79,30 @@ __device__ __inline__ T update_step(
 }
 
 
+struct GeodesicState
+{
+    int i;
+    int j;
+    int iter;
+    int max_iter;
+    int d;
+    int limits_size;
+    int error;
+};
+
+
 template <typename T, uint32_t blockThreads>
-__global__ static void relax_ptp_rxmesh(
-    const rxmesh::Context                   context,
-    const rxmesh::VertexAttribute<T>        coords,
-    rxmesh::VertexAttribute<T>              new_geo_dist,
-    const rxmesh::VertexAttribute<T>        old_geo_dist,
-    const rxmesh::VertexAttribute<uint32_t> toplesets,
-    const uint32_t                          band_start,
-    const uint32_t                          band_end,
-    uint32_t*                               d_error,
-    const T                                 infinity_val,
-    const T                                 error_tol)
+__device__ __forceinline__ void relax_ptp_rxmesh_impl(
+    const rxmesh::Context              context,
+    const rxmesh::VertexAttribute<T>   coords,
+    rxmesh::VertexAttribute<T>         new_geo_dist,
+    const rxmesh::VertexAttribute<T>   old_geo_dist,
+    const rxmesh::VertexAttribute<int> toplesets,
+    const int                          band_start,
+    const int                          band_end,
+    int*                               d_error,
+    const T                            infinity_val,
+    const T                            error_tol)
 {
     using namespace rxmesh;
 
@@ -132,3 +149,115 @@ __global__ static void relax_ptp_rxmesh(
     ShmemAllocator      shrd_alloc;
     query.dispatch<Op::VV>(block, shrd_alloc, geo_lambda, in_active_set, true);
 }
+
+
+template <typename T, uint32_t blockThreads>
+__global__ static void relax_ptp_rxmesh(
+    const rxmesh::Context              context,
+    const rxmesh::VertexAttribute<T>   coords,
+    rxmesh::VertexAttribute<T>         new_geo_dist,
+    const rxmesh::VertexAttribute<T>   old_geo_dist,
+    const rxmesh::VertexAttribute<int> toplesets,
+    const int                          band_start,
+    const int                          band_end,
+    int*                               d_error,
+    const T                            infinity_val,
+    const T                            error_tol)
+{
+    relax_ptp_rxmesh_impl<T, blockThreads>(context,
+                                           coords,
+                                           new_geo_dist,
+                                           old_geo_dist,
+                                           toplesets,
+                                           band_start,
+                                           band_end,
+                                           d_error,
+                                           infinity_val,
+                                           error_tol);
+}
+
+
+#if CUDART_VERSION >= 12030
+__device__ __forceinline__ void advance_geodesic_state_before_relax(
+    GeodesicState* state)
+{
+    state->iter++;
+    if (state->i < (state->j / 2)) {
+        state->i = state->j / 2;
+    }
+    state->error = 0;
+}
+
+
+__global__ static void init_geodesic_graph_state(
+    GeodesicState*                 state,
+    const int                      limits_size,
+    cudaGraphConditionalHandle     cond_handle)
+{
+    state->i           = 1;
+    state->j           = 2;
+    state->iter        = 0;
+    state->max_iter    = 2 * limits_size;
+    state->d           = 0;
+    state->limits_size = limits_size;
+    state->error       = 0;
+
+    const bool keep_going = state->i < state->j && state->iter < state->max_iter;
+    if (keep_going) {
+        advance_geodesic_state_before_relax(state);
+    }
+    cudaGraphSetConditional(cond_handle, keep_going ? 1u : 0u);
+}
+
+
+__global__ static void advance_geodesic_graph_state(
+    GeodesicState*                 state,
+    const int*                     limits,
+    cudaGraphConditionalHandle     cond_handle)
+{
+    const int n_cond = limits[state->i + 1] - limits[state->i];
+
+    if (n_cond == state->error) {
+        state->i++;
+    }
+    if (state->j < state->limits_size - 1) {
+        state->j++;
+    }
+
+    state->d = !state->d;
+
+    const bool keep_going = state->i < state->j && state->iter < state->max_iter;
+    if (keep_going) {
+        advance_geodesic_state_before_relax(state);
+    }
+    cudaGraphSetConditional(cond_handle, keep_going ? 1u : 0u);
+}
+
+
+template <typename T, uint32_t blockThreads>
+__global__ static void relax_ptp_rxmesh_graph(
+    const rxmesh::Context              context,
+    const rxmesh::VertexAttribute<T>   coords,
+    rxmesh::VertexAttribute<T>         geo_0,
+    rxmesh::VertexAttribute<T>         geo_1,
+    const rxmesh::VertexAttribute<int> toplesets,
+    GeodesicState*                     state,
+    const T                            infinity_val,
+    const T                            error_tol)
+{
+    const int band_start = state->i;
+    const int band_end   = state->j;
+
+    const bool d_is_zero = state->d == 0;
+    relax_ptp_rxmesh_impl<T, blockThreads>(context,
+                                           coords,
+                                           d_is_zero ? geo_1 : geo_0,
+                                           d_is_zero ? geo_0 : geo_1,
+                                           toplesets,
+                                           band_start,
+                                           band_end,
+                                           &state->error,
+                                           infinity_val,
+                                           error_tol);
+}
+#endif

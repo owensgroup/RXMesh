@@ -29,6 +29,8 @@ struct arg
 
 #include "geodesic_ptp_openmesh.h"
 #include "geodesic_ptp_rxmesh.h"
+#include "geodesic_ptp_rxmesh_graph.h"
+
 
 void geodesic()
 {
@@ -76,8 +78,56 @@ void geodesic()
     std::vector<uint32_t> limits;
     geodesic_ptp_openmesh<rx_coord_t>(h_seeds, sorted_index, limits, toplesets);
 
+
     // RXMesh Impl
-    geodesic_rxmesh<rx_coord_t>(rx, h_seeds, sorted_index, limits, toplesets);
+    //geodesic_rxmesh<rx_coord_t>(rx, h_seeds, sorted_index, limits, toplesets);
+
+    if (Arg.topleset_backend == "gpu") {
+        auto seed_mask = *rx.add_vertex_attribute<uint8_t>("seed_mask", 1);
+        seed_mask.reset(uint8_t(0), HOST);
+        rx.for_each_vertex(HOST, [&](const VertexHandle vh) {
+            const uint32_t v_id = rx.map_to_global(vh);
+            for (int k = 0; k < h_seeds.rows(); ++k) {
+                if (h_seeds(k, 0) == static_cast<int>(v_id)) {
+                    seed_mask(vh, 0) = uint8_t(1);
+                    break;
+                }
+            }
+        });
+        seed_mask.move(HOST, DEVICE);
+
+        d_toplesets =
+            rx.add_vertex_attribute<int>("topleset", 1, LOCATION_ALL);
+
+        uint32_t    num_levels = 0;
+        const float bfs_ms     = compute_toplesets_device<int>(
+            rx, seed_mask, *d_toplesets, num_levels);
+        RXMESH_INFO("GPU topleset BFS took {} (ms), {} levels",
+                    bfs_ms,
+                    num_levels);
+
+        d_toplesets->move(DEVICE, HOST);
+
+        limits = DenseMatrix<int>(num_levels + 2, 1, HOST);
+        build_limits_from_toplesets<int>(
+            rx, *d_toplesets, num_levels, limits, limits_size);
+    } else if (Arg.topleset_backend == "cpu") {
+        std::vector<int> h_toplesets(rx.get_num_vertices(), 1);
+        limits = DenseMatrix<int>(rx.get_num_vertices() + 2, 1, HOST);
+        geodesic_ptp_openmesh<rx_coord_t>(
+            h_seeds, limits, limits_size, h_toplesets);
+
+        d_toplesets = rx.add_vertex_attribute(h_toplesets, "topleset");
+    } else {
+        RXMESH_ERROR(
+            "Unknown --topleset_backend '{}'. Expected 'gpu' or 'cpu'.",
+            Arg.topleset_backend);
+        return;
+    }
+
+    geodesic_rxmesh_graph<rx_coord_t>(
+        rx, h_seeds, limits, limits_size, *d_toplesets);
+
 }
 
 int main(int argc, char** argv)
