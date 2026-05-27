@@ -421,6 +421,46 @@ class RXMesh
     }
 
 
+    template <typename HandleT>
+    uint32_t* get_element_prefix(locationT location)
+    {
+        if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+            if (location == HOST) {
+                return m_h_vertex_prefix;
+            } else if (location == DEVICE) {
+                return m_d_vertex_prefix;
+            } else {
+                RXMESH_ERROR("RXMesh::get_element_prefix invalid location {}",
+                             location_to_string(location));
+                return nullptr;
+            }
+        }
+
+        if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+            if (location == HOST) {
+                return m_h_edge_prefix;
+            } else if (location == DEVICE) {
+                return m_d_edge_prefix;
+            } else {
+                RXMESH_ERROR("RXMesh::get_element_prefix invalid location {}",
+                             location_to_string(location));
+                return nullptr;
+            }
+        }
+
+        if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+            if (location == HOST) {
+                return m_h_face_prefix;
+            } else if (location == DEVICE) {
+                return m_d_face_prefix;
+            } else {
+                RXMESH_ERROR("RXMesh::get_element_prefix invalid location {}",
+                             location_to_string(location));
+                return nullptr;
+            }
+        }
+    }
+
    protected:
     // Edge hash map that takes two vertices and return their edge id
     using EdgeMapT = std::unordered_map<std::pair<uint32_t, uint32_t>,
@@ -599,10 +639,7 @@ class RXMesh
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_f;
 
     // the prefix sum of the owned vertices/edges/faces in patches
-    uint32_t* m_h_vertex_prefix;
-    uint32_t* m_h_edge_prefix;
-    uint32_t* m_h_face_prefix;
-
+    uint32_t *m_h_vertex_prefix, *m_h_edge_prefix, *m_h_face_prefix;
     uint32_t *m_d_vertex_prefix, *m_d_edge_prefix, *m_d_face_prefix;
 
     // Store the mapping from linear_id to Vertex/Edge/FaceHandle

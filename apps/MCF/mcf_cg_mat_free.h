@@ -46,7 +46,7 @@ void run_cg_mat_free(rxmesh::RXMeshStatic& rx,
     auto input_coord = rx.get_input_vertex_coordinates();
 
     // RHS
-    auto B = rx.add_vertex_attribute<T>("B", 3, rxmesh::DEVICE, rxmesh::SoA);
+    auto B = rx.add_vertex_attribute<T>("B", 3, rxmesh::DEVICE, rxmesh::AoSoA);
     B->reset(0.0, rxmesh::DEVICE);
 
     // the unknowns

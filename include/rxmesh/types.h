@@ -84,8 +84,9 @@ static std::string location_to_string(const locationT location)
 using layoutT = uint32_t;
 enum : layoutT
 {
-    AoS = 0x00,
-    SoA = 0x01,
+    AoS   = 0x00,
+    AoSoA = 0x01,
+    SoA   = 0x02,
 };
 /**
  * @brief convert locationT to string
@@ -95,6 +96,8 @@ static std::string layout_to_string(const layoutT layout)
     switch (layout) {
         case AoS:
             return "AoS";
+        case AoSoA:
+            return "AoSoA";
         case SoA:
             return "SoA";
         default: {

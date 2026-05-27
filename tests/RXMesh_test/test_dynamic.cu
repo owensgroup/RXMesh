@@ -462,6 +462,26 @@ TEST(RXMeshDynamic, RandomCollapse)
 
     EXPECT_TRUE(rx.validate());
 
+    EXPECT_EQ(coords->rows(), rx.get_num_vertices());
+    EXPECT_EQ(v_attr->rows(), rx.get_num_vertices());
+    EXPECT_EQ(e_attr->rows(), rx.get_num_edges());
+    EXPECT_EQ(f_attr->rows(), rx.get_num_faces());
+
+    auto late_v_attr = rx.add_vertex_attribute<int>("lateVAttr", 1, HOST);
+    auto late_e_attr = rx.add_edge_attribute<int>("lateEAttr", 1, HOST);
+    auto late_f_attr = rx.add_face_attribute<int>("lateFAttr", 1, HOST);
+    EXPECT_EQ(late_v_attr->rows(), v_attr->rows());
+    EXPECT_EQ(late_e_attr->rows(), e_attr->rows());
+    EXPECT_EQ(late_f_attr->rows(), f_attr->rows());
+
+    EXPECT_FALSE(rx.supports_global_soa_attribute_layout());
+#ifdef NDEBUG
+    auto dynamic_soa_attr =
+        rx.add_vertex_attribute<int>("dynamicSoAFallback", 1, HOST, SoA);
+    EXPECT_EQ(dynamic_soa_attr->get_layout(), AoSoA);
+    EXPECT_EQ(dynamic_soa_attr->rows(), rx.get_num_vertices());
+#endif
+
     // rx.export_obj(STRINGIFY(OUTPUT_DIR) "sphere3_33.obj", *coords);
 
 #if USE_POLYSCOPE

@@ -112,6 +112,14 @@ class RXMeshStatic : public RXMesh
 
     virtual ~RXMeshStatic() = default;
 
+    /**
+     * @brief True when attributes may use global column-major SoA storage.
+     */
+    virtual bool supports_global_soa_attribute_layout() const
+    {
+        return true;
+    }
+
 #if USE_POLYSCOPE
     /**
      * @brief return a pointer to polyscope surface which has been registered
@@ -593,8 +601,8 @@ class RXMeshStatic : public RXMesh
      * names
      * @param num_attributes number of the attributes
      * @param location where to allocate the attributes
-     * @param layout as SoA or AoS
-     * operations
+     * @param layout as AoS, AoSoA (patch-local SoA), or SoA (global
+     * column-major) operations
      * @return shared pointer to the created attribute
      */
     template <class T>
@@ -602,7 +610,7 @@ class RXMeshStatic : public RXMesh
         const std::string& name,
         uint32_t           num_attributes,
         locationT          location = LOCATION_ALL,
-        layoutT            layout   = SoA);
+        layoutT            layout   = AoSoA);
 
     /**
      * @brief Adding a new face attribute by reading values from a host buffer
@@ -612,15 +620,15 @@ class RXMeshStatic : public RXMesh
      * @tparam T type of the attribute
      * @param name of the attribute. Should not collide with other attributes
      * names
-     * @param layout as SoA or AoS
-     * operations
+     * @param layout as AoS, AoSoA (patch-local SoA), or SoA (global
+     * column-major) operations
      * @return shared pointer to the created attribute
      */
     template <class T>
     std::shared_ptr<FaceAttribute<T>> add_face_attribute(
         const std::vector<std::vector<T>>& f_attributes,
         const std::string&                 name,
-        layoutT                            layout = SoA);
+        layoutT                            layout = AoSoA);
 
     /**
      * @brief Adding a new face attribute similar to another face attribute
@@ -644,15 +652,15 @@ class RXMeshStatic : public RXMesh
      * @tparam T type of the attribute
      * @param name of the attribute. Should not collide with other attributes
      * names
-     * @param layout as SoA or AoS
-     * operations
+     * @param layout as AoS, AoSoA (patch-local SoA), or SoA (global
+     * column-major) operations
      * @return shared pointer to the created attribute
      */
     template <class T>
     std::shared_ptr<FaceAttribute<T>> add_face_attribute(
         const std::vector<T>& f_attributes,
         const std::string&    name,
-        layoutT               layout = SoA);
+        layoutT               layout = AoSoA);
 
     /**
      * @brief Adding a new edge attribute
@@ -661,8 +669,8 @@ class RXMeshStatic : public RXMesh
      * names
      * @param num_attributes number of the attributes
      * @param location where to allocate the attributes
-     * @param layout as SoA or AoS
-     * operations
+     * @param layout as AoS, AoSoA (patch-local SoA), or SoA (global
+     * column-major) operations
      * @return shared pointer to the created attribute
      */
     template <class T>
@@ -670,7 +678,7 @@ class RXMeshStatic : public RXMesh
         const std::string& name,
         uint32_t           num_attributes,
         locationT          location = LOCATION_ALL,
-        layoutT            layout   = SoA);
+        layoutT            layout   = AoSoA);
 
     /**
      * @brief Adding a new edge attribute similar to another edge attribute
@@ -693,8 +701,8 @@ class RXMeshStatic : public RXMesh
      * names
      * @param num_attributes number of the attributes
      * @param location where to allocate the attributes
-     * @param layout as SoA or AoS
-     * operations
+     * @param layout as AoS, AoSoA (patch-local SoA), or SoA (global
+     * column-major) operations
      * @return shared pointer to the created attribute
      */
     template <class T>
@@ -702,7 +710,7 @@ class RXMeshStatic : public RXMesh
         const std::string& name,
         uint32_t           num_attributes,
         locationT          location = LOCATION_ALL,
-        layoutT            layout   = SoA);
+        layoutT            layout   = AoSoA);
 
     /**
      * @brief Adding a new vertex attribute similar to another vertex attribute
@@ -727,15 +735,15 @@ class RXMeshStatic : public RXMesh
      * @param v_attributes attributes to read
      * @param name of the attribute. Should not collide with other attributes
      * names
-     * @param layout as SoA or AoS
-     * operations
+     * @param layout as AoS, AoSoA (patch-local SoA), or SoA (global
+     * column-major) operations
      * @return shared pointer to the created attribute
      */
     template <class T>
     std::shared_ptr<VertexAttribute<T>> add_vertex_attribute(
         const std::vector<std::vector<T>>& v_attributes,
         const std::string&                 name,
-        layoutT                            layout = SoA);
+        layoutT                            layout = AoSoA);
 
     /**
      * @brief Adding a new vertex attribute by reading values from a host buffer
@@ -746,15 +754,15 @@ class RXMeshStatic : public RXMesh
      * @param v_attributes attributes to read
      * @param name of the attribute. Should not collide with other attributes
      * names
-     * @param layout as SoA or AoS
-     * operations
+     * @param layout as AoS, AoSoA (patch-local SoA), or SoA (global
+     * column-major) operations
      * @return shared pointer to the created attribute
      */
     template <class T>
     std::shared_ptr<VertexAttribute<T>> add_vertex_attribute(
         const std::vector<T>& v_attributes,
         const std::string&    name,
-        layoutT               layout = SoA);
+        layoutT               layout = AoSoA);
 
     /**
      * @brief similar to add_vertex/edge/face_attribute where the mesh element
@@ -766,7 +774,7 @@ class RXMeshStatic : public RXMesh
         const std::string& name,
         uint32_t           num_attributes,
         locationT          location = LOCATION_ALL,
-        layoutT            layout   = SoA);
+        layoutT            layout   = AoSoA);
 
     /**
      * @brief Adding a new attribute similar to another attribute in allocation,

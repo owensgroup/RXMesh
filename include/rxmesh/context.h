@@ -45,10 +45,11 @@ class Context
     {
     }
 
-    __device__ __forceinline__          Context(const Context&)   = default;
-    __device__ __forceinline__          Context(Context&&)        = default;
-    __device__ __forceinline__ Context& operator=(const Context&) = default;
-    __device__ __forceinline__ Context& operator=(Context&&)      = default;
+    __host__ __device__ __forceinline__ Context(const Context&) = default;
+    __host__ __device__ __forceinline__ Context(Context&&)      = default;
+    __host__ __device__ __forceinline__ Context& operator=(const Context&) =
+        default;
+    __host__ __device__ __forceinline__ Context& operator=(Context&&) = default;
 
     /**
      * @brief Total number of edges in mesh

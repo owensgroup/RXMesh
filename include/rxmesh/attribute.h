@@ -11,6 +11,7 @@
 #include "rxmesh/patch_info.h"
 #include "rxmesh/types.h"
 
+#include "rxmesh/context.h"
 #include "rxmesh/diff/util.h"
 #include "rxmesh/matrix/dense_matrix.h"
 
@@ -72,6 +73,7 @@ class Attribute : public AttributeBase
           m_d_patches_info(nullptr),
           m_name(nullptr),
           m_num_attributes(0),
+          m_num_elements(0),
           m_allocated(LOCATION_NONE),
           m_h_data(nullptr),
           m_d_data(nullptr),
@@ -79,7 +81,9 @@ class Attribute : public AttributeBase
           m_d_offsets(nullptr),
           m_max_num_patches(0),
           m_layout(AoS),
-          m_total_bytes(0)
+          m_total_bytes(0),
+          m_h_linear_id_element_prefix(nullptr),
+          m_d_linear_id_element_prefix(nullptr)
     {
 #if defined(__CUDACC__)
         this->m_name    = (char*)malloc(sizeof(char) * 1);
@@ -177,7 +181,14 @@ class Attribute : public AttributeBase
 
     __host__ __device__ __forceinline__ uint32_t pitch_y(const uint32_t p) const
     {
-        return (m_layout == AoS) ? 1 : capacity(p);
+        if (m_layout == AoS) {
+            return 1;
+        } else if (m_layout == SoA) {
+            return m_num_elements;
+        } else {
+            assert(m_layout == AoSoA);
+            return capacity(p);
+        }
     }
 
     Attribute(const Attribute& rhs) = default;
@@ -213,6 +224,41 @@ class Attribute : public AttributeBase
      * @brief Check if attribute is allocated on host
      */
     __host__ __device__ __inline__ bool is_host_allocated() const;
+
+    /**
+     * @brief Return the raw storage pointer for a host or device
+     * allocation.
+     */
+    __host__ __device__ T* data(locationT location = DEVICE) const
+    {
+        if ((location & HOST) == HOST) {
+            return m_h_data;
+        }
+
+        if ((location & DEVICE) == DEVICE) {
+            return m_d_data;
+        }
+
+        assert(1 != 1);
+        return nullptr;
+    }
+
+    /**
+     * @brief Number of T values in the raw allocation.
+     */
+    __host__ __device__ size_t storage_size() const
+    {
+        return m_total_bytes / sizeof(T);
+    }
+
+    /**
+     * @brief True when the raw storage is a global column-major
+     * matrix.
+     */
+    __host__ __device__ bool is_tensor_layout() const
+    {
+        return m_layout == SoA;
+    }
 
     /**
      * @brief Reset attribute to certain value
@@ -364,6 +410,18 @@ class Attribute : public AttributeBase
         assert(p_id < m_max_num_patches);
         assert(attr < m_num_attributes);
 
+        if (m_layout == SoA) {
+#ifdef __CUDA_ARCH__
+            assert(local_id < capacity(p_id));
+            return m_d_data[attr * m_num_elements +
+                            linear_index(p_id, local_id)];
+#else
+            assert(local_id < capacity(p_id));
+            return m_h_data[attr * m_num_elements +
+                            linear_index(p_id, local_id)];
+#endif
+        }
+
 #ifdef __CUDA_ARCH__
         assert(local_id < capacity(p_id));
         const uint32_t offset = m_d_offsets[p_id];
@@ -389,6 +447,18 @@ class Attribute : public AttributeBase
     {
         assert(p_id < m_max_num_patches);
         assert(attr < m_num_attributes);
+
+        if (m_layout == SoA) {
+#ifdef __CUDA_ARCH__
+            assert(local_id < capacity(p_id));
+            return m_d_data[attr * m_num_elements +
+                            linear_index(p_id, local_id)];
+#else
+            assert(local_id < capacity(p_id));
+            return m_h_data[attr * m_num_elements +
+                            linear_index(p_id, local_id)];
+#endif
+        }
 
 #ifdef __CUDA_ARCH__
         assert(local_id < capacity(p_id));
@@ -549,6 +619,17 @@ class Attribute : public AttributeBase
     __host__ __device__ __inline__ bool is_empty() const;
 
    protected:
+    __host__ __device__ __forceinline__ uint32_t
+    linear_index(const uint32_t p_id, const uint16_t local_id) const
+    {
+
+#ifdef __CUDA_ARCH__
+        return m_d_linear_id_element_prefix[p_id] + local_id;
+#else
+        return m_h_linear_id_element_prefix[p_id] + local_id;
+#endif
+    }
+
     /**
      * @brief allocate internal memory
      */
@@ -564,6 +645,7 @@ class Attribute : public AttributeBase
     const PatchInfo* m_d_patches_info;
     char*            m_name;
     uint32_t         m_num_attributes;
+    uint32_t         m_num_elements;
     locationT        m_allocated;
     T*               m_h_data;
     T*               m_d_data;
@@ -572,6 +654,8 @@ class Attribute : public AttributeBase
     uint32_t         m_max_num_patches;
     layoutT          m_layout;
     size_t           m_total_bytes;
+    uint32_t*        m_h_linear_id_element_prefix;
+    uint32_t*        m_d_linear_id_element_prefix;
 
     constexpr static uint32_t m_block_size = 256;
 };

@@ -735,6 +735,11 @@ class RXMeshDynamic : public RXMeshStatic
 
     virtual ~RXMeshDynamic() = default;
 
+    bool supports_global_soa_attribute_layout() const override
+    {
+        return false;
+    }
+
     /**
      * @brief check if there is remaining patches not processed yet
      */

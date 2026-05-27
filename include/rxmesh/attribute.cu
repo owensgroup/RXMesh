@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstring>
 #include <memory>
 #include <vector>
@@ -17,19 +18,11 @@ namespace rxmesh {
 
 namespace detail {
 template <typename T, typename HandleT>
-__global__ void memset_attribute(const Attribute<T, HandleT> attr,
-                                 const T                     value,
-                                 const uint32_t              num_patches,
-                                 const uint32_t              num_attributes)
+__global__ void memset_attribute(T* data, const T value, const size_t size)
 {
-    uint32_t p_id = blockIdx.x;
-    if (p_id < num_patches) {
-        const uint16_t element_per_patch = attr.capacity(p_id);
-        for (uint16_t i = threadIdx.x; i < element_per_patch; i += blockDim.x) {
-            for (uint32_t j = 0; j < num_attributes; ++j) {
-                attr(p_id, i, j) = value;
-            }
-        }
+    const size_t tid = threadIdx.x + blockIdx.x * blockDim.x;
+    if (tid < size) {
+        data[tid] = value;
     }
 }
 }  // namespace detail
@@ -46,6 +39,7 @@ __host__ Attribute<T, HandleT>::Attribute(const char*    name,
       m_d_patches_info(rxmesh->m_d_patches_info),
       m_name(nullptr),
       m_num_attributes(num_attributes),
+      m_num_elements(0),
       m_allocated(LOCATION_NONE),
       m_h_data(nullptr),
       m_d_data(nullptr),
@@ -53,8 +47,29 @@ __host__ Attribute<T, HandleT>::Attribute(const char*    name,
       m_d_offsets(nullptr),
       m_max_num_patches(rxmesh->get_max_num_patches()),
       m_layout(layout),
-      m_total_bytes(0)
+      m_total_bytes(0),
+      m_h_linear_id_element_prefix(rxmesh->get_element_prefix<HandleT>(HOST)),
+      m_d_linear_id_element_prefix(rxmesh->get_element_prefix<HandleT>(DEVICE))
+
 {
+    if (m_layout == SoA && !m_rxmesh->supports_global_soa_attribute_layout()) {
+        RXMESH_WARN(
+            "Attribute '{}' requested true SoA on a mesh that does not support "
+            "global SoA attributes. Falling back to AoSoA.",
+            name == nullptr ? "" : name);
+        m_layout = AoSoA;
+    }
+
+    if constexpr (std::is_same_v<HandleT, VertexHandle>) {
+        m_num_elements = rxmesh->get_num_vertices();
+    }
+    if constexpr (std::is_same_v<HandleT, EdgeHandle>) {
+        m_num_elements = rxmesh->get_num_edges();
+    }
+    if constexpr (std::is_same_v<HandleT, FaceHandle>) {
+        m_num_elements = rxmesh->get_num_faces();
+    }
+
     if (name != nullptr) {
         this->m_name = (char*)malloc(sizeof(char) * (strlen(name) + 1));
         strcpy(this->m_name, name);
@@ -70,6 +85,12 @@ __host__ Attribute<T, HandleT>::Attribute(const char*    name,
 template <class T, typename HandleT>
 T& Attribute<T, HandleT>::operator()(size_t i, size_t j)
 {
+    if (m_layout == SoA) {
+        assert(i < m_num_elements);
+        assert(j < m_num_attributes);
+        return m_h_data[j * m_num_elements + i];
+    }
+
     if constexpr (std::is_same_v<HandleT, VertexHandle>) {
         return this->operator()(m_rxmesh->map_to_local_vertex(i), j);
     }
@@ -84,6 +105,12 @@ T& Attribute<T, HandleT>::operator()(size_t i, size_t j)
 template <class T, typename HandleT>
 T& Attribute<T, HandleT>::operator()(size_t i, size_t j) const
 {
+    if (m_layout == SoA) {
+        assert(i < m_num_elements);
+        assert(j < m_num_attributes);
+        return m_h_data[j * m_num_elements + i];
+    }
+
     if constexpr (std::is_same_v<HandleT, VertexHandle>) {
         return this->operator()(m_rxmesh->map_to_local_vertex(i), j);
     }
@@ -110,6 +137,10 @@ size_t Attribute<T, HandleT>::cols() const
 template <class T, typename HandleT>
 uint32_t Attribute<T, HandleT>::size() const
 {
+    if (m_layout == SoA) {
+        return m_num_elements;
+    }
+
     if constexpr (std::is_same_v<HandleT, VertexHandle>) {
         return m_rxmesh->get_num_vertices();
     }
@@ -121,6 +152,8 @@ uint32_t Attribute<T, HandleT>::size() const
     if constexpr (std::is_same_v<HandleT, FaceHandle>) {
         return m_rxmesh->get_num_faces();
     }
+
+    return m_num_elements;
 }
 
 template <class T, typename HandleT>
@@ -276,20 +309,17 @@ void Attribute<T, HandleT>::reset(const T      value,
                                   cudaStream_t stream)
 {
     if (((location & DEVICE) == DEVICE) && is_device_allocated()) {
-        const int threads = 256;
-        detail::memset_attribute<T, HandleT>
-            <<<m_rxmesh->get_num_patches(), threads, 0, stream>>>(
-                *this, value, m_rxmesh->get_num_patches(), m_num_attributes);
+        const int    threads = 256;
+        const size_t count   = storage_size();
+        if (count > 0) {
+            detail::memset_attribute<T, HandleT>
+                <<<DIVIDE_UP(count, threads), threads, 0, stream>>>(
+                    m_d_data, value, count);
+        }
     }
 
     if (((location & HOST) == HOST) && is_host_allocated()) {
-#pragma omp parallel for
-        for (int p = 0; p < static_cast<int>(m_rxmesh->get_num_patches());
-             ++p) {
-            for (uint32_t e = 0; e < capacity(p); ++e) {
-                m_h_data[m_h_offsets[p] + e] = value;
-            }
-        }
+        std::fill_n(m_h_data, storage_size(), value);
     }
 }
 
@@ -522,13 +552,17 @@ void Attribute<T, HandleT>::allocate(locationT location)
             // alloc data
             CUDA_ERROR(cudaMalloc((void**)&(m_d_data), get_total_bytes()));
 
-            // alloc and move offset buffer
-            CUDA_ERROR(cudaMalloc((void**)&(m_d_offsets),
-                                  sizeof(uint32_t) * (m_max_num_patches + 1)));
-            CUDA_ERROR(cudaMemcpy(m_d_offsets,
-                                  m_h_offsets,
-                                  sizeof(uint32_t) * (m_max_num_patches + 1),
-                                  cudaMemcpyHostToDevice));
+            if (m_layout != SoA) {
+                // alloc and move offset buffer
+                CUDA_ERROR(
+                    cudaMalloc((void**)&(m_d_offsets),
+                               sizeof(uint32_t) * (m_max_num_patches + 1)));
+                CUDA_ERROR(
+                    cudaMemcpy(m_d_offsets,
+                               m_h_offsets,
+                               sizeof(uint32_t) * (m_max_num_patches + 1),
+                               cudaMemcpyHostToDevice));
+            }
 
             m_allocated = m_allocated | DEVICE;
         }
@@ -538,6 +572,11 @@ void Attribute<T, HandleT>::allocate(locationT location)
 template <class T, typename HandleT>
 void Attribute<T, HandleT>::allocate_offset()
 {
+    if (m_layout == SoA) {
+        m_total_bytes = sizeof(T) * m_num_elements * m_num_attributes;
+        return;
+    }
+
     if (!m_h_offsets) {
         m_h_offsets = static_cast<uint32_t*>(
             malloc(sizeof(uint32_t) * (m_max_num_patches + 1)));

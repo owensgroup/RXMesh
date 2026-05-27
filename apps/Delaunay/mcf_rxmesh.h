@@ -67,19 +67,19 @@ MCFData mcf_rxmesh_cg(rxmesh::RXMeshDynamic& rx, bool update_coordinates)
     auto input_coord = rx.get_input_vertex_coordinates();
 
     // S in CG
-    auto S = rx.add_vertex_attribute<T>("S", 3, rxmesh::DEVICE, rxmesh::SoA);
+    auto S = rx.add_vertex_attribute<T>("S", 3, rxmesh::DEVICE, rxmesh::AoSoA);
     S->reset(0.0, rxmesh::DEVICE);
 
     // P in CG
-    auto P = rx.add_vertex_attribute<T>("P", 3, rxmesh::DEVICE, rxmesh::SoA);
+    auto P = rx.add_vertex_attribute<T>("P", 3, rxmesh::DEVICE, rxmesh::AoSoA);
     P->reset(0.0, rxmesh::DEVICE);
 
     // R in CG
-    auto R = rx.add_vertex_attribute<T>("R", 3, rxmesh::DEVICE, rxmesh::SoA);
+    auto R = rx.add_vertex_attribute<T>("R", 3, rxmesh::DEVICE, rxmesh::AoSoA);
     R->reset(0.0, rxmesh::DEVICE);
 
     // B in CG
-    auto B = rx.add_vertex_attribute<T>("B", 3, rxmesh::DEVICE, rxmesh::SoA);
+    auto B = rx.add_vertex_attribute<T>("B", 3, rxmesh::DEVICE, rxmesh::AoSoA);
     B->reset(0.0, rxmesh::DEVICE);
 
     // X in CG (the output)
