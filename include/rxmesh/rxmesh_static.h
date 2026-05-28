@@ -904,6 +904,15 @@ class RXMeshStatic : public RXMesh
     template <typename HandleT>
     HandleT get_owner_handle(const HandleT input) const;
 
+
+    /**
+     * @brief get a list of name of all attributes created 
+     */
+    std::vector<std::string> get_attribute_names() const
+    {
+        return m_attr_container->get_attribute_names();
+    }
+
     /**
      * @brief Export the mesh to obj file
      * @tparam T type of vertices coordinates
