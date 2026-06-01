@@ -694,6 +694,8 @@ struct DenseMatrix
                 m_cublas_handle, rows() * cols(), m_d_val, 1, &index));
         }
 
+        index -= 1;
+
         T ret = 0;
 
         CUDA_ERROR(cudaMemcpyAsync(
