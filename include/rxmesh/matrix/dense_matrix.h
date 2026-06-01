@@ -665,7 +665,7 @@ struct DenseMatrix
         T ret = 0;
 
         CUDA_ERROR(cudaMemcpyAsync(
-            &ret, m_d_val + index, sizeof(T), cudaMemcpyDeviceToHost));
+            &ret, m_d_val + index, sizeof(T), cudaMemcpyDeviceToHost, stream));
 
         return std::abs(ret);
     }
@@ -697,7 +697,7 @@ struct DenseMatrix
         T ret = 0;
 
         CUDA_ERROR(cudaMemcpyAsync(
-            &ret, m_d_val + index, sizeof(T), cudaMemcpyDeviceToHost));
+            &ret, m_d_val + index, sizeof(T), cudaMemcpyDeviceToHost, stream));
 
         return std::abs(ret);
     }
