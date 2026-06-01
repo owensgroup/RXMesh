@@ -388,6 +388,22 @@ struct SparseMatrix
     }
 
     /**
+     * @brief const version of the above for_each()
+     */
+    template <typename FuncT>
+    __host__ void for_each(FuncT fun) const
+    {
+        for (IndexT r = 0; r < rows(); ++r) {
+            IndexT start = m_h_row_ptr[r];
+            IndexT stop  = m_h_row_ptr[r + 1];
+            for (IndexT i = start; i < stop; ++i) {
+                IndexT c = m_h_col_idx[i];
+                fun(r, c, get_val_at(i));
+            }
+        }
+    }
+
+    /**
      * @brief access the matrix using the handle as defined by the query
      * operation. This function can only be called if the memory is Not
      * user-managed
