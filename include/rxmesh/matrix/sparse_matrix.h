@@ -1266,7 +1266,7 @@ struct SparseMatrix
      * @brief allocate the temp buffer needed for sparse matrix multiplication
      * by a dense vector
      */
-    __host__ void alloc_multiply_buffer(T*           in_arr,
+    __host__ void alloc_multiply_buffer(const T*     in_arr,
                                         T*           rt_arr,
                                         cudaStream_t stream = 0)
     {
@@ -1313,7 +1313,7 @@ struct SparseMatrix
      * TODO allow this function to take a DenseMatrix instead that represent a
      * dense vector, i.e., one column with multiple rows
      */
-    __host__ void multiply(T* in_arr, T* rt_arr, cudaStream_t stream = 0)
+    __host__ void multiply(const T* in_arr, T* rt_arr, cudaStream_t stream = 0)
     {
         const T alpha = 1.0;
         const T beta  = 0.0;
