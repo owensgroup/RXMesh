@@ -1276,8 +1276,9 @@ struct SparseMatrix
         cusparseDnVecDescr_t vecx = NULL;
         cusparseDnVecDescr_t vecy = NULL;
 
-        CUSPARSE_ERROR(
-            cusparseCreateDnVec(&vecx, m_num_cols, in_arr, cuda_type<T>()));
+        CUSPARSE_ERROR(cusparseCreateDnVec(
+            &vecx, m_num_cols, const_cast<T*>(in_arr), cuda_type<T>()));
+
         CUSPARSE_ERROR(
             cusparseCreateDnVec(&vecy, m_num_rows, rt_arr, cuda_type<T>()));
 
@@ -1321,8 +1322,9 @@ struct SparseMatrix
         cusparseDnVecDescr_t vecx = NULL;
         cusparseDnVecDescr_t vecy = NULL;
 
-        CUSPARSE_ERROR(
-            cusparseCreateDnVec(&vecx, m_num_cols, in_arr, cuda_type<T>()));
+        CUSPARSE_ERROR(cusparseCreateDnVec(
+            &vecx, m_num_cols, const_cast<T*>(in_arr), cuda_type<T>()));
+
         CUSPARSE_ERROR(
             cusparseCreateDnVec(&vecy, m_num_rows, rt_arr, cuda_type<T>()));
 
