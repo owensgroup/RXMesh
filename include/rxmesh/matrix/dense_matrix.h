@@ -71,6 +71,7 @@ struct DenseMatrix
                          IndexT        num_cols,
                          locationT     location)
         : m_context(rx.get_context()),
+          m_allocated(LOCATION_NONE),
           m_num_rows(num_rows),
           m_num_cols(num_cols),
           m_dendescr(NULL),
@@ -93,7 +94,8 @@ struct DenseMatrix
      * means that you can not access the matrix using handles
      */
     explicit DenseMatrix(IndexT num_rows, IndexT num_cols, locationT location)
-        : m_num_rows(num_rows),
+        : m_allocated(LOCATION_NONE),
+          m_num_rows(num_rows),
           m_num_cols(num_cols),
           m_dendescr(NULL),
           m_h_val(nullptr),
