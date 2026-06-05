@@ -134,8 +134,10 @@ __device__ __inline__ void query_block_dispatcher(
                     compute_active_set({patch_info.patch_id, local_id});
                 is_par = !is_del && is_own && is_act;
             }
-            is_participant     = is_participant || is_par;
-            uint32_t warp_mask = __ballot_sync(0xFFFFFFFF, is_par);
+            is_participant = is_participant || is_par;
+            // Participation bitmask is 32-bit words (one per 32 elements); ballot
+            // per 32-lane sub-group so a 64-lane wavefront writes both its words.
+            uint32_t warp_mask = ballot_sub_warp_32(is_par);
             uint32_t lane_id   = threadIdx.x % 32;
             if (lane_id == 0) {
                 uint32_t mask_id               = local_id / 32;

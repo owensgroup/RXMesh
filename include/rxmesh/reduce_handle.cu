@@ -62,7 +62,7 @@ T ReduceHandle<T, HandleT>::dot(const Attribute<T, HandleT>& attr1,
             "allocated on the device");
     }
 
-    detail::dot_kernel<T, attr1.m_block_size>
+    detail::dot_kernel<T, Attribute<T, HandleT>::m_block_size>
         <<<m_max_num_patches, attr1.m_block_size, 0, stream>>>(
             attr1,
             attr2,
@@ -86,7 +86,7 @@ T ReduceHandle<T, HandleT>::norm2(const Attribute<T, HandleT>& attr,
     }
 
 
-    detail::norm2_kernel<T, attr.m_block_size>
+    detail::norm2_kernel<T, Attribute<T, HandleT>::m_block_size>
         <<<m_max_num_patches, attr.m_block_size, 0, stream>>>(
             attr,
             m_max_num_patches,
@@ -111,7 +111,7 @@ typename ReduceHandle<T, HandleT>::KeyValue ReduceHandle<T, HandleT>::arg_max(
 
     detail::ArgMaxOp<HandleT, T> max_pair;
 
-    detail::arg_minmax_kernel<T, attr.m_block_size, HandleT>
+    detail::arg_minmax_kernel<T, Attribute<T, HandleT>::m_block_size, HandleT>
         <<<m_max_num_patches, attr.m_block_size, 0, stream>>>(
             attr,
             attribute_id,
@@ -140,7 +140,7 @@ typename ReduceHandle<T, HandleT>::KeyValue ReduceHandle<T, HandleT>::arg_min(
 
     detail::ArgMinOp<HandleT, T> min_pair;
 
-    detail::arg_minmax_kernel<T, attr.m_block_size, HandleT>
+    detail::arg_minmax_kernel<T, Attribute<T, HandleT>::m_block_size, HandleT>
         <<<m_max_num_patches, attr.m_block_size, 0, stream>>>(
             attr,
             attribute_id,

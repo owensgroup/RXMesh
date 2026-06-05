@@ -1,5 +1,9 @@
 #pragma once
+#if defined(USE_HIP) || defined(__HIP_PLATFORM_AMD__)
+#include "rxmesh/util/cuda_to_hip.h"
+#else
 #include <cuda_runtime.h>
+#endif
 #include <stdint.h>
 
 namespace rxmesh {
@@ -185,7 +189,12 @@ __device__ __forceinline__ unsigned short int atomicCAS(
 __device__ __forceinline__ unsigned dynamic_smem_size()
 {
     unsigned ret;
+#if defined(__HIP_PLATFORM_AMD__)
+    // HIP device code has no %dynamic_smem_size register; only used diagnostically.
+    ret = 0xFFFFFFFFu;
+#else
     asm volatile("mov.u32 %0, %dynamic_smem_size;" : "=r"(ret));
+#endif
     return ret;
 }
 
@@ -224,17 +233,47 @@ __device__ __forceinline__ void device_swap(T*& a, T*& b)
 
 __forceinline__ __device__ unsigned lane_id()
 {
+#if defined(__HIP_PLATFORM_AMD__)
+    return __lane_id();
+#else
     unsigned ret;
     asm volatile("mov.u32 %0, %laneid;" : "=r"(ret));
     return ret;
+#endif
 }
 
 __forceinline__ __device__ unsigned warp_id()
 {
+#if defined(__HIP_PLATFORM_AMD__)
+    // No portable hardware %warpid on HIP; the call sites use this only to
+    // partition block-local work across warps, so the logical warp index is the
+    // correct choice (1D blocks, so this matches lane partitioning).
+    return threadIdx.x / warpSize;
+#else
     // this is not equal to threadIdx.x / 32
     unsigned ret;
     asm volatile("mov.u32 %0, %warpid;" : "=r"(ret));
     return ret;
+#endif
+}
+
+// Ballot a per-lane predicate within the calling lane's 32-lane sub-group and
+// return the 32-bit mask for that sub-group. RXMesh stores participation
+// bitmasks as 32-bit words, one word per 32 mesh elements, and the writer is the
+// sub-group's lane 0 (threadIdx.x % 32 == 0). On NVIDIA a warp IS 32 lanes so
+// this is a plain 32-bit ballot. On a 64-lane CDNA wavefront one ballot spans
+// two 32-element words, so each 32-lane half must extract its own 32 bits --
+// otherwise lanes 32-63 are truncated and the second word is never written.
+__forceinline__ __device__ uint32_t ballot_sub_warp_32(bool predicate)
+{
+#if defined(__HIP_PLATFORM_AMD__)
+    unsigned long long b =
+        __ballot(predicate);  // 64-bit active-lane ballot on wave64
+    const unsigned half = (threadIdx.x % warpSize) / 32;  // 0 or 1
+    return static_cast<uint32_t>((b >> (32 * half)) & 0xFFFFFFFFull);
+#else
+    return __ballot_sync(0xFFFFFFFF, predicate);
+#endif
 }
 
 

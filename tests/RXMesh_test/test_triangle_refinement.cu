@@ -35,7 +35,7 @@ __global__ static void tri_refine(Context                context,
     };
 
     Query<blockThreads> query(context, cavity.patch_id());
-    query.dispatch<Op::FV>(block, shrd_alloc, should_refine);
+    query.template dispatch<Op::FV>(block, shrd_alloc, should_refine);
     block.sync();
 
     block.sync();
@@ -142,8 +142,8 @@ void add_to_polyscope(RXMeshDynamic&          rx,
 
 TEST(RXMeshDynamic, TriangleRefinement)
 {
-
-    RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "rocker-arm.obj");
+    // was 'rocker-arm.obj' but asset no longer found
+    RXMeshDynamic rx(STRINGIFY(INPUT_DIR) "bumpy-cube.obj");
 
     EXPECT_TRUE(rx.validate());
 

@@ -142,7 +142,7 @@ template <typename T>
 __device__ __host__ __inline__ bool is_inf(const T& A)
 {
 
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
     return ::isinf(A);
 #else
     return std::isinf(A);
@@ -156,7 +156,7 @@ template <typename T>
 __device__ __host__ __inline__ bool is_nan(const T& A)
 {
 
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
     return ::isnan(A);
 #else
     return std::isnan(A);
@@ -171,7 +171,7 @@ template <typename T>
 __device__ __host__ __inline__ bool is_finite(const T& A)
 {
 
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
     return ::isfinite(A);
 #else
     return std::isfinite(A);

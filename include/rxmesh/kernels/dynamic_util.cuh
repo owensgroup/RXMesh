@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rxmesh/kernels/util.cuh"
 #include "rxmesh/util/bitmask_util.h"
 #include "rxmesh/util/util.h"
 
@@ -35,12 +36,14 @@ __device__ __forceinline__ void warp_update_mask(const bool thread_predicate,
                                                  uint32_t*      bitmask)
 {
     // if thread's thread_predicate in the N-th lane is true, then warp_maks
-    // N-th bit will be 1
+    // N-th bit will be 1. The bitmask is 32-bit words (one per 32 elements), so
+    // on a 64-lane wavefront ballot per 32-lane sub-group and let each
+    // sub-group's lane 0 write its own word (see ballot_sub_warp_32).
     __syncwarp();
-    uint32_t warp_mask = __ballot_sync(0xFFFFFFFF, thread_predicate);
+    uint32_t warp_mask = ballot_sub_warp_32(thread_predicate);
 
-    // let the thread in first lane writes the new bit mask
-    uint32_t lane_id = threadIdx.x % 32;  // 32 = warp size
+    // let the thread in first lane (of each 32-lane sub-group) write the new mask
+    uint32_t lane_id = threadIdx.x % 32;  // 32 = bitmask word width
     if (lane_id == 0 && warp_mask != 0) {
         // here we first need to bitwise invert the warp_mask and then AND
         // it with bitmask

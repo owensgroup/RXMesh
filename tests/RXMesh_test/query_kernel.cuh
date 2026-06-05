@@ -37,7 +37,7 @@ __global__ static void query_kernel(
 
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<op>(
+    query.template dispatch<op>(
         block,
         shrd_alloc,
         store_lambda,

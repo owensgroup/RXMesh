@@ -56,7 +56,7 @@ __global__ static void extract_separartor(const __grid_constant__ Context
 
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, extract);
+    query.template dispatch<Op::VV>(block, shrd_alloc, extract);
 }
 
 template <uint32_t blockThreads>
@@ -79,7 +79,7 @@ __global__ static void assign_permutation(const __grid_constant__ Context
 
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, assign);
+    query.template dispatch<Op::VV>(block, shrd_alloc, assign);
 }
 }  // namespace detail
 

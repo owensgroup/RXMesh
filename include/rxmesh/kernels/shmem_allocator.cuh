@@ -89,7 +89,13 @@ struct ShmemAllocator
     __device__ __forceinline__ uint32_t get_max_size_bytes() const
     {
         uint32_t ret;
+#if defined(__HIP_PLATFORM_AMD__)
+        // HIP device code has no %dynamic_smem_size register. This value is only
+        // used by the debug over-allocation guard below, so report the max.
+        ret = 0xFFFFFFFFu;
+#else
         asm("mov.u32 %0, %dynamic_smem_size;" : "=r"(ret));
+#endif
         return ret;
     }
 

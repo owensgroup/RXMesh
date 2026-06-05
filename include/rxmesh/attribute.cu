@@ -236,7 +236,7 @@ template <class T, typename HandleT>
 __host__ __device__ __forceinline__ uint32_t
 Attribute<T, HandleT>::size(const uint32_t p) const
 {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
     return m_d_patches_info[p].get_num_elements<HandleT>()[0];
 #else
     return m_h_patches_info[p].get_num_elements<HandleT>()[0];
@@ -247,7 +247,7 @@ template <class T, typename HandleT>
 __host__ __device__ __forceinline__ const PatchInfo&
 Attribute<T, HandleT>::get_patch_info(const uint32_t p) const
 {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
     return m_d_patches_info[p];
 #else
     return m_h_patches_info[p];
@@ -723,12 +723,16 @@ RXMESH_ATTR_TM_INST_ALL(char)
 #undef RXMESH_ATTR_TM_INST_ALL
 #undef RXMESH_ATTR_TM_INST
 
+// to_glm/from_glm/to_eigen/from_eigen are __host__ __device__; clang requires the
+// explicit instantiation to match those target attributes (nvcc does not).
 #define RXMESH_ATTR_GLM_EIGEN_INST(T, H, N)                                      \
-    template vec<T, N> Attribute<T, H>::to_glm<N>(const H&) const;               \
-    template void      Attribute<T, H>::from_glm<N>(const H&, const vec<T, N>&); \
-    template Eigen::Matrix<T, N, 1> Attribute<T, H>::to_eigen<N>(const H&)       \
+    template __host__ __device__ vec<T, N> Attribute<T, H>::to_glm<N>(const H&)  \
         const;                                                                   \
-    template void Attribute<T, H>::from_eigen<N>(                                \
+    template __host__ __device__ void Attribute<T, H>::from_glm<N>(              \
+        const H&, const vec<T, N>&);                                             \
+    template __host__ __device__ Eigen::Matrix<T, N, 1>                          \
+    Attribute<T, H>::to_eigen<N>(const H&) const;                                \
+    template __host__ __device__ void Attribute<T, H>::from_eigen<N>(            \
         const H&, const Eigen::Matrix<T, N, 1>&);
 
 // GLM only fully defines vec<N,T> for N=1,2,3,4; N=6,8,12,16 are incomplete.

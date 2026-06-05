@@ -32,7 +32,7 @@ __global__ static void sum_edges_ev(const rxmesh::Context            context,
 
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::EV>(block, shrd_alloc, sum_edges);
+    query.template dispatch<Op::EV>(block, shrd_alloc, sum_edges);
 }
 
 
@@ -50,7 +50,7 @@ __global__ static void sum_edges_multi_queries(
 
     // initiate the secondary query (EV)
     Query<blockThreads> ev_query(context);
-    ev_query.prologue<Op::EV>(block, shrd_alloc);
+    ev_query.template prologue<Op::EV>(block, shrd_alloc);
 
 
     auto sum_edges = [&](const VertexHandle& vertex,
@@ -88,7 +88,7 @@ __global__ static void sum_edges_multi_queries(
 
     // the primary query
     Query<blockThreads> ve_query(context);
-    ve_query.dispatch<Op::VE>(block, shrd_alloc, sum_edges);
+    ve_query.template dispatch<Op::VE>(block, shrd_alloc, sum_edges);
 
     ev_query.epilogue(block, shrd_alloc);
 }

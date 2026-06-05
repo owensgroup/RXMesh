@@ -104,6 +104,9 @@ inline cudaDeviceProp cuda_query(const int dev)
     RXMESH_INFO("Peak Memory Bandwidth: {0:f}(GB/s)", maxBW);
     RXMESH_INFO("Kernels compiled for compute capability: {}", cuda_arch());
 
+    // The cu{solver,sparse,blas} *GetProperty(MAJOR_VERSION, ...) version-banner
+    // API has no hipSOLVER/hipSPARSE/hipBLAS equivalent; skip it on HIP.
+#if !defined(__HIP_PLATFORM_AMD__)
     int cusolver_major = -1, cusolver_minor = -1, cusolver_patch = -1;
     CUSOLVER_ERROR(cusolverGetProperty(MAJOR_VERSION, &cusolver_major));
     CUSOLVER_ERROR(cusolverGetProperty(MINOR_VERSION, &cusolver_minor));
@@ -140,12 +143,26 @@ inline cudaDeviceProp cuda_query(const int dev)
     RXMESH_INFO(
         "Using cuDSS Version {}.{}.{}", cudss_major, cudss_minor, cudss_patch);
 #endif
+#endif  // !__HIP_PLATFORM_AMD__
 
+#if !defined(__HIP_PLATFORM_AMD__)
+    // hipDeviceProp_t::managedMemory is not reliably set on all ROCm targets
+    // (notably APU-integrated devices on Windows return 0 even when hipMalloc
+    // works fine); the RXMesh core mesh-data-structure path does not use
+    // hipMallocManaged, so treat this as a warning only on HIP.
     if (!dev_prop.managedMemory) {
         RXMESH_ERROR(
             "The selected device does not support CUDA unified memory");
         exit(EXIT_FAILURE);
     }
+#else
+    if (!dev_prop.managedMemory) {
+        RXMESH_WARN(
+            "hipDeviceProp_t::managedMemory = 0 on this device (APU or "
+            "driver limitation); continuing since RXMesh core does not use "
+            "hipMallocManaged");
+    }
+#endif
 
     return dev_prop;
 }

@@ -32,7 +32,34 @@ function(rxmesh_add_app target)
   endif()
 
   set_target_properties(${target} PROPERTIES FOLDER "${RXAPP_FOLDER}")
-  set_property(TARGET ${target} PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+
+  if(USE_HIP)
+    # Compile this target's .cu sources with HIP (the project enables HIP, not
+    # CUDA, so unmarked .cu files would be silently dropped from the link).
+    foreach(src ${RXAPP_SOURCES})
+      if(src MATCHES "\\.cu$")
+        set_source_files_properties(${src} PROPERTIES LANGUAGE HIP)
+      endif()
+    endforeach()
+    set_target_properties(${target} PROPERTIES
+      HIP_ARCHITECTURES "${CMAKE_HIP_ARCHITECTURES}"
+      HIP_SEPARABLE_COMPILATION ON)
+    # Match RXMesh's relocatable device code so cross-TU __device__ symbols link.
+    target_compile_options(${target} PRIVATE $<$<COMPILE_LANGUAGE:HIP>:-fgpu-rdc>)
+    target_link_options(${target} PRIVATE $<$<LINK_LANGUAGE:HIP>:-fgpu-rdc> --hip-link)
+    # On Windows: -fuse-ld=lld-link (from CMake platform module) is rejected by
+    # clang++ gcc-driver under -fgpu-rdc device link; override to empty.
+    # --allow-multiple-definition resolves the duplicate this_cluster() device
+    # symbol from the HIP cooperative_groups header (non-inline __device__ fn in
+    # a system header shows as a strong symbol under -fgpu-rdc on Windows PE).
+    if(WIN32)
+        target_link_options(${target} PRIVATE
+            $<$<LINK_LANGUAGE:HIP>:-fuse-ld=>
+            $<$<LINK_LANGUAGE:HIP>:-Xoffload-linker --allow-multiple-definition>)
+    endif()
+  else()
+    set_property(TARGET ${target} PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+  endif()
 
   if(RXAPP_SOURCES)
     source_group(      
