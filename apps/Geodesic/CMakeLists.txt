@@ -5,7 +5,6 @@ set(SOURCE_LIST
   geodesic_ptp_rxmesh_graph.h
   geodesic_ptp_rxmesh.h
   #../common/openmesh_trimesh.h
-  #../common/openmesh_report.h
 )
 
 

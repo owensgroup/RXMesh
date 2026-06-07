@@ -93,7 +93,7 @@ struct GeodesicState
 
 
 template <typename T, uint32_t blockThreads>
-__global__ static void relax_ptp_rxmesh(
+__device__ static void relax_ptp_rxmesh_impl(
     const rxmesh::Context              context,
     const rxmesh::VertexAttribute<T>   coords,
     rxmesh::VertexAttribute<T>         new_geo_dist,
@@ -196,9 +196,9 @@ __device__ __forceinline__ void advance_geodesic_state_before_relax(
 
 
 __global__ static void init_geodesic_graph_state(
-    GeodesicState*                 state,
-    const int                      limits_size,
-    cudaGraphConditionalHandle     cond_handle)
+    GeodesicState*             state,
+    const int                  limits_size,
+    cudaGraphConditionalHandle cond_handle)
 {
     state->i           = 1;
     state->j           = 2;
@@ -208,7 +208,8 @@ __global__ static void init_geodesic_graph_state(
     state->limits_size = limits_size;
     state->error       = 0;
 
-    const bool keep_going = state->i < state->j && state->iter < state->max_iter;
+    const bool keep_going =
+        state->i < state->j && state->iter < state->max_iter;
     if (keep_going) {
         advance_geodesic_state_before_relax(state);
     }
@@ -217,9 +218,9 @@ __global__ static void init_geodesic_graph_state(
 
 
 __global__ static void advance_geodesic_graph_state(
-    GeodesicState*                 state,
-    const int*                     limits,
-    cudaGraphConditionalHandle     cond_handle)
+    GeodesicState*             state,
+    const int*                 limits,
+    cudaGraphConditionalHandle cond_handle)
 {
     const int n_cond = limits[state->i + 1] - limits[state->i];
 
@@ -232,7 +233,8 @@ __global__ static void advance_geodesic_graph_state(
 
     state->d = !state->d;
 
-    const bool keep_going = state->i < state->j && state->iter < state->max_iter;
+    const bool keep_going =
+        state->i < state->j && state->iter < state->max_iter;
     if (keep_going) {
         advance_geodesic_state_before_relax(state);
     }
