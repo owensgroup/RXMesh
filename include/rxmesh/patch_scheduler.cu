@@ -11,7 +11,7 @@ namespace rxmesh {
 
 __device__ bool PatchScheduler::push(const uint32_t pid)
 {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
 #ifdef PROCESS_SINGLE_PATCH
     return true;
 #else
@@ -47,7 +47,7 @@ __device__ bool PatchScheduler::push(const uint32_t pid)
 
 __device__ uint32_t PatchScheduler::pop()
 {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
 #ifdef PROCESS_SINGLE_PATCH
     return blockIdx.x;
 #else
@@ -131,7 +131,10 @@ __host__ void PatchScheduler::free()
 
 __host__ __device__ int PatchScheduler::size(cudaStream_t stream) const
 {
-#ifdef __CUDA_ARCH__
+    // __CUDA_ARCH__ is not defined during HIP device compilation (HIP uses
+    // __HIP_DEVICE_COMPILE__); without this the device pass would take the host
+    // branch and reference the host-only hipMemcpyAsync.
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
     return count[0];
 #else
     int h_count = 0;

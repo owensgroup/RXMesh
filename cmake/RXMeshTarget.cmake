@@ -40,8 +40,38 @@ source_group(
     FILES ${RXMESH_LIBRARY_SOURCES} ${RXMESH_LIBRARY_HEADERS}
 )
 
-# Required for targets that compile CUDA sources.
-set_property(TARGET RXMesh PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+if(USE_HIP)
+    # Compile the .cu translation units with the HIP toolchain; host C++ is
+    # untouched. Keeps the NVIDIA build intact and the diff minimal.
+    foreach(src ${RXMESH_LIBRARY_SOURCES})
+        if(src MATCHES "\\.cu$")
+            set_source_files_properties(${src} PROPERTIES LANGUAGE HIP)
+        endif()
+    endforeach()
+    set_target_properties(RXMesh PROPERTIES HIP_ARCHITECTURES "${CMAKE_HIP_ARCHITECTURES}")
+    target_compile_definitions(RXMesh PUBLIC USE_HIP)
+    # RXMesh declares __device__ members in headers and defines them in separate
+    # .cu units; that needs relocatable device code so the device linker resolves
+    # them across TUs (the CUDA path uses CUDA_SEPARABLE_COMPILATION / -rdc=true).
+    # -fgpu-rdc must reach consumers too, so apply it as a PUBLIC compile/link opt.
+    set_target_properties(RXMesh PROPERTIES HIP_SEPARABLE_COMPILATION ON)
+    target_compile_options(RXMesh PUBLIC $<$<COMPILE_LANGUAGE:HIP>:-fgpu-rdc>)
+    target_link_options(RXMesh PUBLIC $<$<LINK_LANGUAGE:HIP>:-fgpu-rdc> --hip-link)
+    # On Windows, CMake's Windows-Clang platform module appends -fuse-ld=lld-link
+    # which clang++ (gcc-driver mode) rejects under -fgpu-rdc HIP device link.
+    # Also, the HIP cooperative-groups header defines this_cluster() as a
+    # non-inline __device__ function; under -fgpu-rdc device-link it appears as a
+    # duplicate strong symbol.  Both issues are Windows-only (Linux ELF uses
+    # COMDAT for inline __device__ headers; the -fuse-ld= is Linux-absent).
+    if(WIN32)
+        target_link_options(RXMesh PUBLIC
+            $<$<LINK_LANGUAGE:HIP>:-fuse-ld=>
+            $<$<LINK_LANGUAGE:HIP>:-Xoffload-linker --allow-multiple-definition>)
+    endif()
+else()
+    # Required for targets that compile CUDA sources.
+    set_property(TARGET RXMesh PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+endif()
 set_property(TARGET RXMesh PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 target_compile_features(RXMesh PUBLIC cxx_std_17)
@@ -64,10 +94,23 @@ target_include_directories(RXMesh
     PUBLIC "${rapidjson_SOURCE_DIR}/include"
     PUBLIC "${spdlog_SOURCE_DIR}/include"
     PUBLIC "${cereal_SOURCE_DIR}/include"
-    PUBLIC ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
 )
+if(USE_HIP)
+    # HIP-only redirect headers so the CUDA include spellings
+    # (<cooperative_groups.h>, <cub/...>) resolve to their HIP equivalents
+    # without editing every include site. Must precede the system include path.
+    target_include_directories(RXMesh BEFORE PUBLIC
+        "${RXMESH_SOURCE_DIR}/include/rxmesh/hip_compat")
+else()
+    target_include_directories(RXMesh
+        PUBLIC ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
+endif()
 
-target_link_libraries(RXMesh PUBLIC cuBQL cuBQL_queries)
+# cuBQL is linked but never #included by RXMesh sources; it is a CUDA-only BVH
+# library, so drop it on HIP.
+if(NOT USE_HIP)
+    target_link_libraries(RXMesh PUBLIC cuBQL cuBQL_queries)
+endif()
 target_link_libraries(RXMesh PUBLIC rapidobj::rapidobj)
 
 # CUDA and C++ compiler flags
@@ -97,9 +140,18 @@ set(cuda_flags
     --ptxas-options=-v
 )
 
+# HIP (clang) flags for the .cu translation units compiled as HIP. The nvcc
+# cuda_flags above (-Xcudafe/-rdc/-Xptxas/-lineinfo/--expt-*) are nvcc-only.
+set(hip_flags
+    $<$<CXX_COMPILER_ID:GNU>:-Wno-unused-function>
+    -ffast-math
+    -Wno-unused-result
+)
+
 target_compile_options(RXMesh PUBLIC
     $<$<COMPILE_LANGUAGE:CXX>:${cxx_flags}>
-    $<$<COMPILE_LANGUAGE:CUDA>:${cuda_flags}>
+    $<$<AND:$<COMPILE_LANGUAGE:CUDA>,$<NOT:$<BOOL:${USE_HIP}>>>:${cuda_flags}>
+    $<$<AND:$<COMPILE_LANGUAGE:HIP>,$<BOOL:${USE_HIP}>>:${hip_flags}>
 )
 
 #SuiteSparse
@@ -126,10 +178,17 @@ if(${RX_USE_CUDSS})
     rxmesh_enable_cudss(RXMesh)
 endif()
 
-#cuSolver and cuSparse
-find_package(CUDAToolkit REQUIRED)
-target_link_libraries(RXMesh PUBLIC CUDA::cusparse)
-target_link_libraries(RXMesh PUBLIC CUDA::cusolver)
+#cuSolver and cuSparse (hipSPARSE/hipSOLVER/hipBLAS on HIP)
+if(USE_HIP)
+    find_package(hipsparse REQUIRED)
+    find_package(hipsolver REQUIRED)
+    find_package(hipblas REQUIRED)
+    target_link_libraries(RXMesh PUBLIC roc::hipsparse roc::hipsolver roc::hipblas)
+else()
+    find_package(CUDAToolkit REQUIRED)
+    target_link_libraries(RXMesh PUBLIC CUDA::cusparse)
+    target_link_libraries(RXMesh PUBLIC CUDA::cusolver)
+endif()
 
 
 #Eigen

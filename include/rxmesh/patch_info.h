@@ -11,7 +11,7 @@
 
 #include "rxmesh/lp_hashtable.h"
 
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
 #include "rxmesh/kernels/util.cuh"
 #endif
 
@@ -98,7 +98,7 @@ struct ALIGN(16) PatchInfo
      */
     __device__ __forceinline__ void set_dirty()
     {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         assert(lock.is_locked());
         ::atomicAdd(dirty, 1u);
         __threadfence();
@@ -118,7 +118,7 @@ struct ALIGN(16) PatchInfo
      */
     __device__ __forceinline__ bool is_dirty() const
     {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         return atomic_read(dirty) != 0;
 #else
         return dirty[0] != 0;

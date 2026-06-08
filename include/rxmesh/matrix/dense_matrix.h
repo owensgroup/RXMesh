@@ -286,7 +286,7 @@ struct DenseMatrix
         assert(row < m_num_rows);
         assert(col < m_num_cols);
 
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         return m_d_val[get_index(row, col)];
 #else
         return m_h_val[get_index(row, col)];
@@ -303,7 +303,7 @@ struct DenseMatrix
         assert(row < m_num_rows);
         assert(col < m_num_cols);
 
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         return m_d_val[get_index(row, col)];
 #else
         return m_h_val[get_index(row, col)];
@@ -356,7 +356,7 @@ struct DenseMatrix
         m_num_cols = new_num_cols;
 
 
-#ifndef __CUDA_ARCH__
+#if !defined(__CUDA_ARCH__) && !defined(__HIP_DEVICE_COMPILE__)
         // make sure that cuSparse knows about these changes
         // just in case we used this matrix to multiply with a sparse matrix
         if (std::is_floating_point_v<T> || std::is_same_v<T, int> ||

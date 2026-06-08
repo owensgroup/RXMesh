@@ -169,7 +169,15 @@ struct Iterator
     const LocalT*      m_patch_output;
     const uint32_t     m_patch_id;
     const uint32_t*    m_output_owned_bitmask;
+    // Stored by value on HIP: clang rejects binding this const-reference member
+    // to the temporary LPHashTable() used by the degenerate iterators above
+    // (a member-lifetime bug nvcc tolerates). LPHashTable is a small handle, so a
+    // value copy is equivalent for the .find() read and avoids the dangling ref.
+#if defined(__HIP_PLATFORM_AMD__)
+    const LPHashTable  m_output_lp_hashtable;
+#else
     const LPHashTable& m_output_lp_hashtable;
+#endif
     const LPPair*      m_s_table;
     const PatchStash   m_patch_stash;
     uint16_t           m_begin;

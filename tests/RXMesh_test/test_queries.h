@@ -56,7 +56,11 @@ void launcher(const std::vector<std::vector<uint32_t>>& Faces,
     output.reset(OutputHandleT(), rxmesh::DEVICE);
     CUDA_ERROR(cudaDeviceSynchronize());
 
+    // hipProfilerStart/Stop return hipErrorNotSupported unless a profiler tool is
+    // attached, so the calls are optional instrumentation on HIP (not fatal).
+#if !defined(USE_HIP) && !defined(__HIP_PLATFORM_AMD__)
     CUDA_ERROR(cudaProfilerStart());
+#endif
 
     int num_run = 1000;
 
@@ -70,7 +74,9 @@ void launcher(const std::vector<std::vector<uint32_t>>& Faces,
         timer.stop();
         CUDA_ERROR(cudaDeviceSynchronize());
         CUDA_ERROR(cudaGetLastError());
+#if !defined(USE_HIP) && !defined(__HIP_PLATFORM_AMD__)
         CUDA_ERROR(cudaProfilerStop());
+#endif
 
         total_time += timer.elapsed_millis();
     }

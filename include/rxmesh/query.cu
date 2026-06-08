@@ -16,67 +16,67 @@ template struct Query<1024>;
 
 
 #define RXMESH_QUERY_INSTANTIATE_PROLOGUE(BLOCK_THREADS)         \
-    template void Query<BLOCK_THREADS>::prologue<Op::V>(         \
+    template __device__ void Query<BLOCK_THREADS>::prologue<Op::V>(         \
         cooperative_groups::thread_block&,                       \
         ShmemAllocator&,                                         \
         const bool,                                              \
         const bool);                                             \
-    template void Query<BLOCK_THREADS>::prologue<Op::E>(         \
+    template __device__ void Query<BLOCK_THREADS>::prologue<Op::E>(         \
         cooperative_groups::thread_block&,                       \
         ShmemAllocator&,                                         \
         const bool,                                              \
         const bool);                                             \
-    template void Query<BLOCK_THREADS>::prologue<Op::F>(         \
+    template __device__ void Query<BLOCK_THREADS>::prologue<Op::F>(         \
         cooperative_groups::thread_block&,                       \
         ShmemAllocator&,                                         \
         const bool,                                              \
         const bool);                                             \
-    template void Query<BLOCK_THREADS>::prologue<Op::VV>(        \
+    template __device__ void Query<BLOCK_THREADS>::prologue<Op::VV>(        \
         cooperative_groups::thread_block&,                       \
         ShmemAllocator&,                                         \
         const bool,                                              \
         const bool);                                             \
-    template void Query<BLOCK_THREADS>::prologue<Op::VE>(        \
+    template __device__ void Query<BLOCK_THREADS>::prologue<Op::VE>(        \
         cooperative_groups::thread_block&,                       \
         ShmemAllocator&,                                         \
         const bool,                                              \
         const bool);                                             \
-    template void Query<BLOCK_THREADS>::prologue<Op::VF>(        \
+    template __device__ void Query<BLOCK_THREADS>::prologue<Op::VF>(        \
         cooperative_groups::thread_block&,                       \
         ShmemAllocator&,                                         \
         const bool,                                              \
         const bool);                                             \
-    template void Query<BLOCK_THREADS>::prologue<Op::FV>(        \
+    template __device__ void Query<BLOCK_THREADS>::prologue<Op::FV>(        \
         cooperative_groups::thread_block&,                       \
         ShmemAllocator&,                                         \
         const bool,                                              \
         const bool);                                             \
-    template void Query<BLOCK_THREADS>::prologue<Op::FE>(        \
+    template __device__ void Query<BLOCK_THREADS>::prologue<Op::FE>(        \
         cooperative_groups::thread_block&,                       \
         ShmemAllocator&,                                         \
         const bool,                                              \
         const bool);                                             \
-    template void Query<BLOCK_THREADS>::prologue<Op::FF>(        \
+    template __device__ void Query<BLOCK_THREADS>::prologue<Op::FF>(        \
         cooperative_groups::thread_block&,                       \
         ShmemAllocator&,                                         \
         const bool,                                              \
         const bool);                                             \
-    template void Query<BLOCK_THREADS>::prologue<Op::EV>(        \
+    template __device__ void Query<BLOCK_THREADS>::prologue<Op::EV>(        \
         cooperative_groups::thread_block&,                       \
         ShmemAllocator&,                                         \
         const bool,                                              \
         const bool);                                             \
-    template void Query<BLOCK_THREADS>::prologue<Op::EE>(        \
+    template __device__ void Query<BLOCK_THREADS>::prologue<Op::EE>(        \
         cooperative_groups::thread_block&,                       \
         ShmemAllocator&,                                         \
         const bool,                                              \
         const bool);                                             \
-    template void Query<BLOCK_THREADS>::prologue<Op::EF>(        \
+    template __device__ void Query<BLOCK_THREADS>::prologue<Op::EF>(        \
         cooperative_groups::thread_block&,                       \
         ShmemAllocator&,                                         \
         const bool,                                              \
         const bool);                                             \
-    template void Query<BLOCK_THREADS>::prologue<Op::EVDiamond>( \
+    template __device__ void Query<BLOCK_THREADS>::prologue<Op::EVDiamond>( \
         cooperative_groups::thread_block&,                       \
         ShmemAllocator&,                                         \
         const bool,                                              \
@@ -92,14 +92,14 @@ RXMESH_QUERY_INSTANTIATE_PROLOGUE(1024)
 #undef RXMESH_QUERY_INSTANTIATE_PROLOGUE
 
 #define RXMESH_QUERY_INSTANTIATE_GET_ITERATOR(BLOCK_THREADS)                  \
-    template VertexIterator                                                   \
+    template __device__ VertexIterator                                        \
     Query<BLOCK_THREADS>::get_iterator<VertexIterator>(uint16_t) const;       \
-    template EdgeIterator Query<BLOCK_THREADS>::get_iterator<EdgeIterator>(   \
-        uint16_t) const;                                                      \
-    template DEdgeIterator Query<BLOCK_THREADS>::get_iterator<DEdgeIterator>( \
-        uint16_t) const;                                                      \
-    template FaceIterator Query<BLOCK_THREADS>::get_iterator<FaceIterator>(   \
-        uint16_t) const;
+    template __device__ EdgeIterator                                          \
+    Query<BLOCK_THREADS>::get_iterator<EdgeIterator>(uint16_t) const;         \
+    template __device__ DEdgeIterator                                         \
+    Query<BLOCK_THREADS>::get_iterator<DEdgeIterator>(uint16_t) const;        \
+    template __device__ FaceIterator                                          \
+    Query<BLOCK_THREADS>::get_iterator<FaceIterator>(uint16_t) const;
 
 RXMESH_QUERY_INSTANTIATE_GET_ITERATOR(128)
 RXMESH_QUERY_INSTANTIATE_GET_ITERATOR(256)

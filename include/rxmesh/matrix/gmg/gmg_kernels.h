@@ -37,7 +37,7 @@ __global__ static void populate_edge_hashtable_1st_level(
 
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::EV>(block, shrd_alloc, count);
+    query.template dispatch<Op::EV>(block, shrd_alloc, count);
 }
 
 

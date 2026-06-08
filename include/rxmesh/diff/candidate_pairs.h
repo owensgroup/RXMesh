@@ -109,7 +109,7 @@ struct CandidatePairs
         };
 
 
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         int id = ::atomicAdd(m_current_num_pairs.data(DEVICE), 1);
         if (id < m_pairs_handle.rows()) {
             add_candidate(id);
@@ -166,7 +166,7 @@ struct CandidatePairs
      */
     __device__ __host__ int num_pairs()
     {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         return m_current_num_pairs(0);
 #else
         m_current_num_pairs.move(DEVICE, HOST);
@@ -180,7 +180,7 @@ struct CandidatePairs
      */
     __device__ __host__ int num_index()
     {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         return m_current_num_index(0);
 #else
         m_current_num_index.move(DEVICE, HOST);
@@ -205,7 +205,7 @@ struct CandidatePairs
         m_current_num_pairs(0) = sz_pair;
         m_current_num_index(0) = sz_index;
 
-#ifndef __CUDA_ARCH__
+#if !defined(__CUDA_ARCH__) && !defined(__HIP_DEVICE_COMPILE__)
         m_current_num_pairs.move(HOST, DEVICE);
         m_current_num_index.move(HOST, DEVICE);
 #endif

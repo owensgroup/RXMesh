@@ -7,6 +7,24 @@
 #include "rxmesh/util/bitmask_util.h"
 
 namespace rxmesh {
+
+// Declare a block-shared LPPair array. LPPair has a non-trivial default ctor
+// (value-inits to INVALID32), and clang (HIP) forbids that ctor running on a
+// __shared__ variable ("initialization is not supported for __shared__"). The
+// callers always fill_n() the array before use, so on HIP we back it with
+// uninitialized aligned shared storage and view it as LPPair*. On CUDA keep the
+// plain declaration so that path is byte-identical.
+#if defined(__HIP_PLATFORM_AMD__)
+#define RXMESH_SHARED_LPPAIR_ARRAY(name, count)                       \
+    __shared__ __align__(alignof(::rxmesh::LPPair))                   \
+        unsigned char name##_storage[sizeof(::rxmesh::LPPair) * (count)]; \
+    ::rxmesh::LPPair* name =                                          \
+        reinterpret_cast<::rxmesh::LPPair*>(name##_storage)
+#else
+#define RXMESH_SHARED_LPPAIR_ARRAY(name, count) \
+    __shared__ ::rxmesh::LPPair name[(count)]
+#endif
+
 /**
  * @brief This struct store the index of the not-owned mesh elements as a 32-bit
  * unsigned int where the high 16 bits store the local index within the patch

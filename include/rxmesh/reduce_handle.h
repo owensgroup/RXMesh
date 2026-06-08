@@ -152,7 +152,7 @@ class ReduceHandle
         }
 
 
-        detail::generic_reduce<T, attr.m_block_size>
+        detail::generic_reduce<T, Attribute<T, HandleT>::m_block_size>
             <<<m_max_num_patches, attr.m_block_size, 0, stream>>>(
                 attr,
                 m_max_num_patches,

@@ -375,7 +375,7 @@ __inline__ __device__ void remove_idle_elements(
     // global memory, write the results to shared memory buffer, then
     // copy the shared memory buffer to global memory
 
-    __shared__ LPPair s_stash[LPHashTable::stash_size];
+    RXMESH_SHARED_LPPAIR_ARRAY(s_stash, LPHashTable::stash_size);
 
     fill_n<blockThreads>(s_stash, uint16_t(LPHashTable::stash_size), LPPair());
     fill_n<blockThreads>(s_table, table.get_capacity(), LPPair());
@@ -537,7 +537,7 @@ __global__ static void remove_surplus_elements(Context context)
 
     __shared__ uint32_t s_patch_stash[PatchStash::stash_size];
     fill_n<blockThreads>(
-        s_patch_stash, uint16_t(LPHashTable::stash_size), INVALID32);
+        s_patch_stash, uint16_t(PatchStash::stash_size), INVALID32);
 
     block.sync();
     remove_idle_elements<blockThreads>(block,
@@ -932,7 +932,7 @@ __inline__ __device__ void slice(Context&                          context,
 
     for (uint16_t e = threadIdx.x; e < num_edges; e += blockThreads) {
         if (s_new_p_active_e(e) && !s_owned_e(e) && s_new_p_owned_e(e)) {
-            assert(!new_patch.template is_deleted(LocalEdgeT(e)));
+            assert(!new_patch.is_deleted(LocalEdgeT(e)));
             LPPair lp(e, e, s_new_patch_stash_id);
             pi.lp_e.insert(lp, nullptr, nullptr);
         }
@@ -940,7 +940,7 @@ __inline__ __device__ void slice(Context&                          context,
 
     for (uint16_t f = threadIdx.x; f < num_faces; f += blockThreads) {
         if (s_new_p_active_f(f) && !s_owned_f(f) && s_new_p_owned_f(f)) {
-            assert(!new_patch.template is_deleted(LocalFaceT(f)));
+            assert(!new_patch.is_deleted(LocalFaceT(f)));
             LPPair lp(f, f, s_new_patch_stash_id);
             pi.lp_f.insert(lp, nullptr, nullptr);
         }
@@ -1996,7 +1996,7 @@ __global__ static void compute_vf(const Context               context,
 
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VF>(block, shrd_alloc, store_lambda);
+    query.template dispatch<Op::VF>(block, shrd_alloc, store_lambda);
 }
 
 
@@ -2015,7 +2015,7 @@ __global__ static void compute_max_valence(const __grid_constant__ Context
 
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, max_valence);
+    query.template dispatch<Op::VV>(block, shrd_alloc, max_valence);
 }
 
 template <uint32_t blockThreads>
@@ -2476,6 +2476,29 @@ bool RXMeshDynamic::validate()
 
         update_launch_box(
             {Op::VF}, launch_box, (void*)detail::compute_vf<block_size>, false);
+
+        // The VF query can need more dynamic shared memory than the device
+        // physically offers (e.g. ~80 KB on a 64 KB-per-block AMD CDNA part).
+        // Launching it anyway returns a sticky "invalid argument" that a
+        // cudaDeviceSynchronize() does not clear (no kernel was queued), which
+        // then poisons the next unrelated CUDA call. Detect the over-subscription
+        // up front and skip the VF-based ribbon-faces sub-check on such devices
+        // (the EV-based ribbon-edges check above still runs).
+        cudaFuncAttributes vf_attr;
+        CUDA_ERROR(cudaFuncGetAttributes(
+            &vf_attr, (void*)detail::compute_vf<block_size>));
+        if (launch_box.smem_bytes_dyn >
+            static_cast<size_t>(vf_attr.maxDynamicSharedSizeBytes)) {
+            RXMESH_WARN(
+                "RXMeshDynamic::validate() skipping check_ribbon_faces: the VF "
+                "query needs {} bytes of dynamic shared memory but the device "
+                "allows only {} for this kernel. The EV-based ribbon check "
+                "still ran.",
+                launch_box.smem_bytes_dyn,
+                vf_attr.maxDynamicSharedSizeBytes);
+            remove_attribute("vf");
+            return is_okay();
+        }
 
         detail::compute_vf<block_size>
             <<<launch_box.blocks, block_size, launch_box.smem_bytes_dyn>>>(
@@ -3213,7 +3236,15 @@ void RXMeshDynamic::update_launch_box(
 
     launch_box.smem_bytes_dyn += user_shmem(vertex_cap, edge_cap, face_cap);
 
+#if defined(__HIP_PLATFORM_AMD__)
+    // Upstream unconditionally clobbers the computed budget with a fixed 80 KB
+    // (an NVIDIA-only slack that fits CUDA's 96-227 KB opt-in). CDNA caps dynamic
+    // shared memory at 64 KB/block, so the 80 KB request makes every cavity
+    // editing kernel un-launchable. The value computed above is the kernel's
+    // actual ShmemAllocator footprint, so use it directly on AMD.
+#else
     launch_box.smem_bytes_dyn = 80 * 1024;
+#endif
     if (with_vertex_valence) {
         if (get_input_max_valence() > 256) {
             RXMESH_ERROR(

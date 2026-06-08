@@ -338,7 +338,7 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
      */
     __device__ __host__ IndexT get_term_num_rows(IndexT i) const
     {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         return m_d_terms_rows_prefix[i + 1] - m_d_terms_rows_prefix[i];
 #else
         return m_h_terms_rows_prefix[i + 1] - m_h_terms_rows_prefix[i];
@@ -351,7 +351,7 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
     __device__ __host__ std::pair<IndexT, IndexT> get_term_rows_range(
         IndexT i) const
     {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         return {m_d_terms_rows_prefix[i], m_d_terms_rows_prefix[i + 1]};
 #else
         return {m_h_terms_rows_prefix[i], m_h_terms_rows_prefix[i + 1]};
@@ -382,7 +382,7 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
                                       const IndexT   local_j)
     {
 
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         IndexT r_id =
             this->get_row_id(row) * this->m_d_block_shapes[term].x + local_i;
         r_id += m_d_terms_rows_prefix[term];

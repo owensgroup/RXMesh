@@ -35,7 +35,7 @@ __global__ static void sample_points(const Context            context,
 
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, sampler);
+    query.template dispatch<Op::VV>(block, shrd_alloc, sampler);
 }
 }  // namespace detail
 

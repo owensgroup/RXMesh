@@ -45,7 +45,21 @@ struct PatchStash
     }
 
 
-    __device__ uint8_t insert_patch(uint32_t patch, ShmemMutex& mutex);
+    __device__ __inline__ uint8_t insert_patch(uint32_t patch, ShmemMutex& mutex)
+    {
+        // in case it was there already
+        uint8_t ret = find_patch_index(patch);
+        if (ret != INVALID8) {
+            return ret;
+        }
+
+        // otherwise, we will have to lock access to m_stash. Use
+        // critical_section (not bare lock()/unlock()) so the locked insert is
+        // forward-progress safe when multiple lanes of one wavefront contend;
+        // the split form deadlocks on AMD CDNA (no per-lane ITS within a wave).
+        mutex.critical_section([&] { ret = insert_patch(patch); });
+        return ret;
+    }
 
     /**
      * @brief insert a new patch in the stash and return the stash id. This

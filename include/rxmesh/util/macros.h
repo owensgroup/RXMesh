@@ -1,14 +1,20 @@
 #pragma once
 
+#include <stdint.h>
+
+#if defined(USE_HIP) || defined(__HIP_PLATFORM_AMD__)
+#include "rxmesh/util/cuda_to_hip.h"
+#include "rxmesh/util/cuda_to_hip_math.h"
+#else
 #include <cuda_runtime_api.h>
 #include <cusolverSp.h>
 #include <cusparse.h>
-#include <stdint.h>
-#include "rxmesh/util/log.h"
-
 #ifdef USE_CUDSS
 #include <cudss.h>
 #endif
+#endif
+
+#include "rxmesh/util/log.h"
 
 namespace rxmesh {
 
@@ -39,7 +45,18 @@ constexpr int MAX_OVERLAP_CAVITIES = 4;
 // 4-bit
 #define INVALID4 0xFu
 
+// NVIDIA warp = 32 lanes. AMD wavefront = 64 on CDNA (gfx90a/gfx94x, __GFX9__)
+// and 32 on RDNA (gfx10xx/gfx11xx). __GFX9__ is defined only during HIP device
+// compilation; host code that needs the value should query warpSize at runtime.
+#if defined(__HIP_PLATFORM_AMD__)
+#if defined(__GFX9__)
+#define WARP_SIZE 64
+#else
 #define WARP_SIZE 32
+#endif
+#else
+#define WARP_SIZE 32
+#endif
 
 #define BYTES_TO_MEGABYTES(bytes) (double(bytes) / double(1024.0 * 1024.0))
 
@@ -49,7 +66,7 @@ constexpr int MAX_OVERLAP_CAVITIES = 4;
 
 
 #ifndef myAssert
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
 #define myAssert(condition)                                                   \
     if (!(condition)) {                                                       \
         printf(                                                               \
@@ -224,7 +241,21 @@ inline void cudssHandleError(cudssStatus_t status,
 
 // Taken from
 // https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#extended-lambda-traits
+#if defined(__HIP_PLATFORM_AMD__)
+// HIP/clang exposes no __nv_is_extended_*_lambda_closure_type builtin and no
+// SFINAE-detectable equivalent, so RXMeshStatic::for_each_*(location, lambda)
+// cannot gate its device kernel launch on the lambda's closure type the way the
+// CUDA path does. Reporting "device-capable" here would force the device kernel
+// to be instantiated for the internal for_each(HOST, [&]{...}) host utilities
+// too (and fail, since those lambdas call host-only Eigen/DenseMatrix members).
+// So on HIP the for_each_*(location,lambda) device branch is disabled; device
+// iteration is available through the query path (Query::dispatch / the
+// for_each_dispatch kernels), which RXMesh's device kernels actually use.
+#define IS_D_LAMBDA(X) false
+#define IS_HD_LAMBDA(X) false
+#else
 #define IS_D_LAMBDA(X) __nv_is_extended_device_lambda_closure_type(X)
 #define IS_HD_LAMBDA(X) __nv_is_extended_host_device_lambda_closure_type(X)
+#endif
 
 }  // namespace rxmesh

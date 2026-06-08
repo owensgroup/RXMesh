@@ -504,7 +504,7 @@ struct SparseMatrix
      */
     __device__ __host__ IndexT* row_ptr() const
     {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         return m_d_row_ptr;
 #else
         return m_h_row_ptr;
@@ -533,7 +533,7 @@ struct SparseMatrix
      */
     __device__ __host__ IndexT* col_idx() const
     {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         return m_d_col_idx;
 #else
         return m_h_col_idx;
@@ -578,7 +578,7 @@ struct SparseMatrix
      */
     __device__ __host__ T& get_val_at(IndexT idx) const
     {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         return m_d_val[idx];
 #else
         return m_h_val[idx];

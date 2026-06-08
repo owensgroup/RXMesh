@@ -28,7 +28,7 @@ __global__ void identify_boundary_vertices(const Context      context,
         }
     };
 
-    query.dispatch<Op::EF>(block, shrd_alloc, boundary_edges);
+    query.template dispatch<Op::EF>(block, shrd_alloc, boundary_edges);
 
     block.sync();
 
@@ -40,7 +40,7 @@ __global__ void identify_boundary_vertices(const Context      context,
         }
     };
 
-    query.dispatch<Op::EV>(block, shrd_alloc, boundary_vertices);
+    query.template dispatch<Op::EV>(block, shrd_alloc, boundary_vertices);
 }
 }  // namespace detail
 

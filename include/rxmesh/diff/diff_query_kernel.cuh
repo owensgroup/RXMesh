@@ -142,7 +142,7 @@ __global__ static void hess_matvec_scalar_kernel(
 
         ShmemAllocator shrd_alloc;
 
-        query.dispatch<op>(block, shrd_alloc, eval, oriented);
+        query.template dispatch<op>(block, shrd_alloc, eval, oriented);
     }
 }
 
@@ -191,7 +191,7 @@ __global__ static void diff_scalar_kernel_passive(
 
         ShmemAllocator shrd_alloc;
 
-        query.dispatch<op>(block, shrd_alloc, eval, oriented);
+        query.template dispatch<op>(block, shrd_alloc, eval, oriented);
     }
 }
 
@@ -317,7 +317,7 @@ __global__ static void diff_scalar_kernel_active(
 
         ShmemAllocator shrd_alloc;
 
-        query.dispatch<op>(block, shrd_alloc, eval, oriented);
+        query.template dispatch<op>(block, shrd_alloc, eval, oriented);
     }
 }
 
@@ -390,7 +390,7 @@ __global__ static void diff_scalar_kernel_passive_vf_pair(
 
     ShmemAllocator shrd_alloc;
 
-    query.dispatch<Op::FV>(block, shrd_alloc, eval);
+    query.template dispatch<Op::FV>(block, shrd_alloc, eval);
 }
 
 
@@ -569,7 +569,7 @@ __global__ static void diff_scalar_kernel_active_vf_pair(
 
     ShmemAllocator shrd_alloc;
 
-    query.dispatch<Op::FV>(block, shrd_alloc, eval);
+    query.template dispatch<Op::FV>(block, shrd_alloc, eval);
 }
 
 // ============================== Vector Kernels ==============================
@@ -633,7 +633,7 @@ __global__ static void diff_vector_kernel_passive(
 
         ShmemAllocator shrd_alloc;
 
-        query.dispatch<op>(block, shrd_alloc, eval, oriented);
+        query.template dispatch<op>(block, shrd_alloc, eval, oriented);
     }
 }
 
@@ -729,7 +729,7 @@ __global__ static void diff_vector_kernel_active(
 
         ShmemAllocator shrd_alloc;
 
-        query.dispatch<op>(block, shrd_alloc, eval, oriented);
+        query.template dispatch<op>(block, shrd_alloc, eval, oriented);
     }
 }
 

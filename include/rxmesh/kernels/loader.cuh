@@ -13,6 +13,35 @@
 namespace rxmesh {
 namespace detail {
 
+#if defined(__HIP_PLATFORM_AMD__)
+// HIP cooperative groups has no memcpy_async/wait. Fall back to a synchronous
+// block-strided copy. RXMesh issues several load_async(..., with_wait=false)
+// then drains them with one wait(block); wait_for_copy() maps that drain to a
+// block barrier, so the copies (issued without a barrier here) are visible after
+// it -- preserving the original ordering semantics.
+template <typename T, typename SizeT>
+__device__ __forceinline__ void block_strided_copy(
+    cooperative_groups::thread_block& block,
+    const T*                          in,
+    const SizeT                       size,
+    T*                                out)
+{
+    for (SizeT i = block.thread_rank(); i < size; i += block.size()) {
+        out[i] = in[i];
+    }
+}
+#endif
+
+__device__ __forceinline__ void wait_for_copy(
+    cooperative_groups::thread_block& block)
+{
+#if defined(__HIP_PLATFORM_AMD__)
+    block.sync();
+#else
+    cooperative_groups::wait(block);
+#endif
+}
+
 template <typename T, typename SizeT>
 __device__ __forceinline__ void load_async(
     cooperative_groups::thread_block& block,
@@ -21,11 +50,18 @@ __device__ __forceinline__ void load_async(
     T*                                out,
     bool                              with_wait)
 {
+#if defined(__HIP_PLATFORM_AMD__)
+    block_strided_copy(block, in, size, out);
+    if (with_wait) {
+        block.sync();
+    }
+#else
     cooperative_groups::memcpy_async(block, out, in, sizeof(T) * size);
 
     if (with_wait) {
         cooperative_groups::wait(block);
     }
+#endif
 }
 
 
@@ -38,11 +74,18 @@ __device__ __forceinline__ void load_async(const T*    in,
     namespace cg           = cooperative_groups;
     cg::thread_block block = cg::this_thread_block();
 
+#if defined(__HIP_PLATFORM_AMD__)
+    block_strided_copy(block, in, size, out);
+    if (with_wait) {
+        block.sync();
+    }
+#else
     cg::memcpy_async(block, out, in, sizeof(T) * size);
 
     if (with_wait) {
         cg::wait(block);
     }
+#endif
 }
 
 /**
