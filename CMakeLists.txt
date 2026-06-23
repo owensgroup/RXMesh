@@ -7,14 +7,10 @@ cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
 # CMAKE_HIP_ARCHITECTURES (defaulted only when unset); never hardcode a literal.
 option(USE_HIP "Build the GPU sources with HIP for AMD GPUs" OFF)
 
-if(USE_HIP)
-    if(NOT DEFINED CMAKE_HIP_ARCHITECTURES OR CMAKE_HIP_ARCHITECTURES STREQUAL "")
-        set(CMAKE_HIP_ARCHITECTURES "gfx90a")
-    endif()
-else()
-    if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-        set(CMAKE_CUDA_ARCHITECTURES native)
-    endif()
+# For USE_HIP, project(... LANGUAGES HIP) below auto-detects the host GPU(s) and
+# errors if none is found (pass -DCMAKE_HIP_ARCHITECTURES to override); no pin here.
+if(NOT USE_HIP AND NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES native)
 endif()
 
 #So we can use FetchContent_MakeAvailable without warnings
