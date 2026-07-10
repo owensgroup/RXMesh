@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include "rxmesh/rxmesh_static.h"
 
 #include "rxmesh/diff/candidate_pairs.h"
@@ -55,17 +57,18 @@ struct DiffScalarProblem
      * @param rx is the instance of RXMeshStatic
      * @param assmble_hessian should allocate the Hessian
      */
-    DiffScalarProblem(RXMeshStatic& rx,
-                      bool          assmble_hessian,
-                      int           expected_vv_candidate_pairs = 0,
-                      int           expected_vf_candidate_pairs = 0)
+    DiffScalarProblem(RXMeshStatic&      rx,
+                      bool               assmble_hessian,
+                      int                expected_vv_candidate_pairs = 0,
+                      int                expected_vf_candidate_pairs = 0,
+                      const std::string& opt_var_name = "opt_var")
         : rx(rx),
           ev_diamond_interaction_added(false),
           grad(DenseMatT(rx,
                          rx.get_num_elements<OptVarHandleT>(),
                          VariableDim,
                          LOCATION_ALL)),
-          opt_var(rx.add_attribute<T, OptVarHandleT>("opt_var", VariableDim))
+          opt_var(rx.add_attribute<T, OptVarHandleT>(opt_var_name, VariableDim))
     {
         grad.reset(0, LOCATION_ALL);
         opt_var->reset(static_cast<T>(0), LOCATION_ALL);
