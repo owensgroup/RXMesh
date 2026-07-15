@@ -34,7 +34,7 @@ __global__ static void cluster_points(const Context        context,
 
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::VV>(block, shrd_alloc, cluster);
+    query.template dispatch<Op::VV>(block, shrd_alloc, cluster);
 }
 
 }  // namespace detail

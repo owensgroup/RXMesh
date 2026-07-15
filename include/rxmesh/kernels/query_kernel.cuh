@@ -20,7 +20,7 @@ __global__ static void query_kernel(const __grid_constant__ Context context,
 
     ShmemAllocator shrd_alloc;
 
-    query.dispatch<op>(block, shrd_alloc, user_lambda, oriented);
+    query.template dispatch<op>(block, shrd_alloc, user_lambda, oriented);
 }
 }  // namespace detail
 }  // namespace rxmesh

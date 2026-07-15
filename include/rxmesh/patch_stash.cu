@@ -21,21 +21,6 @@ __host__ PatchStash::PatchStash(bool on_device) : m_is_on_device(on_device)
     }
 }
 
-__device__ uint8_t PatchStash::insert_patch(uint32_t patch, ShmemMutex& mutex)
-{
-    // in case it was there already
-    uint8_t ret = find_patch_index(patch);
-    if (ret != INVALID8) {
-        return ret;
-    }
-
-    // otherwise, we will have to lock access to m_stash
-    mutex.lock();
-    ret = insert_patch(patch);
-    mutex.unlock();
-    return ret;
-}
-
 __host__ __device__ uint8_t PatchStash::insert_patch(uint32_t patch)
 {
     assert(patch != INVALID32);

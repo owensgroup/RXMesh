@@ -157,9 +157,9 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
     const uint16_t edge_cap = m_patch_info.edges_capacity;
     const uint16_t face_cap = m_patch_info.faces_capacity;
 
-    __shared__ LPPair s_inv_st_v[LPHashTable::stash_size];
-    __shared__ LPPair s_inv_st_e[LPHashTable::stash_size];
-    __shared__ LPPair s_inv_st_f[LPHashTable::stash_size];
+    RXMESH_SHARED_LPPAIR_ARRAY(s_inv_st_v, LPHashTable::stash_size);
+    RXMESH_SHARED_LPPAIR_ARRAY(s_inv_st_e, LPHashTable::stash_size);
+    RXMESH_SHARED_LPPAIR_ARRAY(s_inv_st_f, LPHashTable::stash_size);
 
     // inverted hash table
     m_inv_lp_v = InverseLPHashTable(m_patch_info.lp_v,
@@ -311,7 +311,7 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
 
 #ifndef NDEBUG
     // EV
-    cooperative_groups::wait(block);
+    detail::wait_for_copy(block);
     block.sync();
     for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
         if (m_s_active_mask_e(e)) {
@@ -372,13 +372,13 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
     assert(m_s_cavity_boundary_edges);
 
     // lp stash
-    __shared__ LPPair st_v[LPHashTable::stash_size];
+    RXMESH_SHARED_LPPAIR_ARRAY(st_v, LPHashTable::stash_size);
     m_s_table_stash_v = st_v;
 
-    __shared__ LPPair st_e[LPHashTable::stash_size];
+    RXMESH_SHARED_LPPAIR_ARRAY(st_e, LPHashTable::stash_size);
     m_s_table_stash_e = st_e;
 
-    __shared__ LPPair st_f[LPHashTable::stash_size];
+    RXMESH_SHARED_LPPAIR_ARRAY(st_f, LPHashTable::stash_size);
     m_s_table_stash_f = st_f;
 
     fill_n<blockThreads>(
@@ -418,7 +418,7 @@ CavityManager<blockThreads, cop>::alloc_shared_memory(
     assert(m_s_active_cavity_bitmask.m_bitmask);
     m_s_active_cavity_bitmask.set(block);
 
-    cooperative_groups::wait(block);
+    detail::wait_for_copy(block);
     block.sync();
 }
 
@@ -459,7 +459,7 @@ CavityManager<blockThreads, cop>::verify_reading_from_global_memory(
     }
 
     // EV
-    cooperative_groups::wait(block);
+    detail::wait_for_copy(block);
     block.sync();
     for (int e = threadIdx.x; e < int(m_s_num_edges[0]); e += blockThreads) {
         if (m_s_active_mask_e(e)) {
@@ -1155,34 +1155,34 @@ CavityManager<blockThreads, cop>::add_edge_to_cavity_graph(const uint16_t c0,
     auto add_edge = [&](const uint16_t from_c,
                         const uint16_t to_c) -> uint16_t {
         int i;
-        m_s_cavity_graph_mutex.lock(from_c);
+        // critical_section (not bare lock/unlock) so contending lanes of one
+        // wavefront make forward progress on AMD CDNA (no per-lane ITS).
+        m_s_cavity_graph_mutex.critical_section(from_c, [&] {
+            for (i = 0; i < MAX_OVERLAP_CAVITIES; ++i) {
+                int index = from_c * MAX_OVERLAP_CAVITIES + i;
+                assert(index < MAX_OVERLAP_CAVITIES * get_num_cavities());
+                if (m_s_cavity_graph[index] == to_c) {
+                    break;
+                }
 
-        for (i = 0; i < MAX_OVERLAP_CAVITIES; ++i) {
-            int index = from_c * MAX_OVERLAP_CAVITIES + i;
-            assert(index < MAX_OVERLAP_CAVITIES * get_num_cavities());
-            if (m_s_cavity_graph[index] == to_c) {
-                break;
+                if (m_s_cavity_graph[index] == INVALID16) {
+                    m_s_cavity_graph[index] = to_c;
+                    break;
+                }
             }
-
-            if (m_s_cavity_graph[index] == INVALID16) {
-                m_s_cavity_graph[index] = to_c;
-                break;
-            }
-        }
-
-        m_s_cavity_graph_mutex.unlock(from_c);
+        });
 
         return i;
     };
 
     auto clear = [&](const uint16_t c, const uint16_t index) {
-        m_s_cavity_graph_mutex.lock(c);
-        assert(c < m_s_active_cavity_bitmask.size());
-        m_s_active_cavity_bitmask.reset(c, true);
-        assert(c * MAX_OVERLAP_CAVITIES + index <
-               MAX_OVERLAP_CAVITIES * get_num_cavities());
-        m_s_cavity_graph[c * MAX_OVERLAP_CAVITIES + index] = INVALID16;
-        m_s_cavity_graph_mutex.unlock(c);
+        m_s_cavity_graph_mutex.critical_section(c, [&] {
+            assert(c < m_s_active_cavity_bitmask.size());
+            m_s_active_cavity_bitmask.reset(c, true);
+            assert(c * MAX_OVERLAP_CAVITIES + index <
+                   MAX_OVERLAP_CAVITIES * get_num_cavities());
+            m_s_cavity_graph[c * MAX_OVERLAP_CAVITIES + index] = INVALID16;
+        });
     };
 
     // add c0 to c1
@@ -3679,11 +3679,11 @@ CavityManager<blockThreads, cop>::find_copy(uint16_t&     q_local_id,
 {
 
     assert(!m_context.m_patches_info[q_patch].is_deleted(
-        HandleT::LocalT(q_local_id)));
+        typename HandleT::LocalT(q_local_id)));
 
 
     if (!m_context.m_patches_info[q_patch].is_owned(
-            HandleT::LocalT(q_local_id))) {
+            typename HandleT::LocalT(q_local_id))) {
 
         HandleT owner = m_context.m_patches_info[q_patch].find<HandleT>(
             q_local_id, q_table);
@@ -3754,7 +3754,7 @@ CavityManager<blockThreads, cop>::ensure_ownership(
                            .get_num_elements<HandleT>()[0]);
 
                 if (!m_context.m_patches_info[owner_patch].is_owned(
-                        HandleT::LocalT(local_id_in_owner_patch))) {
+                        typename HandleT::LocalT(local_id_in_owner_patch))) {
                     pred = 0;
                 }
             }
@@ -3857,13 +3857,13 @@ CavityManager<blockThreads, cop>::change_ownership(
             assert(owner_patch != m_patch_info.patch_id);
 
             assert(!m_context.m_patches_info[owner_patch].is_deleted(
-                HandleT::LocalT(local_id_in_owner_patch)));
+                typename HandleT::LocalT(local_id_in_owner_patch)));
 
             // TODO if q is no longer the owner, that means some other patch
             // has changed the ownership of vq can be explained as cavities
             // overlap
             assert(m_context.m_patches_info[owner_patch].is_owned(
-                HandleT::LocalT(local_id_in_owner_patch)));
+                typename HandleT::LocalT(local_id_in_owner_patch)));
 
             // add this patch (p) to the owner's patch stash
             const uint8_t stash_id =

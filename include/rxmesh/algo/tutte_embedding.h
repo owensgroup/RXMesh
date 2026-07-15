@@ -48,7 +48,7 @@ __global__ static void next_vertex(const Context                    context,
 
     ShmemAllocator shrd_alloc;
 
-    query.dispatch<Op::FV>(block, shrd_alloc, func);
+    query.template dispatch<Op::FV>(block, shrd_alloc, func);
 }
 
 
@@ -99,7 +99,7 @@ __global__ static void setup_L(const Context                    context,
 
     ShmemAllocator shrd_alloc;
 
-    query.dispatch<Op::EVDiamond>(block, shrd_alloc, func);
+    query.template dispatch<Op::EVDiamond>(block, shrd_alloc, func);
 }
 
 
@@ -139,7 +139,7 @@ __global__ static void setup_L_bd(const Context                    context,
 
     ShmemAllocator shrd_alloc;
 
-    query.dispatch<Op::EVDiamond>(block, shrd_alloc, func);
+    query.template dispatch<Op::EVDiamond>(block, shrd_alloc, func);
 }
 
 template <typename T, typename BoundaryT>

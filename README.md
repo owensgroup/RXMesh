@@ -13,5 +13,6 @@ RXMesh also features a **sparse and dense matrix** infrastructure that is tightl
 
 RXMesh also includes support for **Automatic Differentiation** (AD) directly on the GPU. Built on top of its compact mesh and matrix infrastructure, RXMesh enables efficient computation of gradients and Hessians for geometry processing tasks such as optimization, simulation, and inverse design. This AD system is designed to be modular and fast, allowing users to differentiate through mesh-based computations with minimal overhead.
 
+RXMesh runs on both NVIDIA GPUs (via CUDA) and AMD GPUs (via ROCm/HIP).
 
 ## **For documentation and instructions, visit [RXMeshDocs](https://ahdhn.github.io/RXMeshDocs/)**

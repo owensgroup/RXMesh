@@ -66,7 +66,7 @@ __global__ static void sparse_mat_prescan(
         auto                block = cooperative_groups::this_thread_block();
         Query<blockThreads> query(context);
         ShmemAllocator      shrd_alloc;
-        query.dispatch<op>(block, shrd_alloc, init_lambda);
+        query.template dispatch<op>(block, shrd_alloc, init_lambda);
     }
 }
 
@@ -155,7 +155,7 @@ __global__ static void sparse_mat_col_fill(
         auto                block = cooperative_groups::this_thread_block();
         Query<blockThreads> query(context);
         ShmemAllocator      shrd_alloc;
-        query.dispatch<op>(block, shrd_alloc, col_fillin);
+        query.template dispatch<op>(block, shrd_alloc, col_fillin);
     }
 }
 

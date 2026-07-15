@@ -851,7 +851,7 @@ __global__ static void compute_patch_graph_edge_weight(
 
     Query<blockThreads> query(context);
     ShmemAllocator      shrd_alloc;
-    query.dispatch<Op::EV>(block, shrd_alloc, weights);
+    query.template dispatch<Op::EV>(block, shrd_alloc, weights);
 
 #ifdef USE_V_WEIGHTS
     // sum the owned vertices in the patch in shared memory and then write
@@ -985,7 +985,7 @@ __global__ static void extract_separators(const Context        context,
     };
 
 
-    query.dispatch<Op::VV>(block, shrd_alloc, extract);
+    query.template dispatch<Op::VV>(block, shrd_alloc, extract);
     block.sync();
 
     if (s_patch_total > 0) {

@@ -57,7 +57,7 @@ __host__ __device__ __inline__ void bitmask_set_bit(const uint16_t local_id,
     constexpr uint32_t one  = 1;
     const uint32_t     mask = one << bit;
 
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
     if (is_atomic) {
         ::atomicOr(bitmask + idx, mask);
         return;
@@ -76,7 +76,7 @@ __host__ __device__ __inline__ bool bitmask_try_set_bit(const uint16_t local_id,
     const uint32_t     mask = one << bit;
     uint32_t           old;
 
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
     old = ::atomicOr(bitmask + idx, mask);
 #else
     old = bitmask[idx];
@@ -95,7 +95,7 @@ __host__ __device__ __inline__ void bitmask_clear_bit(const uint16_t local_id,
     constexpr uint32_t one  = 1;
     const uint32_t     mask = ~(one << bit);
 
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
     if (is_atomic) {
         ::atomicAnd(bitmask + idx, mask);
         return;
@@ -113,7 +113,7 @@ __host__ __device__ __inline__ void bitmask_flip_bit(const uint16_t local_id,
     constexpr uint32_t one  = 1;
     const uint32_t     mask = one << bit;
 
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
     if (is_atomic) {
         ::atomicXor(bitmask + idx, mask);
         return;

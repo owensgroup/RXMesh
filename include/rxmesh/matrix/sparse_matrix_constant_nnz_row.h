@@ -75,7 +75,7 @@ struct SparseMatrixConstantNNZRow : public SparseMatrix<T>
      */
     __device__ __host__ IndexT* col_idx()
     {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         return this->m_d_col_idx;
 #else
         return this->m_h_col_idx;

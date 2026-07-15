@@ -85,7 +85,7 @@ class Attribute : public AttributeBase
           m_h_linear_id_element_prefix(nullptr),
           m_d_linear_id_element_prefix(nullptr)
     {
-#if defined(__CUDACC__)
+#if defined(__CUDACC__) || defined(__HIPCC__)
         this->m_name    = (char*)malloc(sizeof(char) * 1);
         this->m_name[0] = '\0';
 #endif
@@ -159,7 +159,7 @@ class Attribute : public AttributeBase
     __host__ __device__ __forceinline__ uint32_t
     capacity(const uint32_t p) const
     {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         return m_d_patches_info[p].get_capacity<HandleT>();
 #else
         return m_h_patches_info[p].get_capacity<HandleT>();
@@ -411,7 +411,7 @@ class Attribute : public AttributeBase
         assert(attr < m_num_attributes);
 
         if (m_layout == SoA) {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
             assert(local_id < capacity(p_id));
             return m_d_data[attr * m_num_elements +
                             linear_index(p_id, local_id)];
@@ -422,7 +422,7 @@ class Attribute : public AttributeBase
 #endif
         }
 
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         assert(local_id < capacity(p_id));
         const uint32_t offset = m_d_offsets[p_id];
         return m_d_data[offset + local_id * pitch_x() + attr * pitch_y(p_id)];
@@ -449,7 +449,7 @@ class Attribute : public AttributeBase
         assert(attr < m_num_attributes);
 
         if (m_layout == SoA) {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
             assert(local_id < capacity(p_id));
             return m_d_data[attr * m_num_elements +
                             linear_index(p_id, local_id)];
@@ -460,7 +460,7 @@ class Attribute : public AttributeBase
 #endif
         }
 
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         assert(local_id < capacity(p_id));
         const uint32_t offset = m_d_offsets[p_id];
         return m_d_data[offset + local_id * pitch_x() + attr * pitch_y(p_id)];
@@ -623,7 +623,7 @@ class Attribute : public AttributeBase
     linear_index(const uint32_t p_id, const uint16_t local_id) const
     {
 
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         return m_d_linear_id_element_prefix[p_id] + local_id;
 #else
         return m_h_linear_id_element_prefix[p_id] + local_id;

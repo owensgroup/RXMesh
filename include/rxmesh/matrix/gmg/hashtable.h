@@ -360,7 +360,7 @@ struct GPUHashTable
 
         do {
 
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
 
             __threadfence();
             pair.m_key =
@@ -397,7 +397,7 @@ struct GPUHashTable
         for (uint8_t i = 0; i < stash_size; ++i) {
             T prv;
 
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
             __threadfence();
             prv.m_key = ::atomicCAS(reinterpret_cast<uint64_t*>(m_stash + i),
                                     INVALID64,

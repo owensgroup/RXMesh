@@ -51,7 +51,7 @@ __host__ void LPHashTable::clear()
 template <uint32_t blockThreads>
 __device__ void LPHashTable::clear()
 {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
     assert(m_is_on_device);
     for (uint32_t i = threadIdx.x; i < m_capacity; i += blockThreads) {
         m_table[i].m_pair = INVALID32;
@@ -161,7 +161,7 @@ template <uint32_t blockSize>
 __device__ void LPHashTable::write_to_global_memory(const LPPair* s_table,
                                                     const LPPair* s_stash)
 {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
     if (s_stash != nullptr) {
         detail::store<blockSize>(s_stash, stash_size, m_stash);
     }
@@ -173,7 +173,7 @@ __host__ __device__ bool LPHashTable::insert(LPPair           pair,
                                              volatile LPPair* table,
                                              volatile LPPair* stash)
 {
-#ifndef __CUDA_ARCH__
+#if !defined(__CUDA_ARCH__) && !defined(__HIP_DEVICE_COMPILE__)
     assert(stash == nullptr);
     assert(table == nullptr);
 #endif
@@ -183,7 +183,7 @@ __host__ __device__ bool LPHashTable::insert(LPPair           pair,
 
     do {
         const auto input_key = pair.key();
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         if (table != nullptr) {
             pair.m_pair =
                 ::atomicExch((uint32_t*)table + bucket_id, pair.m_pair);
@@ -226,7 +226,7 @@ __host__ __device__ bool LPHashTable::insert(LPPair           pair,
 
     const auto input_key = pair.key();
 
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
     for (uint8_t i = 0; i < stash_size; ++i) {
         LPPair prv;
         if (stash != nullptr) {

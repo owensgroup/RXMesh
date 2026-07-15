@@ -168,7 +168,7 @@ class Context
 
     __device__ __host__ __forceinline__ const uint32_t* vertex_prefix() const
     {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         return m_d_vertex_prefix;
 #else
         return m_h_vertex_prefix;
@@ -177,7 +177,7 @@ class Context
 
     __device__ __host__ __forceinline__ const uint32_t* edge_prefix() const
     {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         return m_d_edge_prefix;
 #else
         return m_h_edge_prefix;
@@ -186,7 +186,7 @@ class Context
 
     __device__ __host__ __forceinline__ const uint32_t* face_prefix() const
     {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
         return m_d_face_prefix;
 #else
         return m_h_face_prefix;
@@ -308,7 +308,7 @@ class Context
         uint32_t p_id = owner_handle.patch_id();
         uint16_t ret  = owner_handle.local_id();
 
-        assert(m_patches_info[p_id].is_owned(HandleT::LocalT(ret)));
+        assert(m_patches_info[p_id].is_owned(typename HandleT::LocalT(ret)));
 
         // TODO we don't need to do count the number of owned elements if the
         // mesh is static, i.e., we have not modified the topology of the mesh

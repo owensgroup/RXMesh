@@ -253,7 +253,7 @@ __global__ static void slice_patches(Context        context,
                     pi.owned_mask_f,
                     pi.active_mask_f);
 
-        cooperative_groups::wait(block);
+        wait_for_copy(block);
         block.sync();
 
 #ifdef SLICE_GGP

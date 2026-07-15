@@ -7,7 +7,7 @@ namespace rxmesh {
 
 __device__ bool PatchLock::acquire_lock(uint32_t id)
 {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
     int attempt = 0;
     while (::atomicCAS(lock, FREE, LOCKED) == LOCKED) {
         __threadfence();
@@ -30,7 +30,7 @@ __device__ bool PatchLock::acquire_lock(uint32_t id)
 
 __device__ void PatchLock::release_lock()
 {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
     atomicExch(spin, INVALID32);
     atomicExch(lock, FREE);
     __threadfence();
@@ -39,7 +39,7 @@ __device__ void PatchLock::release_lock()
 
 __device__ bool PatchLock::is_locked() const
 {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
     return atomic_read(lock) == LOCKED;
 #else
     return false;

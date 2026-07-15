@@ -17,7 +17,7 @@
 
 #pragma once
 
-#if defined(__CUDACC__)
+#if defined(__CUDACC__) || defined(__HIPCC__)
 #include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/kernels/util.cuh"
 #endif
@@ -139,7 +139,7 @@ struct LPHashTable
         bool    with_wait,
         LPPair* s_stash = nullptr) const
     {
-#if defined(__CUDACC__)
+#if defined(__CUDACC__) || defined(__HIPCC__)
         if (s_stash != nullptr) {
             detail::load_async(m_stash, stash_size, s_stash, false);
         }
@@ -226,7 +226,7 @@ struct LPHashTable
          const LPPair*               table = nullptr,
          const LPPair*               stash = nullptr) const
     {
-#ifndef __CUDA_ARCH__
+#if !defined(__CUDA_ARCH__) && !defined(__HIP_DEVICE_COMPILE__)
         assert(stash == nullptr);
         assert(table == nullptr);
 #endif
@@ -240,7 +240,7 @@ struct LPHashTable
             if (table != nullptr) {
                 found = table[bucket_id];
             } else {
-#ifdef __CUDA_ARCH__
+#if defined(__CUDA_ARCH__) || defined(__HIP_DEVICE_COMPILE__)
                 uint32_t* ptr =
                     reinterpret_cast<uint32_t*>(m_table + bucket_id);
                 found = LPPair(atomic_read(ptr));

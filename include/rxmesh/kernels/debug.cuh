@@ -71,7 +71,12 @@ __global__ void print_arr_host(uint32_t size, dataT* arr)
 __device__ __forceinline__ unsigned total_smem_size()
 {
     unsigned ret;
+#if defined(__HIP_PLATFORM_AMD__)
+    // HIP device code has no %total_smem_size register; diagnostic only.
+    ret = 0xFFFFFFFFu;
+#else
     asm volatile("mov.u32 %0, %total_smem_size;" : "=r"(ret));
+#endif
     return ret;
 }
 }  // namespace rxmesh
