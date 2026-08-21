@@ -5,6 +5,7 @@
 #include "rxmesh/util/macros.h"
 
 #include <array>
+#include <limits>
 
 using namespace rxmesh;
 
@@ -135,6 +136,58 @@ TEST(Attribute, Reduce)
         false);
 
     EXPECT_EQ(output, result);
+}
+
+TEST(Attribute, ReduceDevice)
+{
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+    auto attr = rx.add_vertex_attribute<float>("reduce_device", 1, DEVICE);
+    constexpr float value = 2.5f;
+    populate<float>(rx, *attr, value);
+
+    ReduceHandle<float, VertexHandle> reducer(*attr);
+    float*                            device_output = nullptr;
+    CUDA_ERROR(cudaMalloc(&device_output, sizeof(float)));
+    cudaStream_t stream = nullptr;
+    CUDA_ERROR(cudaStreamCreate(&stream));
+
+    reducer.reduce_device(*attr, cub::Sum(), 0.0f, device_output, 0, stream);
+    float output = 0.0f;
+    CUDA_ERROR(cudaMemcpyAsync(
+        &output, device_output, sizeof(float), cudaMemcpyDeviceToHost, stream));
+    CUDA_ERROR(cudaStreamSynchronize(stream));
+    EXPECT_FLOAT_EQ(output, value * rx.get_num_vertices());
+
+    reducer.reduce_device(*attr,
+                          cub::Max(),
+                          std::numeric_limits<float>::lowest(),
+                          device_output,
+                          0,
+                          stream);
+    CUDA_ERROR(cudaMemcpyAsync(
+        &output, device_output, sizeof(float), cudaMemcpyDeviceToHost, stream));
+    CUDA_ERROR(cudaStreamSynchronize(stream));
+    EXPECT_FLOAT_EQ(output, value);
+
+    CUDA_ERROR(cudaStreamDestroy(stream));
+    GPU_FREE(device_output);
+}
+
+TEST(Attribute, ReduceDeviceZeroPatchWritesInit)
+{
+    Attribute<float, VertexHandle>    empty_attr;
+    ReduceHandle<float, VertexHandle> reducer(0);
+    float*                            device_output = nullptr;
+    CUDA_ERROR(cudaMalloc(&device_output, sizeof(float)));
+
+    reducer.reduce_device(
+        empty_attr, cub::Sum(), 7.25f, device_output, INVALID32, nullptr);
+    float output = 0.0f;
+    CUDA_ERROR(cudaMemcpy(
+        &output, device_output, sizeof(float), cudaMemcpyDeviceToHost));
+    EXPECT_FLOAT_EQ(output, 7.25f);
+
+    GPU_FREE(device_output);
 }
 
 
@@ -367,4 +420,173 @@ TEST(Attribute, ToAndFromMatrixPreserveLayouts)
             NULL,
             false);
     }
+}
+
+TEST(Attribute, ExternalDeviceBuffer)
+{
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+
+    auto attr =
+        rx.add_vertex_attribute<float>("external_soa", 3, LOCATION_NONE, SoA);
+
+    const size_t bytes  = size_t(rx.get_num_vertices()) * 3 * sizeof(float);
+    float*       first  = nullptr;
+    float*       second = nullptr;
+    CUDA_ERROR(cudaMalloc(&first, bytes));
+    CUDA_ERROR(cudaMalloc(&second, bytes));
+
+    ASSERT_TRUE(attr->attach_device_buffer(first, bytes));
+    EXPECT_TRUE(attr->is_external_device_buffer());
+    EXPECT_TRUE(attr->is_device_allocated());
+    EXPECT_EQ(attr->data(DEVICE), first);
+
+    device_write(rx, *attr);
+    std::vector<float> values(rx.get_num_vertices() * 3);
+    ASSERT_EQ(cudaMemcpy(values.data(), first, bytes, cudaMemcpyDeviceToHost),
+              cudaSuccess);
+    const size_t n = rx.get_num_vertices();
+    for (size_t i = 0; i < n; ++i) {
+        EXPECT_FLOAT_EQ(values[i], 11.0f);
+        EXPECT_FLOAT_EQ(values[n + i], 22.0f);
+        EXPECT_FLOAT_EQ(values[2 * n + i], 33.0f);
+    }
+
+    ASSERT_TRUE(attr->attach_device_buffer(second, bytes));
+    EXPECT_EQ(attr->data(DEVICE), second);
+    EXPECT_EQ(cudaMemset(first, 0, bytes), cudaSuccess);
+
+    attr->release(DEVICE);
+    EXPECT_FALSE(attr->is_external_device_buffer());
+    EXPECT_FALSE(attr->is_device_allocated());
+    EXPECT_EQ(attr->data(DEVICE), nullptr);
+    EXPECT_EQ(cudaMemset(second, 0, bytes), cudaSuccess);
+
+    attr->detach_device_buffer();
+    GPU_FREE(first);
+    GPU_FREE(second);
+}
+
+TEST(Attribute, ExternalDeviceBufferValidation)
+{
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+
+    auto attr = rx.add_vertex_attribute<float>("ext", 3, LOCATION_NONE, SoA);
+
+    const size_t bytes     = size_t(rx.get_num_vertices()) * 3 * sizeof(float);
+    float*       external  = nullptr;
+    float*       too_small = nullptr;
+    CUDA_ERROR(cudaMalloc(&external, bytes));
+    CUDA_ERROR(cudaMalloc(&too_small, sizeof(float)));
+
+    ASSERT_TRUE(attr->attach_device_buffer(external, bytes));
+    EXPECT_FALSE(attr->attach_device_buffer(too_small, sizeof(float)));
+    EXPECT_EQ(attr->data(DEVICE), external);
+    EXPECT_TRUE(attr->is_external_device_buffer());
+
+    std::vector<float> host(rx.get_num_vertices() * 3);
+    EXPECT_FALSE(attr->attach_device_buffer(host.data(), bytes));
+    EXPECT_EQ(attr->data(DEVICE), external);
+
+    auto non_soa =
+        rx.add_vertex_attribute<float>("ext_non_soa", 3, LOCATION_NONE, AoSoA);
+    EXPECT_FALSE(non_soa->attach_device_buffer(external, bytes));
+    EXPECT_FALSE(non_soa->is_device_allocated());
+
+    rx.remove_attribute("ext");
+    EXPECT_FALSE(attr->is_external_device_buffer());
+    EXPECT_EQ(cudaMemset(external, 0, bytes), cudaSuccess);
+
+    GPU_FREE(external);
+    GPU_FREE(too_small);
+}
+
+TEST(Attribute, DeviceBufferReleasedBeforeExternalAttach)
+{
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+
+    auto attr =
+        rx.add_vertex_attribute<float>("owned_to_external", 1, DEVICE, SoA);
+
+    float* owned = attr->data(DEVICE);
+    ASSERT_NE(owned, nullptr);
+    cudaPointerAttributes pointer_attributes{};
+    ASSERT_EQ(cudaPointerGetAttributes(&pointer_attributes, owned),
+              cudaSuccess);
+
+    const size_t bytes    = size_t(rx.get_num_vertices()) * sizeof(float);
+    float*       external = nullptr;
+    CUDA_ERROR(cudaMalloc(&external, bytes));
+    ASSERT_NE(external, owned);
+
+    ASSERT_TRUE(attr->attach_device_buffer(external, bytes));
+    EXPECT_EQ(attr->data(DEVICE), external);
+    EXPECT_TRUE(attr->is_external_device_buffer());
+
+    // The previous owned allocation was released, while the borrowed one is
+    // still owned by caller and usable after Attribute release.
+    const cudaError_t owned_status =
+        cudaPointerGetAttributes(&pointer_attributes, owned);
+    if (owned_status == cudaSuccess) {
+        // CUDA 11+ can report a successfully queried, freed pointer as
+        // unregistered host memory instead of returning an error.
+        EXPECT_EQ(pointer_attributes.type, cudaMemoryTypeUnregistered);
+    } else {
+        cudaGetLastError();
+    }
+    attr->release(DEVICE);
+    EXPECT_EQ(cudaMemset(external, 0, bytes), cudaSuccess);
+    GPU_FREE(external);
+}
+
+TEST(Attribute, ExternalDeviceBufferRequiresDetachBeforeMove)
+{
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+    auto         attr =
+        rx.add_vertex_attribute<float>("external_detach_move", 1, HOST, SoA);
+    attr->reset(4.0f, HOST);
+
+    const size_t bytes    = size_t(rx.get_num_vertices()) * sizeof(float);
+    float*       external = nullptr;
+    CUDA_ERROR(cudaMalloc(&external, bytes));
+    CUDA_ERROR(cudaMemset(external, 0, bytes));
+    ASSERT_TRUE(attr->attach_device_buffer(external, bytes));
+
+    // Moving to DEVICE cannot silently overwrite borrowed storage
+    attr->move(HOST, DEVICE);
+    ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+    std::vector<float> values(rx.get_num_vertices(), -1.0f);
+    ASSERT_EQ(
+        cudaMemcpy(values.data(), external, bytes, cudaMemcpyDeviceToHost),
+        cudaSuccess);
+    for (float value : values) {
+        EXPECT_FLOAT_EQ(value, 0.0f);
+    }
+
+    attr->detach_device_buffer();
+    attr->move(HOST, DEVICE);
+    ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+    EXPECT_TRUE(attr->is_device_allocated());
+    EXPECT_FALSE(attr->is_external_device_buffer());
+    EXPECT_NE(attr->data(DEVICE), external);
+
+    attr->release(DEVICE);
+    EXPECT_EQ(cudaMemset(external, 0, bytes), cudaSuccess);
+    GPU_FREE(external);
+}
+
+TEST(Attribute, MeshDestructionDoesNotFreeExternalDeviceBuffer)
+{
+    float* external = nullptr;
+    size_t bytes    = 0;
+    {
+        RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+        bytes = size_t(rx.get_num_vertices()) * sizeof(float);
+        CUDA_ERROR(cudaMalloc(&external, bytes));
+        auto attr = rx.add_vertex_attribute<float>(
+            "external_mesh_lifetime", 1, LOCATION_NONE, SoA);
+        ASSERT_TRUE(attr->attach_device_buffer(external, bytes));
+    }
+
+    EXPECT_EQ(cudaMemset(external, 0, bytes), cudaSuccess);
+    GPU_FREE(external);
 }
