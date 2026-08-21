@@ -15,6 +15,8 @@ namespace rxmesh {
  * Attribute. To create a new ReduceHandle, use create_reduce_handle()
  * from Attribute
  * @tparam T The type of the attribute
+ * TODO allows for async dot(), norm2(), arg_max(), arg_min() similar to
+ * reduce_device()
  */
 template <typename T, typename HandleT>
 class ReduceHandle
