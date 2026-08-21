@@ -8,8 +8,10 @@ ReduceHandle<T, HandleT>::ReduceHandle(const uint32_t num_patches)
 {
     size_t type_size = std::max(sizeof(T), sizeof(KeyValue));
 
-    CUDA_ERROR(
-        cudaMalloc(&m_d_reduce_1st_stage, m_max_num_patches * type_size));
+    //just in case we have no patches 
+    const uint32_t p_count = std::max(1u, m_max_num_patches);
+
+    CUDA_ERROR(cudaMalloc(&m_d_reduce_1st_stage, size_t(p_count) * type_size));
 
     CUDA_ERROR(cudaMalloc(&m_d_reduce_2nd_stage, type_size));
 
@@ -19,7 +21,7 @@ ReduceHandle<T, HandleT>::ReduceHandle(const uint32_t num_patches)
                            temp_bytes_t,
                            m_d_reduce_1st_stage,
                            m_d_reduce_2nd_stage,
-                           m_max_num_patches);
+                           p_count);
 
     KeyValue* ptr_p        = NULL;
     size_t    temp_bytes_p = 0;
@@ -28,7 +30,7 @@ ReduceHandle<T, HandleT>::ReduceHandle(const uint32_t num_patches)
         temp_bytes_p,
         reinterpret_cast<KeyValue*>(m_d_reduce_1st_stage),
         reinterpret_cast<KeyValue*>(m_d_reduce_2nd_stage),
-        m_max_num_patches,
+        p_count,
         detail::ArgMaxOp<HandleT, T>(),
         KeyValue(HandleT(), std::numeric_limits<T>::lowest()));
 
