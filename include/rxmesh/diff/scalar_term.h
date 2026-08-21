@@ -14,6 +14,53 @@
 
 namespace rxmesh {
 
+namespace detail {
+
+/**
+ * @brief every loss add an attribute which is where the loss write its
+ * output per element. this attribute is later summed to return the total loss.
+ * this attribute is owned by both ScalarTerm and AttributeContainer. Even if
+ * the ScalarTerm is deleted, the AttributeContainer won't delete the
+ * attribute--it only deletes it when the RXMeshStatic is deleted. Thus, here
+ * we register this attribute which allows us to delete the (loss) attribute
+ * when the ScalarTerm is deleted 
+ */
+class RegisteredAttributeOwner
+{
+   public:
+    RegisteredAttributeOwner()                                = default;
+    RegisteredAttributeOwner(const RegisteredAttributeOwner&) = delete;
+    RegisteredAttributeOwner& operator=(const RegisteredAttributeOwner&) =
+        delete;
+
+    ~RegisteredAttributeOwner()
+    {
+        reset();
+    }
+
+    void bind(RXMeshStatic& rx, AttributeBase* attribute)
+    {
+        reset();
+        m_rx        = &rx;
+        m_attribute = attribute;
+    }
+
+    void reset()
+    {
+        if (m_rx != nullptr && m_attribute != nullptr) {
+            m_rx->remove_attribute(m_attribute);
+        }
+        m_rx        = nullptr;
+        m_attribute = nullptr;
+    }
+
+   private:
+    RXMeshStatic*  m_rx        = nullptr;
+    AttributeBase* m_attribute = nullptr;
+};
+
+}  // namespace detail
+
 /**
  * @brief pure virtual class used as interface for all energy terms (without
  * specifying the which type of mesh elements it is specified on, number of
@@ -22,14 +69,17 @@ namespace rxmesh {
 template <typename T, typename OptVarHandleT>
 struct ScalarTerm
 {
+    virtual ~ScalarTerm() = default;
+
     virtual void eval_active(Attribute<T, OptVarHandleT>& opt_var,
                              FaceAttribute<VertexHandle>* face_interact_vertex,
                              cudaStream_t                 stream) = 0;
 
     virtual void eval_active_grad_only(
-        Attribute<T, OptVarHandleT>& opt_var,
-        FaceAttribute<VertexHandle>* face_interact_vertex,
-        cudaStream_t                 stream) = 0;
+        Attribute<T, OptVarHandleT>&     opt_var,
+        FaceAttribute<VertexHandle>*     face_interact_vertex,
+        DenseMatrix<T, Eigen::RowMajor>& gradient_output,
+        cudaStream_t                     stream) = 0;
 
     virtual void eval_passive(Attribute<T, OptVarHandleT>& opt_var,
                               FaceAttribute<VertexHandle>* face_interact_vertex,
@@ -42,6 +92,10 @@ struct ScalarTerm
         cudaStream_t                           stream) = 0;
 
     virtual T get_loss(cudaStream_t stream) = 0;
+
+    virtual void get_loss_device(T* device_output, cudaStream_t stream) = 0;
+
+    virtual locationT get_loss_allocated() const = 0;
 
     virtual void update_hessian(void* hess_ptr) = 0;
 };
@@ -73,15 +127,13 @@ struct TemplatedScalarTerm
                         LambdaT                              t,
                         bool                                 oreinted,
                         DenseMatrix<T, Eigen::RowMajor>*     grad,
-                        HessianSparseMatrix<T, VariableDim>* hess)
+                        HessianSparseMatrix<T, VariableDim>* hess,
+                        locationT term_loss_location = LOCATION_ALL)
         : term(t), rx(rx), grad(grad), hess(hess), oreinted(oreinted)
     {
-        // To avoid the clash that happens from adding many losses.
-        std::ostringstream address;
-        address << (void const*)this;
-        std::string name = address.str();
-
-        loss = rx.add_attribute<T, LossHandleT>("Loss" + name, 1);
+        const std::string name = rx.make_unique_attribute_name("rx:diff:loss:");
+        loss = rx.add_attribute<T, LossHandleT>(name, 1, term_loss_location);
+        loss_registration.bind(rx, loss.get());
 
         reducer = std::make_shared<ReduceHandle<T, LossHandleT>>(*loss);
 
@@ -175,9 +227,10 @@ struct TemplatedScalarTerm
      * 1st derivative only
      */
     void eval_active_grad_only(
-        Attribute<T, OptVarHandleT>& opt_var,
-        FaceAttribute<VertexHandle>* face_interact_vertex,
-        cudaStream_t                 stream)
+        Attribute<T, OptVarHandleT>&     opt_var,
+        FaceAttribute<VertexHandle>*     face_interact_vertex,
+        DenseMatrix<T, Eigen::RowMajor>& gradient_output,
+        cudaStream_t                     stream)
     {
         rx.run_kernel(lb_active_grad_only,
                       detail::diff_scalar_kernel_active<blockThreads,
@@ -189,7 +242,7 @@ struct TemplatedScalarTerm
                                                         VariableDim,
                                                         LambdaT>,
                       stream,
-                      *grad,
+                      gradient_output,
                       *hess,
                       *loss,
                       opt_var,
@@ -269,6 +322,17 @@ struct TemplatedScalarTerm
         return reducer->reduce(*loss, cub::Sum(), 0, INVALID32, stream);
     }
 
+    void get_loss_device(T* device_output, cudaStream_t stream)
+    {
+        reducer->reduce_device(
+            *loss, cub::Sum(), T(0), device_output, INVALID32, stream);
+    }
+
+    locationT get_loss_allocated() const
+    {
+        return loss == nullptr ? LOCATION_NONE : loss->get_allocated();
+    }
+
     /**
      * @brief update the pointer to hessian stored in this class
      */
@@ -280,6 +344,7 @@ struct TemplatedScalarTerm
     LambdaT term;
 
     std::shared_ptr<Attribute<T, LossHandleT>>    loss;
+    detail::RegisteredAttributeOwner              loss_registration;
     std::shared_ptr<ReduceHandle<T, LossHandleT>> reducer;
     LaunchBox<blockThreads>                       lb_active;
     LaunchBox<blockThreads>                       lb_passive;
@@ -324,15 +389,13 @@ struct TemplatedScalarTermPairs
         LambdaT                                       t,
         DenseMatrix<T, Eigen::RowMajor>*              grad,
         HessianSparseMatrix<T, VariableDim>*          hess,
-        CandidatePairs<HandleT0, HandleT1, HessMatT>& pairs)
+        CandidatePairs<HandleT0, HandleT1, HessMatT>& pairs,
+        locationT term_loss_location = LOCATION_ALL)
         : term(t), rx(rx), grad(grad), hess(hess), pairs(pairs)
     {
-        // To avoid the clash that happens from adding many losses.
-        std::ostringstream address;
-        address << (void const*)this;
-        std::string name = address.str();
-
-        loss = rx.add_attribute<T, LossHandleT>("Loss" + name, 1);
+        const std::string name = rx.make_unique_attribute_name("rx:diff:loss:");
+        loss = rx.add_attribute<T, LossHandleT>(name, 1, term_loss_location);
+        loss_registration.bind(rx, loss.get());
 
         reducer = std::make_shared<ReduceHandle<T, LossHandleT>>(*loss);
 
@@ -433,9 +496,10 @@ struct TemplatedScalarTermPairs
      * 1st derivative only
      */
     void eval_active_grad_only(
-        Attribute<T, OptVarHandleT>& opt_var,
-        FaceAttribute<VertexHandle>* face_interact_vertex,
-        cudaStream_t                 stream)
+        Attribute<T, OptVarHandleT>&     opt_var,
+        FaceAttribute<VertexHandle>*     face_interact_vertex,
+        DenseMatrix<T, Eigen::RowMajor>& gradient_output,
+        cudaStream_t                     stream)
     {
         int size = pairs.num_pairs();
 
@@ -456,7 +520,7 @@ struct TemplatedScalarTermPairs
                                                           ProjectHess,
                                                           LambdaT>,
                 stream,
-                *grad,
+                gradient_output,
                 *hess,
                 *loss,
                 opt_var,
@@ -477,7 +541,7 @@ struct TemplatedScalarTermPairs
                                                    VariableDim,
                                                    LambdaT>
                 <<<blocks, blockThreads, 0, stream>>>(
-                    pairs, *grad, *hess, *loss, opt_var, term);
+                    pairs, gradient_output, *hess, *loss, opt_var, term);
         }
     }
 
@@ -571,6 +635,17 @@ struct TemplatedScalarTermPairs
         return reducer->reduce(*loss, cub::Sum(), 0, INVALID32, stream);
     }
 
+    void get_loss_device(T* device_output, cudaStream_t stream)
+    {
+        reducer->reduce_device(
+            *loss, cub::Sum(), T(0), device_output, INVALID32, stream);
+    }
+
+    locationT get_loss_allocated() const
+    {
+        return loss == nullptr ? LOCATION_NONE : loss->get_allocated();
+    }
+
     /**
      * @brief update the pointer to hessian stored in this class
      */
@@ -583,6 +658,7 @@ struct TemplatedScalarTermPairs
 
     RXMeshStatic&                                 rx;
     std::shared_ptr<Attribute<T, LossHandleT>>    loss;
+    detail::RegisteredAttributeOwner              loss_registration;
     std::shared_ptr<ReduceHandle<T, LossHandleT>> reducer;
 
     DenseMatrix<T, Eigen::RowMajor>*              grad;
