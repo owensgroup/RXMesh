@@ -154,8 +154,11 @@ class ReduceHandle
         }
 
         if (m_max_num_patches == 0) {
-            CUDA_ERROR(cudaMemcpyAsync(
-                device_output, &init, cudaMemcpyHostToDevice, stream));
+            CUDA_ERROR(cudaMemcpyAsync(device_output,
+                                       &init,
+                                       sizeof(T),
+                                       cudaMemcpyHostToDevice,
+                                       stream));
             return;
         }
 

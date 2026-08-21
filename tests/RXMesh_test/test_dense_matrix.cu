@@ -4,6 +4,20 @@
 
 #include "rxmesh/matrix/dense_matrix.h"
 
+#include <vector>
+
+template <typename MatT>
+void write_dense_device_view(rxmesh::RXMeshStatic& rx, MatT view)
+{
+    using namespace rxmesh;
+    rx.for_each_vertex(DEVICE,
+                       [view] __device__(const VertexHandle vh) mutable {
+                           view(vh, 0) = 4.0f;
+                           view(vh, 1) = 5.0f;
+                           view(vh, 2) = 6.0f;
+                       });
+}
+
 TEST(RXMeshStatic, DenseMatrixToEigen)
 {
     using namespace rxmesh;
@@ -312,4 +326,74 @@ TEST(RXMeshStatic, DenseMatrixSlice)
     }
 
     mat.release();
+}
+
+TEST(RXMeshStatic, DenseMatrixDeviceView)
+{
+    using namespace rxmesh;
+    using MatT = DenseMatrix<float, Eigen::RowMajor>;
+
+    RXMeshStatic  rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+    const int     rows  = static_cast<int>(rx.get_num_vertices());
+    constexpr int cols  = 3;
+    const size_t  bytes = size_t(rows) * cols * sizeof(float);
+
+    float* device_ptr = nullptr;
+    CUDA_ERROR(cudaMalloc(&device_ptr, bytes));
+
+    auto view = MatT::device_view(rx, rows, cols, device_ptr);
+    EXPECT_EQ(view.data(DEVICE), device_ptr);
+    EXPECT_EQ(view.get_allocated() & DEVICE, DEVICE);
+    EXPECT_EQ(view.get_allocated() & HOST, LOCATION_NONE);
+    EXPECT_TRUE(view.has_compatible_context<VertexHandle>(rx));
+    EXPECT_FALSE(view.has_library_resources());
+
+    write_dense_device_view(rx, view);
+    ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    std::vector<float> values(size_t(rows) * cols);
+    ASSERT_EQ(
+        cudaMemcpy(values.data(), device_ptr, bytes, cudaMemcpyDeviceToHost),
+        cudaSuccess);
+    for (int row = 0; row < rows; ++row) {
+        EXPECT_FLOAT_EQ(values[size_t(row) * cols], 4.0f);
+        EXPECT_FLOAT_EQ(values[size_t(row) * cols + 1], 5.0f);
+        EXPECT_FLOAT_EQ(values[size_t(row) * cols + 2], 6.0f);
+    }
+
+    view.release();
+    view.release();
+    EXPECT_FALSE(view.has_library_resources());
+    EXPECT_EQ(cudaMemset(device_ptr, 0, bytes), cudaSuccess);
+    GPU_FREE(device_ptr);
+}
+
+TEST(RXMeshStatic, DenseMatrixUserManagedAllocationFlags)
+{
+    using namespace rxmesh;
+
+    float* device_ptr = nullptr;
+    CUDA_ERROR(cudaMalloc(&device_ptr, 12 * sizeof(float)));
+
+    DenseMatrix<float> device_only(4, 3, device_ptr, nullptr);
+    EXPECT_EQ(device_only.get_allocated() & DEVICE, DEVICE);
+    EXPECT_EQ(device_only.get_allocated() & HOST, LOCATION_NONE);
+    EXPECT_TRUE(device_only.has_library_resources());
+    device_only.release();
+    device_only.release();
+    EXPECT_FALSE(device_only.has_library_resources());
+
+    EXPECT_EQ(cudaMemset(device_ptr, 0, 12 * sizeof(float)), cudaSuccess);
+    GPU_FREE(device_ptr);
+
+    std::vector<float> host_values(12, 2.0f);
+    DenseMatrix<float> host_only(4, 3, nullptr, host_values.data());
+    EXPECT_EQ(host_only.get_allocated() & DEVICE, LOCATION_NONE);
+    EXPECT_EQ(host_only.get_allocated() & HOST, HOST);
+    EXPECT_FALSE(host_only.has_library_resources());
+    EXPECT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+    host_only.release();
+    host_only.release();
+    EXPECT_FALSE(host_only.has_library_resources());
+    EXPECT_FLOAT_EQ(host_values.front(), 2.0f);
 }
