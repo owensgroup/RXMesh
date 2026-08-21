@@ -49,7 +49,8 @@ __host__ Attribute<T, HandleT>::Attribute(const char*    name,
       m_layout(layout),
       m_total_bytes(0),
       m_h_linear_id_element_prefix(rxmesh->get_element_prefix<HandleT>(HOST)),
-      m_d_linear_id_element_prefix(rxmesh->get_element_prefix<HandleT>(DEVICE))
+      m_d_linear_id_element_prefix(rxmesh->get_element_prefix<HandleT>(DEVICE)),
+      m_external_device_buffer(false)
 
 {
     if (m_layout == SoA && !m_rxmesh->supports_global_soa_attribute_layout()) {
@@ -304,6 +305,15 @@ const char* Attribute<T, HandleT>::get_name() const
 }
 
 template <class T, typename HandleT>
+void Attribute<T, HandleT>::release_name()
+{
+    if (m_name != nullptr) {
+        free(m_name);
+        m_name = nullptr;
+    }
+}
+
+template <class T, typename HandleT>
 void Attribute<T, HandleT>::reset(const T      value,
                                   locationT    location,
                                   cudaStream_t stream)
@@ -334,6 +344,13 @@ void Attribute<T, HandleT>::move(locationT    source,
             "are the same.",
             location_to_string(source),
             location_to_string(target));
+        return;
+    }
+
+    if (m_external_device_buffer && (target & DEVICE) == DEVICE) {
+        RXMESH_ERROR(
+            "Attribute::move() cannot overwrite an attached external device "
+            "buffer. Detach it first.");
         return;
     }
 
@@ -382,10 +399,16 @@ void Attribute<T, HandleT>::release(locationT location)
         m_allocated = m_allocated & (~HOST);
     }
 
-    if (((location & DEVICE) == DEVICE) && is_device_allocated()) {
-        GPU_FREE(m_d_data);
+    if ((location & DEVICE) == DEVICE) {
+        if (m_external_device_buffer) {
+            // Borrowed storage is detached, never freed by RXMesh.
+            m_d_data = nullptr;
+        } else if (is_device_allocated()) {
+            GPU_FREE(m_d_data);
+        }
         GPU_FREE(m_d_offsets);
-        m_allocated = m_allocated & (~DEVICE);
+        m_external_device_buffer = false;
+        m_allocated              = m_allocated & (~DEVICE);
     }
 }
 
@@ -531,6 +554,13 @@ __host__ __device__ __inline__ void Attribute<T, HandleT>::from_eigen(
 template <class T, typename HandleT>
 void Attribute<T, HandleT>::allocate(locationT location)
 {
+    if (((location & DEVICE) == DEVICE) && m_external_device_buffer) {
+        RXMESH_ERROR(
+            "Attribute::allocate() cannot replace an attached external "
+            "device buffer. Detach it first.");
+        return;
+    }
+
     if (m_max_num_patches != 0) {
         if ((location & HOST) == HOST) {
             release(HOST);
@@ -603,6 +633,15 @@ std::vector<std::string> AttributeContainer::get_attribute_names() const
     return names;
 }
 
+std::string AttributeContainer::make_unique_name(const std::string& prefix)
+{
+    std::string candidate;
+    do {
+        candidate = prefix + std::to_string(m_next_internal_attribute_id++);
+    } while (does_exist(candidate.c_str()));
+    return candidate;
+}
+
 template <typename AttrT>
 std::shared_ptr<AttrT> AttributeContainer::add(const char*   name,
                                                uint32_t      num_attributes,
@@ -641,9 +680,21 @@ void AttributeContainer::remove(const char* name)
          ++it) {
 
         if (!strcmp((*it)->get_name(), name)) {
+            remove(it->get());
+            return;
+        }
+    }
+}
+
+void AttributeContainer::remove(const AttributeBase* attribute)
+{
+    for (auto it = m_attr_container.begin(); it != m_attr_container.end();
+         ++it) {
+        if (it->get() == attribute) {
             (*it)->release(LOCATION_ALL);
+            (*it)->release_name();
             m_attr_container.erase(it);
-            break;
+            return;
         }
     }
 }

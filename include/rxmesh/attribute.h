@@ -2,6 +2,7 @@
 
 #include <assert.h>
 #include <cuda_runtime_api.h>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -36,6 +37,8 @@ class AttributeBase
     virtual const char* get_name() const = 0;
 
     virtual void release(locationT location = LOCATION_ALL) = 0;
+
+    virtual void release_name() = 0;
 
     virtual ~AttributeBase() = default;
 };
@@ -83,12 +86,9 @@ class Attribute : public AttributeBase
           m_layout(AoS),
           m_total_bytes(0),
           m_h_linear_id_element_prefix(nullptr),
-          m_d_linear_id_element_prefix(nullptr)
+          m_d_linear_id_element_prefix(nullptr),
+          m_external_device_buffer(false)
     {
-#if defined(__CUDACC__)
-        this->m_name    = (char*)malloc(sizeof(char) * 1);
-        this->m_name[0] = '\0';
-#endif
     }
 
     /**
@@ -196,6 +196,11 @@ class Attribute : public AttributeBase
     virtual ~Attribute() = default;
 
     /**
+     * @brief Release the name allocation.     
+     */
+    void release_name() override;
+
+    /**
      * @brief Get the name of the attribute
      */
     const char* get_name() const;
@@ -258,6 +263,117 @@ class Attribute : public AttributeBase
     __host__ __device__ bool is_tensor_layout() const
     {
         return m_layout == SoA;
+    }
+
+    /**
+     * @brief True when the device storage points at memory owned by an
+     * external party (e.g., a PyTorch tensor). In that case this attribute
+     * never allocates or frees the device pointer.
+     */
+    __host__ __device__ bool is_external_device_buffer() const
+    {
+        return m_external_device_buffer;
+    }
+
+    /**
+     * @brief Point the device storage at memory owned by somebody else.
+     *
+     * This is meant mainly for interop with external array frameworks that
+     * already hold a buffer matching this attribute's true SoA (global
+     * column-major) layout. The caller keeps ownership and must guarantee that
+     * ptr stays valid for as long as this attribute reads or writes through
+     * it. Only supported for SoA (tensor) layout, since that is the only layout
+     * with a well defined global memory layout (that is independent of the
+     * RXMesh patches)      
+     * @param ptr device pointer holding size()
+     * get_num_attributes() values
+     * @param capacity_bytes accessible bytes
+     * beginning at ptr
+     * @return true on success and false on validation
+     * failure
+     */
+    bool attach_device_buffer(T* ptr, size_t capacity_bytes)
+    {
+        if (m_layout != SoA) {
+            RXMESH_ERROR(
+                "Attribute::attach_device_buffer() is only supported for "
+                "true SoA (tensor) layout attributes.");
+            return false;
+        }
+
+        const size_t required_bytes =
+            sizeof(T) * size_t(m_num_elements) * size_t(m_num_attributes);
+
+        if (required_bytes != 0 && ptr == nullptr) {
+            RXMESH_ERROR(
+                "Attribute::attach_device_buffer() received a null pointer "
+                "for a non-empty attribute.");
+            return false;
+        }
+
+        if (capacity_bytes < required_bytes) {
+            RXMESH_ERROR(
+                "Attribute::attach_device_buffer() received {} bytes but the "
+                "attribute requires at least {} bytes.",
+                capacity_bytes,
+                required_bytes);
+            return false;
+        }
+
+        if (ptr != nullptr &&
+            reinterpret_cast<std::uintptr_t>(ptr) % alignof(T) != 0) {
+            RXMESH_ERROR(
+                "Attribute::attach_device_buffer() received a pointer that is "
+                "not aligned for the attribute value type.");
+            return false;
+        }
+
+        if (ptr != nullptr) {
+            cudaPointerAttributes external_attributes{};
+
+            CUDA_ERROR(cudaPointerGetAttributes(&external_attributes, ptr));
+
+#if CUDART_VERSION >= 10000
+            if (external_attributes.type != cudaMemoryTypeDevice) {
+#else
+            if (external_attributes.memoryType != cudaMemoryTypeDevice) {
+#endif
+                RXMESH_ERROR(
+                    "Attribute::attach_device_buffer() requires device "
+                    "memory.");
+                return false;
+            }
+        }
+
+        // drop whatever we currently own on the device
+        release(DEVICE);
+
+        // SoA does not use the offset buffer, but this also refreshes
+        // m_total_bytes so storage_size()/get_total_bytes() stay correct.
+        allocate_offset();
+
+        if (ptr == nullptr) {
+            return true;
+        }
+
+        m_d_data                 = ptr;
+        m_external_device_buffer = true;
+        m_allocated              = m_allocated | DEVICE;
+        return true;
+    }
+
+    /**
+     * @brief Stop referencing an external device buffer without freeing it.
+     */
+    void detach_device_buffer()
+    {
+        if (!m_external_device_buffer) {
+            return;
+        }
+
+        m_d_data                 = nullptr;
+        m_external_device_buffer = false;
+        m_allocated              = m_allocated & (~DEVICE);
     }
 
     /**
@@ -656,6 +772,9 @@ class Attribute : public AttributeBase
     size_t           m_total_bytes;
     uint32_t*        m_h_linear_id_element_prefix;
     uint32_t*        m_d_linear_id_element_prefix;
+    // when true, m_d_data is owned by an external party and must never be
+    // allocated or freed by this attribute
+    bool m_external_device_buffer;
 
     constexpr static uint32_t m_block_size = 256;
 };
@@ -676,12 +795,15 @@ using FaceAttribute = Attribute<T, FaceHandle>;
 class AttributeContainer
 {
    public:
-    AttributeContainer() = default;
+    AttributeContainer() : m_next_internal_attribute_id(0)
+    {
+    }
 
     virtual ~AttributeContainer()
     {
         while (!m_attr_container.empty()) {
             m_attr_container.back()->release();
+            m_attr_container.back()->release_name();
             m_attr_container.pop_back();
         }
     }
@@ -696,6 +818,11 @@ class AttributeContainer
      * @brief get a list of name of the attributes managed by this container
      */
     std::vector<std::string> get_attribute_names() const;
+
+    /**
+     * @brief Allocate monotonically increasing internal name.
+     */
+    std::string make_unique_name(const std::string& prefix);
 
     /**
      * @brief add a new attribute to be managed by this container
@@ -726,8 +853,12 @@ class AttributeContainer
      */
     void remove(const char* name);
 
+    /** @brief Remove exactly the supplied registered Attribute object. */
+    void remove(const AttributeBase* attribute);
+
    private:
     std::vector<std::shared_ptr<AttributeBase>> m_attr_container;
+    uint64_t                                    m_next_internal_attribute_id;
 };
 
 }  // namespace rxmesh

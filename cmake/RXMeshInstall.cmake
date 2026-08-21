@@ -31,7 +31,9 @@ function(rxmesh_install_target_if_exists target_name)
     if(TARGET "${target_name}")
         install(TARGETS "${target_name}"
                 ARCHIVE DESTINATION "${RXMESH_INSTALL_LIBDIR}"
+                ${_RXMESH_INSTALL_COMPONENT_ARGS}
                 LIBRARY DESTINATION "${RXMESH_INSTALL_LIBDIR}"
+                ${_RXMESH_INSTALL_COMPONENT_ARGS}
                 RUNTIME DESTINATION "${RXMESH_INSTALL_BINDIR}"
                 ${_RXMESH_INSTALL_COMPONENT_ARGS})
     endif()
