@@ -17,7 +17,7 @@ RXMeshStatic::RXMeshStatic(const std::string file_path,
 
     std::vector<std::vector<uint32_t>>   fv;
     std::vector<std::vector<rx_coord_t>> vertices;
-    CPUTimer load_obj_timer;
+    CPUTimer                             load_obj_timer;
     load_obj_timer.start();
     const bool loaded = import_obj(file_path, vertices, fv);
     load_obj_timer.stop();
@@ -547,6 +547,18 @@ void RXMeshStatic::remove_attribute(const std::string& name)
     }
 
     m_attr_container->remove(name.c_str());
+}
+
+void RXMeshStatic::remove_attribute(const AttributeBase* attribute)
+{
+    if (attribute != nullptr) {
+        m_attr_container->remove(attribute);
+    }
+}
+
+std::string RXMeshStatic::make_unique_attribute_name(const std::string& prefix)
+{
+    return m_attr_container->make_unique_name(prefix);
 }
 
 std::shared_ptr<VertexAttribute<rx_coord_t>>

@@ -805,6 +805,14 @@ class RXMeshStatic : public RXMesh
      */
     void remove_attribute(const std::string& name);
 
+    /** @brief Remove one exact Attribute registration by object identity.
+     */
+    void remove_attribute(const AttributeBase* attribute);
+
+    /** @brief Return a unique internal Attribute name.
+     */
+    std::string make_unique_attribute_name(const std::string& prefix);
+
     /**
      * @brief populate boundary_v with 1 if the vertex is a boundary vertex and
      * 0 otherwise. Only the first attribute (i.e., boundary_v(vh, 0)) will be
@@ -906,7 +914,7 @@ class RXMeshStatic : public RXMesh
 
 
     /**
-     * @brief get a list of name of all attributes created 
+     * @brief get a list of name of all attributes created
      */
     std::vector<std::string> get_attribute_names() const
     {
