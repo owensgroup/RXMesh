@@ -149,7 +149,14 @@ class Attribute : public AttributeBase
      * corresponds to the template HandleT
      * @param p the patch id
      */
-    __host__ __device__ __inline__ uint32_t size(const uint32_t p) const;
+    __host__ __device__ __forceinline__ uint32_t size(const uint32_t p) const
+    {
+#ifdef __CUDA_ARCH__
+        return m_d_patches_info[p].get_num_elements<HandleT>()[0];
+#else
+        return m_h_patches_info[p].get_num_elements<HandleT>()[0];
+#endif
+    }
 
     /**
      * @brief get maximum number of elements in a patch. The element type
@@ -169,8 +176,15 @@ class Attribute : public AttributeBase
     /**
      * @brief Get patch info for patch p
      */
-    __host__ __device__ __inline__ const PatchInfo& get_patch_info(
-        const uint32_t p) const;
+    __host__ __device__ __forceinline__ const PatchInfo& get_patch_info(
+        const uint32_t p) const
+    {
+#ifdef __CUDA_ARCH__
+        return m_d_patches_info[p];
+#else
+        return m_h_patches_info[p];
+#endif
+    }
 
 
     __host__ __device__ __forceinline__ uint32_t pitch_x() const
@@ -208,27 +222,42 @@ class Attribute : public AttributeBase
     /**
      * @brief get the number of attributes per mesh element
      */
-    __host__ __device__ __inline__ uint32_t get_num_attributes() const;
+    __host__ __device__ __forceinline__ uint32_t get_num_attributes() const
+    {
+        return m_num_attributes;
+    }
 
     /**
      * @brief Flag that indicates where the memory is allocated
      */
-    __host__ __device__ __inline__ locationT get_allocated() const;
+    __host__ __device__ __forceinline__ locationT get_allocated() const
+    {
+        return m_allocated;
+    }
 
     /**
      * @brief return the memory layout
      */
-    __host__ __device__ __inline__ layoutT get_layout() const;
+    __host__ __device__ __forceinline__ layoutT get_layout() const
+    {
+        return m_layout;
+    }
 
     /**
      * @brief Check if attribute is allocated on device
      */
-    __host__ __device__ __inline__ bool is_device_allocated() const;
+    __host__ __device__ __forceinline__ bool is_device_allocated() const
+    {
+        return ((m_allocated & DEVICE) == DEVICE);
+    }
 
     /**
      * @brief Check if attribute is allocated on host
      */
-    __host__ __device__ __inline__ bool is_host_allocated() const;
+    __host__ __device__ __forceinline__ bool is_host_allocated() const
+    {
+        return ((m_allocated & HOST) == HOST);
+    }
 
     /**
      * @brief Return the raw storage pointer for a host or device
@@ -486,7 +515,17 @@ class Attribute : public AttributeBase
      */
     template <int N>
     __host__ __device__ __inline__ Eigen::Matrix<T, N, 1> to_eigen(
-        const HandleT& handle) const;
+        const HandleT& handle) const
+    {
+        assert(N <= get_num_attributes());
+
+        Eigen::Matrix<T, N, 1> ret;
+
+        for (Eigen::Index i = 0; i < N; ++i) {
+            ret[i] = this->operator()(handle, i);
+        }
+        return ret;
+    }
 
     /**
      * @brief store an Eigen (small) vector in this attribute. The size of Eigen
@@ -496,7 +535,14 @@ class Attribute : public AttributeBase
     template <int N>
     __host__ __device__ __inline__ void from_eigen(
         const HandleT&                handle,
-        const Eigen::Matrix<T, N, 1>& in);
+        const Eigen::Matrix<T, N, 1>& in)
+    {
+        assert(N <= get_num_attributes());
+
+        for (Eigen::Index i = 0; i < N; ++i) {
+            this->operator()(handle, i) = in[i];
+        }
+    }
 
     /**
      * @brief Accessing an attribute using a handle to the mesh element
@@ -732,7 +778,10 @@ class Attribute : public AttributeBase
     /**
      * @brief Check if the attribute is empty
      */
-    __host__ __device__ __inline__ bool is_empty() const;
+    __host__ __device__ __forceinline__ bool is_empty() const
+    {
+        return m_max_num_patches == 0;
+    }
 
    protected:
     __host__ __device__ __forceinline__ uint32_t

@@ -234,71 +234,6 @@ void Attribute<T, HandleT>::from_matrix(DenseMatrix<T, Order>* mat)
 
 
 template <class T, typename HandleT>
-__host__ __device__ __forceinline__ uint32_t
-Attribute<T, HandleT>::size(const uint32_t p) const
-{
-#ifdef __CUDA_ARCH__
-    return m_d_patches_info[p].get_num_elements<HandleT>()[0];
-#else
-    return m_h_patches_info[p].get_num_elements<HandleT>()[0];
-#endif
-}
-
-template <class T, typename HandleT>
-__host__ __device__ __forceinline__ const PatchInfo&
-Attribute<T, HandleT>::get_patch_info(const uint32_t p) const
-{
-#ifdef __CUDA_ARCH__
-    return m_d_patches_info[p];
-#else
-    return m_h_patches_info[p];
-#endif
-}
-
-template <class T, typename HandleT>
-__host__ __device__ __forceinline__ uint32_t
-Attribute<T, HandleT>::get_num_attributes() const
-{
-    return this->m_num_attributes;
-}
-
-template <class T, typename HandleT>
-__host__ __device__ __forceinline__ locationT
-Attribute<T, HandleT>::get_allocated() const
-{
-    return this->m_allocated;
-}
-
-template <class T, typename HandleT>
-__host__ __device__ __forceinline__ layoutT
-Attribute<T, HandleT>::get_layout() const
-{
-    return this->m_layout;
-}
-
-template <class T, typename HandleT>
-__host__ __device__ __forceinline__ bool
-Attribute<T, HandleT>::is_device_allocated() const
-{
-    return ((m_allocated & DEVICE) == DEVICE);
-}
-
-template <class T, typename HandleT>
-__host__ __device__ __forceinline__ bool
-Attribute<T, HandleT>::is_host_allocated() const
-{
-    return ((m_allocated & HOST) == HOST);
-}
-
-
-template <class T, typename HandleT>
-__host__ __device__ __forceinline__ bool Attribute<T, HandleT>::is_empty() const
-{
-    return m_max_num_patches == 0;
-}
-
-
-template <class T, typename HandleT>
 const char* Attribute<T, HandleT>::get_name() const
 {
     return m_name;
@@ -521,35 +456,6 @@ void Attribute<T, HandleT>::copy_from(Attribute<T, HandleT>& source,
                                    stream));
     }
 }
-
-template <class T, typename HandleT>
-template <int N>
-__host__ __device__ __inline__ Eigen::Matrix<T, N, 1>
-         Attribute<T, HandleT>::to_eigen(const HandleT& handle) const
-{
-    assert(N <= get_num_attributes());
-
-    Eigen::Matrix<T, N, 1> ret;
-
-    for (Eigen::Index i = 0; i < N; ++i) {
-        ret[i] = this->operator()(handle, i);
-    }
-    return ret;
-}
-
-template <class T, typename HandleT>
-template <int N>
-__host__ __device__ __inline__ void Attribute<T, HandleT>::from_eigen(
-    const HandleT&                handle,
-    const Eigen::Matrix<T, N, 1>& in)
-{
-    assert(N <= get_num_attributes());
-
-    for (Eigen::Index i = 0; i < N; ++i) {
-        this->operator()(handle, i) = in[i];
-    }
-}
-
 
 template <class T, typename HandleT>
 void Attribute<T, HandleT>::allocate(locationT location)
