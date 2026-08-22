@@ -91,7 +91,18 @@ struct LPHashTable
      * is for the device only and must be called by a single block
      */
     template <uint32_t blockThreads>
-    __device__ void clear();
+    __device__ void clear()
+    {
+#ifdef __CUDA_ARCH__
+        assert(m_is_on_device);
+        for (uint32_t i = threadIdx.x; i < m_capacity; i += blockThreads) {
+            m_table[i].m_pair = INVALID32;
+        }
+        for (uint32_t i = threadIdx.x; i < stash_size; i += blockThreads) {
+            m_stash[i].m_pair = INVALID32;
+        }
+#endif
+    }
 
     /**
      * @brief Free the GPU allocation
@@ -116,13 +127,51 @@ struct LPHashTable
      * @brief compute current load factor
      */
     __host__ __device__ float compute_load_factor(
-        LPPair* s_table = nullptr) const;
+        LPPair* s_table = nullptr) const
+    {
+        auto lf = [&]() {
+            uint32_t m = 0;
+            for (uint32_t i = 0; i < m_capacity; ++i) {
+                if (s_table != nullptr) {
+                    if (!s_table[i].is_sentinel()) {
+                        ++m;
+                    }
+                } else {
+                    if (!m_table[i].is_sentinel()) {
+                        ++m;
+                    }
+                }
+            }
+            return m;
+        };
+
+        return static_cast<float>(lf()) / static_cast<float>(m_capacity);
+    }
 
     /**
      * @brief compute current load factor for the stash
      */
     __host__ __device__ float compute_stash_load_factor(
-        LPPair* s_stash = nullptr) const;
+        LPPair* s_stash = nullptr) const
+    {
+        auto lf = [&]() {
+            uint32_t m = 0;
+            for (uint32_t i = 0; i < stash_size; ++i) {
+                if (s_stash != nullptr) {
+                    if (!s_stash[i].is_sentinel()) {
+                        ++m;
+                    }
+                } else {
+                    if (!m_stash[i].is_sentinel()) {
+                        ++m;
+                    }
+                }
+            }
+            return m;
+        };
+
+        return static_cast<float>(lf()) / static_cast<float>(stash_size);
+    }
 
     /**
      * @brief memcpy the hashtable from host to device, host to host, device to
@@ -157,7 +206,15 @@ struct LPHashTable
      */
     template <uint32_t blockSize>
     __device__ void write_to_global_memory(const LPPair* s_table,
-                                           const LPPair* s_stash);
+                                           const LPPair* s_stash)
+    {
+#ifdef __CUDA_ARCH__
+        if (s_stash != nullptr) {
+            detail::store<blockSize>(s_stash, stash_size, m_stash);
+        }
+        detail::store<blockSize>(s_table, m_capacity, m_table);
+#endif
+    }
 
     /**
      * @brief Insert new pair in the table. This function can be called from
@@ -170,7 +227,88 @@ struct LPHashTable
      */
     __host__ __device__ bool insert(LPPair           pair,
                                     volatile LPPair* table = nullptr,
-                                    volatile LPPair* stash = nullptr);
+                                    volatile LPPair* stash = nullptr)
+    {
+#ifndef __CUDA_ARCH__
+        assert(stash == nullptr);
+        assert(table == nullptr);
+#endif
+
+        auto     bucket_id      = m_hasher0(pair.key()) % m_capacity;
+        uint16_t cuckoo_counter = 0;
+
+        do {
+            const auto input_key = pair.key();
+#ifdef __CUDA_ARCH__
+            if (table != nullptr) {
+                pair.m_pair =
+                    ::atomicExch((uint32_t*)table + bucket_id, pair.m_pair);
+            } else {
+                pair.m_pair =
+                    ::atomicExch((uint32_t*)m_table + bucket_id, pair.m_pair);
+            }
+#else
+            uint32_t temp = pair.m_pair;
+            if (table != nullptr) {
+                pair.m_pair             = table[bucket_id].m_pair;
+                table[bucket_id].m_pair = temp;
+            } else {
+                pair.m_pair               = m_table[bucket_id].m_pair;
+                m_table[bucket_id].m_pair = temp;
+            }
+#endif
+
+            if (pair.is_sentinel() || pair.key() == input_key) {
+                return true;
+            } else {
+                auto bucket0 = m_hasher0(pair.key()) % m_capacity;
+                auto bucket1 = m_hasher1(pair.key()) % m_capacity;
+                auto bucket2 = m_hasher2(pair.key()) % m_capacity;
+                auto bucket3 = m_hasher3(pair.key()) % m_capacity;
+
+                auto new_bucket_id = bucket0;
+                if (bucket_id == bucket2) {
+                    new_bucket_id = bucket3;
+                } else if (bucket_id == bucket1) {
+                    new_bucket_id = bucket2;
+                } else if (bucket_id == bucket0) {
+                    new_bucket_id = bucket1;
+                }
+
+                bucket_id = new_bucket_id;
+            }
+            cuckoo_counter++;
+        } while (cuckoo_counter < m_max_cuckoo_chains);
+
+        const auto input_key = pair.key();
+
+#ifdef __CUDA_ARCH__
+        for (uint8_t i = 0; i < stash_size; ++i) {
+            LPPair prv;
+            if (stash != nullptr) {
+                prv.m_pair =
+                    ::atomicCAS((uint32_t*)(stash + i), INVALID32, pair.m_pair);
+            } else {
+                prv.m_pair =
+                    ::atomicCAS(reinterpret_cast<uint32_t*>(m_stash + i),
+                                INVALID32,
+                                pair.m_pair);
+            }
+            if (prv.is_sentinel() || prv.key() == input_key) {
+                return true;
+            }
+        }
+#else
+        assert(stash == nullptr);
+        for (uint8_t i = 0; i < stash_size; ++i) {
+            if (m_stash[i].is_sentinel() || m_stash[i].key() == input_key) {
+                m_stash[i] = pair;
+                return true;
+            }
+        }
+#endif
+        return false;
+    }
 
     /**
      * @brief Find a pair in the hash table given its key.
@@ -194,7 +332,23 @@ struct LPHashTable
      * find the old pair. Then, we replace it with new_pair
      * @param new_pair the new pair that will be inserted
      */
-    __host__ __device__ void replace(const LPPair new_pair);
+    __host__ __device__ void replace(const LPPair new_pair)
+    {
+        uint32_t bucket_id(0);
+        bool     in_stash(false);
+        LPPair   old_pair =
+            find(new_pair.key(), bucket_id, in_stash, nullptr, nullptr);
+
+        assert(!old_pair.is_sentinel());
+        assert(new_pair.key() == old_pair.key());
+
+        if (!in_stash) {
+            m_table[bucket_id].m_pair = new_pair.m_pair;
+        } else {
+            m_stash[bucket_id].m_pair = new_pair.m_pair;
+        }
+    }
+
 
     /**
      * @brief remove item from the hash table i.e., replace it with
@@ -207,7 +361,26 @@ struct LPHashTable
      */
     __host__ __device__ void remove(const typename LPPair::KeyT key,
                                     LPPair*                     table,
-                                    LPPair*                     stash);
+                                    LPPair*                     stash)
+    {
+        uint32_t bucket_id(0);
+        bool     in_stash(false);
+        find(key, bucket_id, in_stash, table, stash);
+
+        if (!in_stash) {
+            if (table != nullptr) {
+                table[bucket_id].m_pair = INVALID32;
+            } else {
+                m_table[bucket_id].m_pair = INVALID32;
+            }
+        } else {
+            if (stash != nullptr) {
+                stash[bucket_id].m_pair = INVALID32;
+            } else {
+                m_stash[bucket_id].m_pair = INVALID32;
+            }
+        }
+    }
 
     /**
      * @brief Find a pair in the hash table given its key.

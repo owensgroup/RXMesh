@@ -9,13 +9,16 @@
 
 #include <cuda_runtime.h>
 #include <stdint.h>
+#include <cassert>
+
+#include "rxmesh/util/macros.h"
 
 namespace rxmesh {
 
 struct PatchScheduler
 {
     __device__ __host__ PatchScheduler()
-        : count(nullptr), capacity(0), list(nullptr){};
+        : count(nullptr), capacity(0), list(nullptr) {};
     __device__ __host__ PatchScheduler(const PatchScheduler& other) = default;
     __device__ __host__ PatchScheduler(PatchScheduler&&)            = default;
     __device__ __host__ PatchScheduler& operator=(const PatchScheduler&) =
@@ -26,12 +29,77 @@ struct PatchScheduler
     /**
      * @brief add/push new patch of the list
      */
-    __device__ bool push(const uint32_t pid);
+    __device__ bool push(const uint32_t pid)
+    {
+#ifdef __CUDA_ARCH__
+#ifdef PROCESS_SINGLE_PATCH
+        return true;
+#else
+        assert(pid != INVALID32);
+        if (::atomicAdd(count, 1) < static_cast<int>(capacity)) {
+            int pos = ::atomicAdd(back, 1) % capacity;
+
+            // the loop because another thread/block may have just decremented
+            // the count but has not yet finish reading from the list
+            while (::atomicCAS(list + pos, INVALID32, pid) != INVALID32) {
+                // TODO do we really need to sleep if it is only one thread
+                // in the block doing the job??
+                //__nanosleep(10);
+            }
+            return true;
+        } else {
+            // for our configuration, this should not happen since a block only
+            // pop a patch and, if not able to process it due to dependency
+            // conflict, the block push the same patch again. So at all times
+            // count is less than capacity if capacity is total number of
+            // patches
+            assert(0);
+            return false;
+        }
+
+
+#endif
+#else
+        // to silence the compiler warning
+        return true;
+#endif
+    }
 
     /**
      * @brief get a patch from the list. If the list is empty, return INVALID32
      */
-    __device__ uint32_t pop();
+    __device__ uint32_t pop()
+    {
+#ifdef __CUDA_ARCH__
+#ifdef PROCESS_SINGLE_PATCH
+        return blockIdx.x;
+#else
+        int readable = ::atomicSub(count, 1);
+
+        uint32_t pid = INVALID32;
+
+        if (readable <= 0) {
+            ::atomicAdd(count, 1);
+        } else {
+
+            int pos = ::atomicAdd(front, 1) % capacity;
+
+            // the loop because another thread/block may have just incremented
+            // the count but has not yet wrote to the list
+            while (pid == INVALID32) {
+                pid = atomicExch(list + pos, INVALID32);
+                // TODO do we really need to sleep if it is only one thread
+                // in the block doing the job??
+                //__nanosleep(10);
+            }
+        }
+        return pid;
+#endif
+#else
+        // to silence the compiler warning
+        return INVALID32;
+#endif
+    }
 
     /**
      * @brief fill the list by sequential numbers
@@ -53,14 +121,27 @@ struct PatchScheduler
     /**
      * @brief return the size of the queue (that is not the capacity)
      */
-    __host__ __device__ int size(cudaStream_t stream = NULL) const;
+    __host__ __device__ int size(cudaStream_t stream = NULL) const
+    {
+#ifdef __CUDA_ARCH__
+        return count[0];
+#else
+        int h_count = 0;
+        CUDA_ERROR(cudaMemcpyAsync(
+            &h_count, count, sizeof(int), cudaMemcpyDeviceToHost, stream));
+        return h_count;
+#endif
+    }
 
     /**
      * @brief check if the list empty. On the host, the check need to move data
      * from device to host
      * @return
      */
-    __host__ __device__ bool is_empty(cudaStream_t stream = NULL);
+    __host__ __device__ bool is_empty(cudaStream_t stream = NULL)
+    {
+        return size(stream) == 0;
+    }
 
     int*      count;
     int*      front;

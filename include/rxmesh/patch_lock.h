@@ -4,6 +4,10 @@
 
 #include "rxmesh/util/macros.h"
 
+#if defined(__CUDACC__)
+#include "rxmesh/kernels/util.cuh"
+#endif
+
 namespace rxmesh {
 
 /**
@@ -22,18 +26,53 @@ struct PatchLock
     /**
      * @brief acquire the lock give an id that represent the block index
      */
-    __device__ bool acquire_lock(uint32_t id);
+    __device__ bool acquire_lock(uint32_t id)
+    {
+#ifdef __CUDA_ARCH__
+        int attempt = 0;
+        while (::atomicCAS(lock, FREE, LOCKED) == LOCKED) {
+            __threadfence();
+            if (attempt == MAX_ATTEMPT) {
+                int other = ::atomicMin(spin, id);
+                __threadfence();
+                if (other < id) {
+                    return false;
+                }
+                attempt = 0;
+            }
+            attempt++;
+        }
+        atomicExch(spin, id);
+        return true;
+#else
+        return true;
+#endif
+    }
 
     /**
      * @brief release the lock. Should only be called by the block/thread that
      * has successfully acquired the lock
      */
-    __device__ void release_lock();
+    __device__ void release_lock()
+    {
+#ifdef __CUDA_ARCH__
+        atomicExch(spin, INVALID32);
+        atomicExch(lock, FREE);
+        __threadfence();
+#endif
+    }
 
     /**
      * @brief check if the patch is locked
      */
-    __device__ bool is_locked() const;
+    __device__ bool is_locked() const
+    {
+#ifdef __CUDA_ARCH__
+        return atomic_read(lock) == LOCKED;
+#else
+        return false;
+#endif
+    }
 
     /**
      * @brief initialize the lock by allocating memory and initialized the
