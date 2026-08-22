@@ -121,6 +121,7 @@ write_basic_package_version_file(
 install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/RXMeshConfig.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/RXMeshConfigVersion.cmake"
+        "${RXMESH_SOURCE_DIR}/cmake/RXMeshApp.cmake"
         DESTINATION "${RXMESH_INSTALL_CMAKEDIR}"
         ${_RXMESH_INSTALL_COMPONENT_ARGS})
 

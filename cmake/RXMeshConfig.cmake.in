@@ -1,6 +1,13 @@
 @PACKAGE_INIT@
 
+if(CMAKE_VERSION VERSION_LESS 3.25)
+    message(FATAL_ERROR
+        "RXMesh requires CMake 3.25 or newer for mandatory CUDA device "
+        "link-time optimization.")
+endif()
+
 include(CMakeFindDependencyMacro)
+include("${CMAKE_CURRENT_LIST_DIR}/RXMeshApp.cmake")
 
 find_dependency(CUDAToolkit REQUIRED)
 find_package(OpenMP QUIET)

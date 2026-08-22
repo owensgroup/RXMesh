@@ -43,6 +43,7 @@ source_group(
 # Required for targets that compile CUDA sources.
 set_property(TARGET RXMesh PROPERTY CUDA_SEPARABLE_COMPILATION ON)
 set_property(TARGET RXMesh PROPERTY POSITION_INDEPENDENT_CODE ON)
+rxmesh_enable_cuda_device_lto(RXMesh)
 
 target_compile_features(RXMesh PUBLIC cxx_std_17)
 target_compile_definitions(RXMesh
@@ -86,9 +87,7 @@ set(cuda_flags
     # 20054-D "dynamic initialization is not supported for a function-scope static __shared__ variable within a __device__/__global__ function"
     -Xcudafe "--display_error_number --diag_suppress=177 --diag_suppress=174 --diag_suppress=20054"
     -rdc=true
-    -lineinfo
     --expt-extended-lambda
-    -use_fast_math
     $<$<CXX_COMPILER_ID:GNU>:-O3>
     --expt-relaxed-constexpr
     -Xptxas -warn-spills

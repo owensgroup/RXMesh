@@ -1,6 +1,6 @@
 #To run with cuDSS:
 #>> cmake -DRX_USE_CUDSS=ON -DCMAKE_PREFIX_PATH="C:\Program Files\NVIDIA cuDSS\v0.6\lib\12\cmake" ..
-cmake_minimum_required(VERSION 3.24 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.25 FATAL_ERROR)
 
 if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
     set(CMAKE_CUDA_ARCHITECTURES native)
@@ -12,6 +12,12 @@ cmake_policy(SET CMP0169 OLD)
 project(RXMesh 
         VERSION 0.2.1 
         LANGUAGES C CXX CUDA)
+
+include(cmake/RXMeshApp.cmake)
+# CMake emits per-architecture LTO IR only for numeric architecture values.
+rxmesh_resolve_cuda_architectures(
+    CMAKE_CUDA_ARCHITECTURES
+    ${CMAKE_CUDA_ARCHITECTURES})
 
 message(STATUS "RXMesh: CUDA architectures: ${CMAKE_CUDA_ARCHITECTURES}")
 
