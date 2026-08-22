@@ -537,7 +537,7 @@ __global__ static void remove_surplus_elements(Context context)
 
     __shared__ uint32_t s_patch_stash[PatchStash::stash_size];
     fill_n<blockThreads>(
-        s_patch_stash, uint16_t(LPHashTable::stash_size), INVALID32);
+        s_patch_stash, uint16_t(PatchStash::stash_size), INVALID32);
 
     block.sync();
     remove_idle_elements<blockThreads>(block,
