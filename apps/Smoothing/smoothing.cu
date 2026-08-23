@@ -87,6 +87,14 @@ void smoothing(RXMeshStatic& rx)
 
     GradientDescent gd(problem, Arg.learning_rate);
 
+    // Warm up the GPU for one second
+    GPUTimer warmup_timer;
+    warmup_timer.start();
+    do {
+        problem.eval_terms();
+        warmup_timer.stop();
+    } while (warmup_timer.elapsed_millis() < 1000.0f);
+
     GPUTimer timer;
     timer.start();
 
