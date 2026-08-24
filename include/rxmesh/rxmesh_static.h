@@ -831,6 +831,16 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<VertexAttribute<rx_coord_t>> get_input_vertex_coordinates();
 
     /**
+     * @brief Copy the input vertex positions into an external row-major
+     * buffer
+     * @param coordinates Buffer with room for 3x#V values.
+     * @param use_global_order If false, row i corresponds to compact linear
+     * vertex ID i. If true, row i corresponds to global (input) vertex ID i.
+     */
+    void get_input_vertex_coordinates(rx_coord_t* coordinates,
+                                      bool use_global_order = false) const;
+
+    /**
      * @brief return the number of regions (labels) in the mesh.
      */
     int get_num_regions() const;
@@ -999,6 +1009,17 @@ class RXMeshStatic : public RXMesh
      * @brief convert the mesh connectivity to face list
      */
     void create_face_list(std::vector<glm::uvec3>& f_list) const;
+
+    /**
+     * @brief Copy the mesh connectivity into a row-major buffer
+     * @param f_list Buffer with room for 3x#F uint32_t values
+     * @param
+     * use_global_order If false, rows and vertex IDs use compact linear
+     * ordering. If true, rows use global (input) face IDs and entries use
+     * global (input) vertex IDs
+     */
+    void create_face_list(uint32_t* f_list,
+                          bool      use_global_order = false) const;
 
    protected:
     template <typename AttributeT>

@@ -574,6 +574,37 @@ RXMeshStatic::get_input_vertex_coordinates()
     return m_input_vertex_coordinates;
 }
 
+void RXMeshStatic::get_input_vertex_coordinates(rx_coord_t* coordinates,
+                                                bool use_global_order) const
+{
+    if (!m_input_vertex_coordinates) {
+        RXMESH_ERROR(
+            "RXMeshStatic::get_input_vertex_coordinates input vertex was "
+            "not initialized. Call RXMeshStatic with constructor to the "
+            "obj file path");
+        exit(EXIT_FAILURE);
+    }
+
+    if (coordinates == nullptr && get_num_vertices() != 0) {
+        RXMESH_ERROR(
+            "RXMeshStatic::get_input_vertex_coordinates output buffer is "
+            "null");
+        return;
+    }
+
+    for_each_vertex(
+        HOST,
+        [&](const VertexHandle vh) {
+            const uint32_t row =
+                use_global_order ? map_to_global(vh) : linear_id(vh);
+            for (uint32_t i = 0; i < 3; ++i) {
+                coordinates[3 * row + i] = (*m_input_vertex_coordinates)(vh, i);
+            }
+        },
+        NULL,
+        false);
+}
+
 int RXMeshStatic::get_num_regions() const
 {
     return m_num_regions;
@@ -720,6 +751,42 @@ void RXMeshStatic::create_face_list(std::vector<glm::uvec3>& f_list) const
                     face[e]          = vid;
                 }
                 f_list.push_back(face);
+            }
+        }
+    }
+}
+
+void RXMeshStatic::create_face_list(uint32_t* f_list,
+                                    bool      use_global_order) const
+{
+    //TODO should combine this implementation and the one above into one 
+    if (f_list == nullptr && get_num_faces() != 0) {
+        RXMESH_ERROR("RXMeshStatic::create_face_list output buffer is null");
+        return;
+    }
+
+    for (uint32_t p = 0; p < this->m_num_patches; ++p) {
+        const uint32_t p_num_faces = this->m_h_patches_info[p].num_faces[0];
+        for (uint32_t f = 0; f < p_num_faces; ++f) {
+            if (!detail::is_deleted(f,
+                                    this->m_h_patches_info[p].active_mask_f) &&
+                detail::is_owned(f, this->m_h_patches_info[p].owned_mask_f)) {
+
+                const FaceHandle fh(p, f);
+                const uint32_t   row =
+                    use_global_order ? map_to_global(fh) : linear_id(fh);
+
+                for (uint32_t e = 0; e < 3; ++e) {
+                    uint16_t edge = this->m_h_patches_info[p].fe[3 * f + e].id;
+                    flag_t   dir(0);
+                    Context::unpack_edge_dir(edge, edge, dir);
+                    const uint16_t e_id = (2 * edge) + dir;
+                    const uint16_t v    = this->m_h_patches_info[p].ev[e_id].id;
+                    const VertexHandle vh(p, v);
+                    const uint32_t     vid =
+                        use_global_order ? map_to_global(vh) : linear_id(vh);
+                    f_list[3 * row + e] = vid;
+                }
             }
         }
     }
