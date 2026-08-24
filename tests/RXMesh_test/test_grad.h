@@ -361,24 +361,6 @@ TEST(Diff, ConfigurableStorage)
     }
     EXPECT_EQ(rx.get_attribute_names(), baseline_names);
 
-    DiffProblemMemoryOptions absent_options = metadata_options;
-    absent_options.opt_var_storage          = OptVarStorage::Absent;
-    {
-        ProblemT problem(rx, false, absent_options, "absent_opt_var");
-        EXPECT_EQ(problem.opt_var, nullptr);
-        EXPECT_FALSE(problem.has_owned_opt_var());
-        EXPECT_EQ(rx.get_attribute_names(), baseline_names);
-        try {
-            problem.eval_terms_grad_only();
-            FAIL() << "Expected absent-storage evaluation to throw";
-        } catch (const std::invalid_argument& error) {
-            const std::string message(error.what());
-            EXPECT_NE(message.find("eval_terms_grad_only"), std::string::npos);
-            EXPECT_NE(message.find("Absent"), std::string::npos);
-        }
-    }
-    EXPECT_EQ(rx.get_attribute_names(), baseline_names);
-
     // Repeated construction exercises mesh monotonic names and exact
     // identity cleanup rather than relying on allocator addresses.
     for (int i = 0; i < 100; ++i) {

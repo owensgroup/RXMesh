@@ -18,8 +18,7 @@ namespace rxmesh {
 enum class OptVarStorage
 {
     Owned,
-    MetadataOnly,
-    Absent
+    MetadataOnly
 };
 
 /**
@@ -99,24 +98,21 @@ struct DiffScalarProblem
             grad.reset(T(0), options.gradient_location);
         }
 
-        if (options.opt_var_storage != OptVarStorage::Absent) {
-            const std::string internal_name =
-                options.unique_internal_names ?
-                    rx.make_unique_attribute_name(opt_var_name + ":rx:diff:") :
-                    opt_var_name;
-            const locationT opt_var_location =
-                options.opt_var_storage == OptVarStorage::MetadataOnly ?
-                    LOCATION_NONE :
-                    options.opt_var_location;
-            opt_var =
-                rx.add_attribute<T, OptVarHandleT>(internal_name,
-                                                   VariableDim,
-                                                   opt_var_location,
-                                                   options.opt_var_layout);
-            opt_var_registration.bind(rx, opt_var.get());
-            if (opt_var_location != LOCATION_NONE) {
-                opt_var->reset(T(0), opt_var_location);
-            }
+        const std::string internal_name =
+            options.unique_internal_names ?
+                rx.make_unique_attribute_name(opt_var_name + ":rx:diff:") :
+                opt_var_name;
+        const locationT opt_var_location =
+            options.opt_var_storage == OptVarStorage::MetadataOnly ?
+                LOCATION_NONE :
+                options.opt_var_location;
+        opt_var = rx.add_attribute<T, OptVarHandleT>(internal_name,
+                                                     VariableDim,
+                                                     opt_var_location,
+                                                     options.opt_var_layout);
+        opt_var_registration.bind(rx, opt_var.get());
+        if (opt_var_location != LOCATION_NONE) {
+            opt_var->reset(T(0), opt_var_location);
         }
 
         if constexpr (WithHessian) {
@@ -628,14 +624,10 @@ struct DiffScalarProblem
     bool require_owned_opt_var(const char* operation) const
     {
         if (!has_owned_opt_var()) {
-            const char* mode =
-                memory_options.opt_var_storage == OptVarStorage::MetadataOnly ?
-                    "MetadataOnly" :
-                    "Absent";
             const std::string message =
                 "DiffScalarProblem::" + std::string(operation) +
                 "() requires OptVarStorage::Owned, but this problem uses " +
-                mode +
+                "MetadataOnly" +
                 ". Use an overload with an explicit optimization Attribute.";
             RXMESH_ERROR("{}", message);
             throw std::invalid_argument(message);
