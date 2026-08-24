@@ -4,9 +4,6 @@
 #include "rxmesh/matrix/permute_method.h"
 #include "rxmesh/matrix/permute_util.h"
 
-#include "rxmesh/matrix/mgnd_permute.cuh"
-#include "rxmesh/matrix/nd_permute.cuh"
-
 #include "thrust/device_ptr.h"
 #include "thrust/execution_policy.h"
 #include "thrust/gather.h"
@@ -133,11 +130,6 @@ struct DirectSolver : public SolverBase<SpMatT, DenseMatOrder>
                                                      m_h_solver_col_idx,
                                                      NULL,
                                                      m_h_permute));
-        } else if (m_perm == PermuteMethod::GPUMGND) {
-            mgnd_permute(rx, m_h_permute);
-
-        } else if (m_perm == PermuteMethod::GPUND) {
-            nd_permute(rx, m_h_permute);
         } else {
             RXMESH_ERROR("DirectSolver::permute() incompatible permute method");
         }
