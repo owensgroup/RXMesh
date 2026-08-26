@@ -38,7 +38,17 @@ struct ALIGN(16) PatchInfo
           vertices_capacity(0),
           edges_capacity(0),
           faces_capacity(0),
-          patch_id(INVALID32) {};
+          patch_id(INVALID32),
+          color(INVALID32),
+          dirty(nullptr),
+          child_id(INVALID32),
+          should_slice(false),
+          tf(nullptr),
+          active_mask_t(nullptr),
+          owned_mask_t(nullptr),
+          num_tets(nullptr),
+          tets_capacity(0),
+          lp_t() {};
 
     __device__ __host__            PatchInfo(const PatchInfo& other) = default;
     __device__ __host__            PatchInfo(PatchInfo&&)            = default;
@@ -46,25 +56,26 @@ struct ALIGN(16) PatchInfo
     __device__ __host__ PatchInfo& operator=(PatchInfo&&)            = default;
     __device__                     __host__ ~PatchInfo()             = default;
 
-    // The topology information: edge incident vertices and face incident edges
+    // The topology information: edge incident vertices, face incident edges,
+    // and tet incident faces
     LocalVertexT* ev;
     LocalEdgeT*   fe;
-
+    LocalFaceT*   tf;
 
     // Active bitmask where 1 indicates active/existing mesh element and 0
     // if the mesh element is deleted
-    uint32_t *active_mask_v, *active_mask_e, *active_mask_f;
+    uint32_t *active_mask_v, *active_mask_e, *active_mask_f, *active_mask_t;
 
     // Owned bitmask where 1 indicates that the mesh element is owned by this
     // patch
-    uint32_t *owned_mask_v, *owned_mask_e, *owned_mask_f;
+    uint32_t *owned_mask_v, *owned_mask_e, *owned_mask_f, *owned_mask_t;
 
     // Number of mesh elements in the patch
-    uint16_t *num_vertices, *num_edges, *num_faces;
+    uint16_t *num_vertices, *num_edges, *num_faces, *num_tets;
 
-    // Capacity of v/e/f. This controls the allocations of ev, fe,
-    // active_mask_v/e/f, owned_mask_v/e/f
-    uint16_t vertices_capacity, edges_capacity, faces_capacity;
+    // Capacity of v/e/f/t. This controls the allocations of ev, fe, and tf
+    // active_mask_v/e/f/t, owned_mask_v/e/f/t
+    uint16_t vertices_capacity, edges_capacity, faces_capacity, tets_capacity;
 
     // The index of this patch
     uint32_t patch_id;
@@ -77,7 +88,7 @@ struct ALIGN(16) PatchInfo
     // Hash table storing the mapping from local indices of ribbon (not-owned)
     // mesh elements to their owner patch and their local indices in their owner
     // patch
-    LPHashTable lp_v, lp_e, lp_f;
+    LPHashTable lp_v, lp_e, lp_f, lp_t;
 
     // a lock for the patch that should be acquired before modifying the patch
     // specially if more than one thread is updating the patch
@@ -92,8 +103,8 @@ struct ALIGN(16) PatchInfo
     bool should_slice;
 
     /**
-     * @brief update the dirty flag associated with this patch. The calling
-     * thread should have locked the patch before updating
+     * @brief update the dirty flag associated with this patch. The
+     * calling thread should have locked the patch before updating
      * @return
      */
     __device__ __forceinline__ void set_dirty()
@@ -380,8 +391,7 @@ struct ALIGN(16) PatchInfo
     /**
      * @brief check if an edge within this patch is deleted
      */
-    __device__ __host__ __forceinline__ bool is_deleted(
-        LocalEdgeT eh) const
+    __device__ __host__ __forceinline__ bool is_deleted(LocalEdgeT eh) const
     {
         assert(eh.id != INVALID16);
         return detail::is_deleted(eh.id, get_active_mask<EdgeHandle>());

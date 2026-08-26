@@ -680,5 +680,7 @@ class RXMesh
     uint32_t m_num_colors;
 
     Timers<CPUTimer> m_timers;
+
+    bool m_is_tet_mesh = false;
 };
 }  // namespace rxmesh

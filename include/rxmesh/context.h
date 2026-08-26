@@ -40,7 +40,12 @@ class Context
           m_max_num_patches(0),
           m_d_v_handles(nullptr),
           m_d_e_handles(nullptr),
-          m_d_f_handles(nullptr)
+          m_d_f_handles(nullptr),
+          m_num_tets(nullptr),
+          m_max_num_tets(nullptr),
+          m_d_tet_prefix(nullptr),
+          m_h_tet_prefix(nullptr),
+          m_d_t_handles(nullptr)
 
     {
     }
@@ -438,5 +443,9 @@ class Context
     VertexHandle* m_d_v_handles;
     EdgeHandle*   m_d_e_handles;
     FaceHandle*   m_d_f_handles;
+
+    uint32_t * m_num_tets, *m_max_num_tets;
+    uint32_t * m_d_tet_prefix, *m_h_tet_prefix;
+    TetHandle* m_d_t_handles;
 };
 }  // namespace rxmesh
