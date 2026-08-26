@@ -155,6 +155,9 @@ struct Iterator
 
     __device__ __forceinline__ HandleT back() const
     {
+        if (size() == 0) {
+            return HandleT();
+        }
         return ((*this)[size() - 1]);
     }
 
@@ -189,7 +192,7 @@ struct Iterator
             m_begin = m_local_id * offset_size;
             m_end   = (m_local_id + 1) * offset_size;
         }
-        assert(m_end > m_begin);
+        assert(m_end >= m_begin);
     }
 };
 
@@ -197,6 +200,7 @@ using VertexIterator = Iterator<VertexHandle>;
 using EdgeIterator   = Iterator<EdgeHandle>;
 using DEdgeIterator  = Iterator<DEdgeHandle>;
 using FaceIterator   = Iterator<FaceHandle>;
+using TetIterator    = Iterator<TetHandle>;
 
 
 /**
@@ -283,5 +287,52 @@ struct IteratorType<Op::FF>
     using type = FaceIterator;
 };
 
+template <>
+struct IteratorType<Op::T>
+{
+    using type = TetIterator;
+};
+
+template <>
+struct IteratorType<Op::VT>
+{
+    using type = TetIterator;
+};
+
+template <>
+struct IteratorType<Op::ET>
+{
+    using type = TetIterator;
+};
+
+template <>
+struct IteratorType<Op::FT>
+{
+    using type = TetIterator;
+};
+
+template <>
+struct IteratorType<Op::TV>
+{
+    using type = VertexIterator;
+};
+
+template <>
+struct IteratorType<Op::TE>
+{
+    using type = EdgeIterator;
+};
+
+template <>
+struct IteratorType<Op::TF>
+{
+    using type = FaceIterator;
+};
+
+template <>
+struct IteratorType<Op::TT>
+{
+    using type = TetIterator;
+};
 
 }  // namespace rxmesh
