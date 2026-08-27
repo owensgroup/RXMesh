@@ -18,7 +18,9 @@ namespace rxmesh {
 struct PatchScheduler
 {
     __device__ __host__ PatchScheduler()
-        : count(nullptr), capacity(0), list(nullptr) {};
+        : count(nullptr), front(nullptr), back(nullptr), capacity(0), list(nullptr)
+    {
+    }
     __device__ __host__ PatchScheduler(const PatchScheduler& other) = default;
     __device__ __host__ PatchScheduler(PatchScheduler&&)            = default;
     __device__ __host__ PatchScheduler& operator=(const PatchScheduler&) =

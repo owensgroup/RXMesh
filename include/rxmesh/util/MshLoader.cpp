@@ -11,14 +11,13 @@
 
 #include <cassert>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <vector>
 
-#include <string.h>
-
 namespace rxmesh {
-// helper function
-void inline _msh_eat_white_space(std::ifstream& fin)
+namespace {
+void eat_text_white_space(std::ifstream& fin)
 {
     char next = fin.peek();
     while (next == '\n' || next == ' ' || next == '\t' || next == '\r') {
@@ -27,6 +26,30 @@ void inline _msh_eat_white_space(std::ifstream& fin)
     }
 }
 
+void consume_binary_line_end(std::ifstream& fin)
+{
+    int next = fin.get();
+    while (next == ' ' || next == '\t') {
+        next = fin.get();
+    }
+    if (next == '\r') {
+        next = fin.get();
+    }
+    if (next != '\n') {
+        throw std::runtime_error("Expected a line ending before binary data");
+    }
+}
+
+template <typename T>
+T read_binary(std::ifstream& fin)
+{
+    T value;
+    if (!fin.read(reinterpret_cast<char*>(&value), sizeof(T))) {
+        throw std::runtime_error("Unexpected end of binary .msh data");
+    }
+    return value;
+}
+}  // namespace
 
 MshLoader::MshLoader(const std::string& filename)
 {
@@ -47,8 +70,11 @@ MshLoader::MshLoader(const std::string& filename)
     }
 
     fin >> version >> type >> m_data_size;
+    if (type != 0 && type != 1) {
+        throw std::runtime_error("Unsupported .msh encoding");
+    }
     m_binary = (type == 1);
-    if (version > 2.2 || version < 2.0) {
+    if (version != 2.0 && version != 2.1 && version != 2.2) {
         // probably unsupported version
         std::stringstream err_msg;
         err_msg << "Error: Unsupported file version:" << version << std::endl;
@@ -69,9 +95,8 @@ MshLoader::MshLoader(const std::string& filename)
 
     // Read in extra info from binary header.
     if (m_binary) {
-        int one;
-        _msh_eat_white_space(fin);
-        fin.read(reinterpret_cast<char*>(&one), sizeof(int));
+        consume_binary_line_end(fin);
+        const int one = read_binary<int>(fin);
         if (one != 1) {
             std::stringstream err_msg;
             err_msg << "Binary msh file " << filename
@@ -127,34 +152,43 @@ MshLoader::MshLoader(const std::string& filename)
 void MshLoader::parse_nodes(std::ifstream& fin)
 {
     size_t num_nodes;
-    fin >> num_nodes;
-    m_nodes.resize(num_nodes * 3);
+    if (!(fin >> num_nodes)) {
+        throw std::runtime_error("Invalid .msh node count");
+    }
+    if (num_nodes > static_cast<size_t>(std::numeric_limits<int>::max())) {
+        throw std::runtime_error("Too many .msh nodes");
+    }
+    m_nodes.reserve(num_nodes * 3);
+
+    auto add_node =
+        [&](const int tag, const double x, const double y, const double z) {
+            if (tag <= 0 ||
+                !m_node_map.emplace(tag, static_cast<int>(m_node_map.size()))
+                     .second) {
+                throw std::runtime_error("Invalid or duplicate .msh node tag");
+            }
+            m_nodes.push_back(static_cast<Float>(x));
+            m_nodes.push_back(static_cast<Float>(y));
+            m_nodes.push_back(static_cast<Float>(z));
+        };
 
     if (m_binary) {
-        size_t stride    = (4 + 3 * m_data_size);
-        size_t num_bytes = stride * num_nodes;
-        char*  data      = new char[num_bytes];
-        _msh_eat_white_space(fin);
-        fin.read(data, num_bytes);
-
+        consume_binary_line_end(fin);
         for (size_t i = 0; i < num_nodes; i++) {
-            int node_idx;
-            memcpy(&node_idx, data + i * stride, sizeof(int));
-            node_idx -= 1;
-            // directly move into vector storage
-            // this works only when m_data_size==sizeof(Float)==sizeof(double)
-            memcpy(
-                &m_nodes[node_idx * 3], data + i * stride + 4, m_data_size * 3);
+            const int    tag = read_binary<int>(fin);
+            const double x   = read_binary<double>(fin);
+            const double y   = read_binary<double>(fin);
+            const double z   = read_binary<double>(fin);
+            add_node(tag, x, y, z);
         }
-        delete[] data;
     } else {
-        int node_idx;
         for (size_t i = 0; i < num_nodes; i++) {
-            fin >> node_idx;
-            node_idx -= 1;
-            // here it's 3D node explicitly
-            fin >> m_nodes[node_idx * 3] >> m_nodes[node_idx * 3 + 1] >>
-                m_nodes[node_idx * 3 + 2];
+            int    tag;
+            double x, y, z;
+            if (!(fin >> tag >> x >> y >> z)) {
+                throw std::runtime_error("Invalid .msh node");
+            }
+            add_node(tag, x, y, z);
         }
     }
 }
@@ -163,53 +197,70 @@ void MshLoader::parse_elements(std::ifstream& fin)
 {
     m_elements_tags.resize(2);  // hardcoded to have 2 tags
     size_t num_elements;
-    fin >> num_elements;
+    if (!(fin >> num_elements)) {
+        throw std::runtime_error("Invalid .msh element count");
+    }
+    if (num_elements > static_cast<size_t>(std::numeric_limits<int>::max())) {
+        throw std::runtime_error("Too many .msh elements");
+    }
 
-    size_t nodes_per_element;
+    auto add_element = [&](const int elem_id, const int elem_type) {
+        if (m_elements.size() >
+            static_cast<size_t>(std::numeric_limits<int>::max())) {
+            throw std::runtime_error("Too much .msh element connectivity");
+        }
+        if (elem_id <= 0 ||
+            !m_element_map
+                 .emplace(elem_id, static_cast<int>(m_element_map.size()))
+                 .second) {
+            throw std::runtime_error("Invalid or duplicate .msh element tag");
+        }
+        m_elements_ids.push_back(elem_id - 1);
+        m_elements_types.push_back(elem_type);
+        m_elements_lengths.push_back(num_nodes_per_elem_type(elem_type));
+        m_elements_nodes_idx.push_back(static_cast<int>(m_elements.size()));
+    };
+
+    auto add_node = [&](const int node_tag) {
+        const auto iter = m_node_map.find(node_tag);
+        if (iter == m_node_map.end()) {
+            throw std::runtime_error("Element references a missing node tag");
+        }
+        m_elements.push_back(iter->second);
+    };
 
     if (m_binary) {
-        _msh_eat_white_space(fin);
-        int elem_read = 0;
+        consume_binary_line_end(fin);
+        size_t elem_read = 0;
         while (elem_read < num_elements) {
             // Parse element header.
-            int elem_type, num_elems, num_tags;
-            fin.read((char*)&elem_type, sizeof(int));
-            fin.read((char*)&num_elems, sizeof(int));
-            fin.read((char*)&num_tags, sizeof(int));
-            nodes_per_element = num_nodes_per_elem_type(elem_type);
+            const int elem_type = read_binary<int>(fin);
+            const int num_elems = read_binary<int>(fin);
+            const int num_tags  = read_binary<int>(fin);
+            if (num_elems <= 0 || num_tags < 0 ||
+                static_cast<size_t>(num_elems) > num_elements - elem_read) {
+                throw std::runtime_error("Invalid binary .msh element block");
+            }
+            const int nodes_per_element = num_nodes_per_elem_type(elem_type);
 
             // store node info
-            for (size_t i = 0; i < num_elems; i++) {
-                int elem_idx;
-
-                // all elements in the segment share the same elem_type and
-                // number of nodes per element
-                m_elements_types.push_back(elem_type);
-                m_elements_lengths.push_back(nodes_per_element);
-
-                fin.read((char*)&elem_idx, sizeof(int));
-                elem_idx -= 1;
-                m_elements_ids.push_back(elem_idx);
+            for (int i = 0; i < num_elems; i++) {
+                add_element(read_binary<int>(fin), elem_type);
 
                 // read first two tags
-                for (size_t j = 0; j < num_tags; j++) {
-                    int tag;
-                    fin.read((char*)&tag, sizeof(int));
+                for (int j = 0; j < num_tags; j++) {
+                    const int tag = read_binary<int>(fin);
                     if (j < 2)
                         m_elements_tags[j].push_back(tag);
                 }
 
-                for (size_t j = num_tags; j < 2; j++)
+                for (int j = num_tags; j < 2; j++)
                     m_elements_tags[j].push_back(
                         -1);  // fill up tags if less then 2
 
-                m_elements_nodes_idx.push_back(m_elements.size());
                 // Element values.
-                for (size_t j = 0; j < nodes_per_element; j++) {
-                    int idx;
-                    fin.read((char*)&idx, sizeof(int));
-
-                    m_elements.push_back(idx - 1);
+                for (int j = 0; j < nodes_per_element; j++) {
+                    add_node(read_binary<int>(fin));
                 }
             }
             elem_read += num_elems;
@@ -218,31 +269,31 @@ void MshLoader::parse_elements(std::ifstream& fin)
         for (size_t i = 0; i < num_elements; i++) {
             // Parse per element header
             int elem_num, elem_type, num_tags;
-            fin >> elem_num >> elem_type >> num_tags;
+            if (!(fin >> elem_num >> elem_type >> num_tags) || num_tags < 0) {
+                throw std::runtime_error("Invalid .msh element");
+            }
+            add_element(elem_num, elem_type);
 
             // read tags.
-            for (size_t j = 0; j < num_tags; j++) {
+            for (int j = 0; j < num_tags; j++) {
                 int tag;
-                fin >> tag;
+                if (!(fin >> tag)) {
+                    throw std::runtime_error("Invalid .msh element tag");
+                }
                 if (j < 2)
                     m_elements_tags[j].push_back(tag);
             }
-            for (size_t j = num_tags; j < 2; j++)
+            for (int j = num_tags; j < 2; j++)
                 m_elements_tags[j].push_back(
                     -1);  // fill up tags if less then 2
 
-            nodes_per_element = num_nodes_per_elem_type(elem_type);
-            m_elements_types.push_back(elem_type);
-            m_elements_lengths.push_back(nodes_per_element);
-
-            elem_num -= 1;
-            m_elements_ids.push_back(elem_num);
-            m_elements_nodes_idx.push_back(m_elements.size());
             // Parse node idx.
-            for (size_t j = 0; j < nodes_per_element; j++) {
+            for (int j = 0; j < m_elements_lengths.back(); j++) {
                 int idx;
-                fin >> idx;
-                m_elements.push_back(idx - 1);  // msh index starts from 1.
+                if (!(fin >> idx)) {
+                    throw std::runtime_error("Invalid .msh element node tag");
+                }
+                add_node(idx);
             }
         }
     }
@@ -263,13 +314,11 @@ void MshLoader::parse_node_field(std::ifstream& fin)
     std::vector<std::string> str_tags(num_string_tags);
 
     for (size_t i = 0; i < num_string_tags; i++) {
-        _msh_eat_white_space(fin);
+        eat_text_white_space(fin);
         if (fin.peek() == '\"') {
             // Handle field name between quotes.
-            char buf[128];
             fin.get();  // remove the quote at the beginning.
-            fin.getline(buf, 128, '\"');
-            str_tags[i] = std::string(buf);
+            std::getline(fin, str_tags[i], '"');
         } else {
             fin >> str_tags[i];
         }
@@ -292,38 +341,34 @@ void MshLoader::parse_node_field(std::ifstream& fin)
     int         num_components = int_tags[1];
     int         num_entries    = int_tags[2];
 
-    std::vector<Float> field(num_entries * num_components);
+    if (num_components <= 0 || num_entries < 0) {
+        throw std::runtime_error("Invalid node field size");
+    }
+    std::vector<Float> field(m_node_map.size() * num_components);
 
     if (m_binary) {
-        size_t num_bytes = (num_components * m_data_size + 4) * num_entries;
-        char*  data      = new char[num_bytes];
-        _msh_eat_white_space(fin);
-        fin.read(data, num_bytes);
-        for (size_t i = 0; i < num_entries; i++) {
-            int node_idx;
-            memcpy(&node_idx, &data[i * (4 + num_components * m_data_size)], 4);
-
-            if (node_idx < 1)
-                throw std::runtime_error("Negative or zero index");
-            node_idx -= 1;
-
-            if (node_idx >= num_entries)
-                throw std::runtime_error("Index too big");
-            size_t base_idx = i * (4 + num_components * m_data_size) + 4;
-            // TODO: make this work when m_data_size != sizeof(double) ?
-            memcpy(&field[node_idx * num_components],
-                   &data[base_idx],
-                   num_components * m_data_size);
+        consume_binary_line_end(fin);
+    }
+    for (int i = 0; i < num_entries; i++) {
+        int node_tag;
+        if (m_binary) {
+            node_tag = read_binary<int>(fin);
+        } else if (!(fin >> node_tag)) {
+            throw std::runtime_error("Invalid node field entry");
         }
-        delete[] data;
-    } else {
-        int node_idx;
-        for (size_t i = 0; i < num_entries; i++) {
-            fin >> node_idx;
-            node_idx -= 1;
-            for (size_t j = 0; j < num_components; j++) {
-                fin >> field[node_idx * num_components + j];
+        const auto node = m_node_map.find(node_tag);
+        if (node == m_node_map.end()) {
+            throw std::runtime_error("Node field references a missing node");
+        }
+        for (int j = 0; j < num_components; j++) {
+            double value;
+            if (m_binary) {
+                value = read_binary<double>(fin);
+            } else if (!(fin >> value)) {
+                throw std::runtime_error("Invalid node field value");
             }
+            field[node->second * num_components + j] =
+                static_cast<Float>(value);
         }
     }
 
@@ -341,13 +386,11 @@ void MshLoader::parse_element_field(std::ifstream& fin)
     fin >> num_string_tags;
     std::vector<std::string> str_tags(num_string_tags);
     for (size_t i = 0; i < num_string_tags; i++) {
-        _msh_eat_white_space(fin);
+        eat_text_white_space(fin);
         if (fin.peek() == '\"') {
             // Handle field name between quoates.
-            char buf[128];
             fin.get();  // remove the quote at the beginning.
-            fin.getline(buf, 128, '\"');
-            str_tags[i] = buf;
+            std::getline(fin, str_tags[i], '"');
         } else {
             fin >> str_tags[i];
         }
@@ -366,36 +409,38 @@ void MshLoader::parse_element_field(std::ifstream& fin)
     if (num_string_tags <= 0 || num_int_tags <= 2) {
         throw std::runtime_error("Invalid file format");
     }
-    std::string        fieldname      = str_tags[0];
-    int                num_components = int_tags[1];
-    int                num_entries    = int_tags[2];
-    std::vector<Float> field(num_entries * num_components);
+    std::string fieldname      = str_tags[0];
+    int         num_components = int_tags[1];
+    int         num_entries    = int_tags[2];
+    if (num_components <= 0 || num_entries < 0) {
+        throw std::runtime_error("Invalid element field size");
+    }
+    std::vector<Float> field(m_element_map.size() * num_components);
 
     if (m_binary) {
-        size_t num_bytes = (num_components * m_data_size + 4) * num_entries;
-        char*  data      = new char[num_bytes];
-        _msh_eat_white_space(fin);
-        fin.read(data, num_bytes);
-        for (int i = 0; i < num_entries; i++) {
-            int elem_idx;
-            // works with sizeof(int)==4
-            memcpy(&elem_idx, &data[i * (4 + num_components * m_data_size)], 4);
-            elem_idx -= 1;
-
-            // directly copy data into vector storage space
-            memcpy(&field[elem_idx * num_components],
-                   &data[i * (4 + num_components * m_data_size) + 4],
-                   m_data_size * num_components);
+        consume_binary_line_end(fin);
+    }
+    for (int i = 0; i < num_entries; i++) {
+        int elem_tag;
+        if (m_binary) {
+            elem_tag = read_binary<int>(fin);
+        } else if (!(fin >> elem_tag)) {
+            throw std::runtime_error("Invalid element field entry");
         }
-        delete[] data;
-    } else {
-        int elem_idx;
-        for (size_t i = 0; i < num_entries; i++) {
-            fin >> elem_idx;
-            elem_idx -= 1;
-            for (size_t j = 0; j < num_components; j++) {
-                fin >> field[elem_idx * num_components + j];
+        const auto element = m_element_map.find(elem_tag);
+        if (element == m_element_map.end()) {
+            throw std::runtime_error(
+                "Element field references a missing element");
+        }
+        for (int j = 0; j < num_components; j++) {
+            double value;
+            if (m_binary) {
+                value = read_binary<double>(fin);
+            } else if (!(fin >> value)) {
+                throw std::runtime_error("Invalid element field value");
             }
+            field[element->second * num_components + j] =
+                static_cast<Float>(value);
         }
     }
     m_element_fields_names.push_back(fieldname);
@@ -438,6 +483,9 @@ int MshLoader::num_nodes_per_elem_type(int elem_type)
             break;
         case ELEMENT_PRISM:  // 6-node prism
             nodes_per_element = 6;
+            break;
+        case ELEMENT_PYRAMID:  // 5-node pyramid
+            nodes_per_element = 5;
             break;
         case ELEMENT_LINE_2ND_ORDER:
             nodes_per_element = 3;
@@ -523,5 +571,130 @@ void MshLoader::index_structures(int tag_column)
 
         m_structure_length.insert(std::pair<msh_struct, int>(*t, cnt));
     }
+}
+
+MeshKind load_msh(const std::string&                    filename,
+                  std::vector<std::vector<rx_coord_t>>& vertices,
+                  std::vector<std::vector<uint32_t>>&   simplices,
+                  bool                                  append)
+{
+    const MshLoader loader(filename);
+    const auto&     nodes    = loader.get_nodes();
+    const auto&     elements = loader.get_elements();
+    const auto&     starts   = loader.get_elements_nodes_idx();
+    const auto&     types    = loader.get_elements_types();
+    const auto&     lengths  = loader.get_elements_lengths();
+
+    auto dimension = [](const int type) {
+        switch (type) {
+            case MshLoader::ELEMENT_POINT:
+                return 0;
+            case MshLoader::ELEMENT_LINE:
+            case MshLoader::ELEMENT_LINE_2ND_ORDER:
+                return 1;
+            case MshLoader::ELEMENT_TRI:
+            case MshLoader::ELEMENT_QUAD:
+            case MshLoader::ELEMENT_TRI_2ND_ORDER:
+            case MshLoader::ELEMENT_QUAD_2ND_ORDER:
+                return 2;
+            default:
+                return 3;
+        }
+    };
+
+    int top_dimension = 0;
+    for (const int type : types) {
+        top_dimension = std::max(top_dimension, dimension(type));
+    }
+
+    MeshKind kind;
+    int      selected_type;
+    if (top_dimension == 2) {
+        kind          = MeshKind::Triangle;
+        selected_type = MshLoader::ELEMENT_TRI;
+    } else if (top_dimension == 3) {
+        kind          = MeshKind::Tet;
+        selected_type = MshLoader::ELEMENT_TET;
+    } else {
+        throw std::runtime_error("The .msh file has no triangles or tets");
+    }
+
+    for (const int type : types) {
+        if (dimension(type) == top_dimension && type != selected_type) {
+            throw std::runtime_error(
+                "Unsupported top-dimensional .msh element type");
+        }
+    }
+
+    const size_t num_nodes = nodes.size() / 3;
+    if (nodes.size() % 3 != 0 ||
+        num_nodes > std::numeric_limits<uint32_t>::max()) {
+        throw std::runtime_error("Invalid .msh node storage");
+    }
+
+    std::vector<bool> used(num_nodes, false);
+    size_t            num_simplices     = 0;
+    size_t            num_used_vertices = 0;
+    for (size_t i = 0; i < types.size(); i++) {
+        if (types[i] != selected_type) {
+            continue;
+        }
+        const size_t start = static_cast<size_t>(starts[i]);
+        if (starts[i] < 0 || lengths[i] != top_dimension + 1 ||
+            start > elements.size() ||
+            static_cast<size_t>(lengths[i]) > elements.size() - start) {
+            throw std::runtime_error("Invalid .msh element storage");
+        }
+        for (int j = 0; j < lengths[i]; j++) {
+            const int vertex = elements[start + j];
+            if (vertex < 0 || static_cast<size_t>(vertex) >= num_nodes) {
+                throw std::runtime_error("Invalid .msh vertex index");
+            }
+            if (!used[vertex]) {
+                used[vertex] = true;
+                num_used_vertices++;
+            }
+        }
+        num_simplices++;
+    }
+
+    const uint32_t        invalid = std::numeric_limits<uint32_t>::max();
+    std::vector<uint32_t> old_to_new(num_nodes, invalid);
+    const size_t vertex_offset = append ? vertices.size() : 0;
+    const size_t max_vertices =
+        static_cast<size_t>(std::numeric_limits<uint32_t>::max());
+    if (num_used_vertices > max_vertices ||
+        vertex_offset > max_vertices - num_used_vertices) {
+        throw std::runtime_error("Too many combined mesh vertices");
+    }
+
+    if (!append) {
+        vertices.clear();
+        simplices.clear();
+    }
+    vertices.reserve(vertex_offset + num_used_vertices);
+    for (size_t i = 0; i < num_nodes; i++) {
+        if (used[i]) {
+            old_to_new[i] = static_cast<uint32_t>(vertices.size());
+            vertices.push_back({static_cast<rx_coord_t>(nodes[3 * i]),
+                                static_cast<rx_coord_t>(nodes[3 * i + 1]),
+                                static_cast<rx_coord_t>(nodes[3 * i + 2])});
+        }
+    }
+
+    simplices.reserve(simplices.size() + num_simplices);
+    for (size_t i = 0; i < types.size(); i++) {
+        if (types[i] != selected_type) {
+            continue;
+        }
+        const size_t          start = static_cast<size_t>(starts[i]);
+        std::vector<uint32_t> simplex;
+        simplex.reserve(lengths[i]);
+        for (int j = 0; j < lengths[i]; j++) {
+            simplex.push_back(old_to_new[elements[start + j]]);
+        }
+        simplices.push_back(std::move(simplex));
+    }
+    return kind;
 }
 }  // namespace rxmesh

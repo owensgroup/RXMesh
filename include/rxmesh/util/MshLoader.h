@@ -14,10 +14,11 @@
 #include <string>
 #include <vector>
 
+#include "rxmesh/types.h"
+
 namespace rxmesh {
 
 /// Class for loading information from .msh file
-/// depends only on c++stl library
 class MshLoader
 {
    public:
@@ -34,12 +35,11 @@ class MshLoader
 
         bool operator<(const msh_struct& a) const
         {
-            return (this->tag * 100 + this->el_type) <
-                   (a.tag * 100 + a.el_type);
+            return tag < a.tag || (tag == a.tag && el_type < a.el_type);
         }
     };
 
-    typedef float Float;
+    typedef rx_coord_t Float;
 
     typedef std::vector<int>               IndexVector;
     typedef std::vector<int>               IntVector;
@@ -169,7 +169,7 @@ class MshLoader
     {
         return (std::find(std::begin(m_element_fields_names),
                           std::end(m_element_fields_names),
-                          fieldname) != std::end(m_node_fields_names));
+                          fieldname) != std::end(m_element_fields_names));
     }
 
     // check if all elements have ids assigned sequentially
@@ -237,6 +237,14 @@ class MshLoader
     StructVector m_structures;        // unique structures
     StructIndex  m_structure_length;  // length of structures with consistent
                                       // element type
+
+    std::map<int, int> m_node_map;
+    std::map<int, int> m_element_map;
 };
+
+MeshKind load_msh(const std::string&                    filename,
+                  std::vector<std::vector<rx_coord_t>>& vertices,
+                  std::vector<std::vector<uint32_t>>&   simplices,
+                  bool                                  append = false);
 
 }  // namespace rxmesh

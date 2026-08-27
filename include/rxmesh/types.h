@@ -15,6 +15,12 @@ using rx_coord_t = float;
 
 namespace rxmesh {
 
+enum class MeshKind : uint8_t
+{
+    Triangle,
+    Tet
+};
+
 template <typename T, int N>
 using vec = glm::vec<N, T, glm::defaultp>;
 

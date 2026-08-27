@@ -26,29 +26,29 @@ struct ALIGN(16) PatchInfo
     __device__ __host__ __forceinline__ PatchInfo()
         : ev(nullptr),
           fe(nullptr),
+          tf(nullptr),
           active_mask_v(nullptr),
           active_mask_e(nullptr),
           active_mask_f(nullptr),
+          active_mask_t(nullptr),
           owned_mask_v(nullptr),
           owned_mask_e(nullptr),
           owned_mask_f(nullptr),
+          owned_mask_t(nullptr),
           num_vertices(nullptr),
           num_edges(nullptr),
           num_faces(nullptr),
+          num_tets(nullptr),
           vertices_capacity(0),
           edges_capacity(0),
           faces_capacity(0),
+          tets_capacity(0),
           patch_id(INVALID32),
           color(INVALID32),
+          lp_t(),
           dirty(nullptr),
           child_id(INVALID32),
-          should_slice(false),
-          tf(nullptr),
-          active_mask_t(nullptr),
-          owned_mask_t(nullptr),
-          num_tets(nullptr),
-          tets_capacity(0),
-          lp_t() {};
+          should_slice(false) {};
 
     __device__ __host__            PatchInfo(const PatchInfo& other) = default;
     __device__ __host__            PatchInfo(PatchInfo&&)            = default;

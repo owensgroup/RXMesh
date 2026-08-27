@@ -1,4 +1,5 @@
 #include <numeric>
+#include <stdexcept>
 
 #include <cooperative_groups.h>
 
@@ -18,6 +19,17 @@
 #include <thrust/host_vector.h>
 
 namespace rxmesh {
+
+namespace {
+const std::string& check_obj_file(const std::string& file_path)
+{
+    if (get_file_extension(file_path) != ".obj") {
+        throw std::invalid_argument(
+            "RXMeshDynamic only accepts .obj triangle meshes");
+    }
+    return file_path;
+}
+}  // namespace
 
 namespace detail {
 template <uint32_t blockThreads, typename HandleT>
@@ -2187,7 +2199,7 @@ RXMeshDynamic::RXMeshDynamic(const std::string file_path,
                              const float       capacity_factor,
                              const float       patch_alloc_factor,
                              const float       lp_hashtable_load_factor)
-    : RXMeshStatic(file_path,
+    : RXMeshStatic(check_obj_file(file_path),
                    patcher_file,
                    patch_size,
                    capacity_factor,

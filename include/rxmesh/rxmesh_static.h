@@ -40,11 +40,12 @@ class RXMeshStatic : public RXMesh
     RXMeshStatic(const RXMeshStatic&) = delete;
 
     /**
-     * @brief Constructor that initializes the mesh from an OBJ file.
-     * @param file_path Path to the input OBJ file.
+     * @brief Constructor that initializes the mesh from an OBJ or MSH
+     * file.
+     * @param file_path Path to the input mesh file.
      * @param patcher_file (optional) Path to a patch file previously generated
-     * using save(). If provided, it restores the exact same patch assignment.
-     * This is mainly useful for debugging and reproducibility.
+     * using save(). If provided, it restores the exact same patch
+     * assignment.This is mainly useful for debugging and reproducibility.
      * @param patch_size (optional) Target size of each patch. This is used as
      * input to the k-means clustering algorithm that partitions the mesh.
      * @param capacity_factor (optional) Controls how much extra space each
@@ -66,13 +67,14 @@ class RXMeshStatic : public RXMesh
                           const float       lp_hashtable_load_factor = 0.8);
 
     /**
-     * @brief  Constructor using triangles and vertices
-     * @param fv Face incident vertices as read from an obj file
+     * @brief Constructor using triangle or tet connectivity.
+     * @param fv Incident vertices for each input simplex.
      * @param patcher_file (optional) Path to a patch file previously generated
      * using save(). If provided, it restores the exact same patch assignment.
      * This is mainly useful for debugging and reproducibility.
-     * @param patch_size (optional) Target size of each patch. This is used as
-     * input to the k-means clustering algorithm that partitions the mesh.
+     * @param patch_size (optional) Target size
+     * of each patch. This is used as input to the k-means clustering algorithm
+     * that partitions the mesh.
      * @param capacity_factor (optional) Controls how much extra space each
      * patch can hold. The maximum number of vertices/edges/faces per patch is:
      * capacity_factor x (current number of elements in the patch). This allows
@@ -84,12 +86,24 @@ class RXMeshStatic : public RXMesh
      * Load factor for the hash table used to store mappings from
      * mesh elements (not owned by a patch) to their (patch_id, local_id).
      */
-    explicit RXMeshStatic(std::vector<std::vector<uint32_t>>& fv,
+    explicit RXMeshStatic(std::vector<std::vector<uint32_t>>& simplices,
                           const std::string                   patcher_file = "",
                           const uint32_t                      patch_size = 512,
                           const float capacity_factor                    = 1.0,
                           const float patch_alloc_factor                 = 1.0,
                           const float lp_hashtable_load_factor           = 0.8);
+
+    /**
+     * @brief Constructor using vertex positions and triangle or tet
+     * connectivity.
+     */
+    explicit RXMeshStatic(std::vector<std::vector<rx_coord_t>>& vertices,
+                          std::vector<std::vector<uint32_t>>&   simplices,
+                          const std::string patcher_file             = "",
+                          const uint32_t    patch_size               = 512,
+                          const float       capacity_factor          = 1.0,
+                          const float       patch_alloc_factor       = 1.0,
+                          const float       lp_hashtable_load_factor = 0.8);
 
     /**
      * @brief Constructor that initializes the mesh from multiple OBJ file.

@@ -1,8 +1,9 @@
-#include <algorithm>
+#include <stdexcept>
 
 #include "rxmesh/rxmesh_static.h"
-
 #include "rxmesh/rxmesh_static.inl"
+#include "rxmesh/util/MshLoader.h"
+#include "rxmesh/util/import_obj.h"
 
 namespace rxmesh {
 RXMeshStatic::RXMeshStatic(const std::string file_path,
@@ -15,22 +16,40 @@ RXMeshStatic::RXMeshStatic(const std::string file_path,
 {
     m_num_regions = 1;
 
-    std::vector<std::vector<uint32_t>>   fv;
+    std::vector<std::vector<uint32_t>>   simplices;
     std::vector<std::vector<rx_coord_t>> vertices;
-    CPUTimer                             load_obj_timer;
-    load_obj_timer.start();
-    const bool loaded = import_obj(file_path, vertices, fv);
-    load_obj_timer.stop();
-    RXMESH_INFO("RXMeshStatic: load_obj took= {} (ms)",
-                load_obj_timer.elapsed_millis());
-    if (!loaded) {
-        RXMESH_ERROR(
-            "RXMeshStatic::RXMeshStatic could not read the input file {}",
-            file_path);
-        exit(EXIT_FAILURE);
+
+    CPUTimer load_mesh_timer;
+    load_mesh_timer.start();
+
+    MeshKind          kind;
+    const std::string extension = get_file_extension(file_path);
+    if (extension == ".obj") {
+        kind = MeshKind::Triangle;
+        if (!import_obj(file_path, vertices, simplices)) {
+            RXMESH_ERROR(
+                "RXMeshStatic::RXMeshStatic could not read the input file {}",
+                file_path);
+            exit(EXIT_FAILURE);
+        }
+    } else if (extension == ".msh") {
+        kind = load_msh(file_path, vertices, simplices);
+    } else {
+        throw std::invalid_argument(
+            "RXMeshStatic supports .obj and .msh files");
     }
 
-    this->init(fv,
+    load_mesh_timer.stop();
+    RXMESH_INFO("RXMeshStatic: mesh loading took= {} (ms)",
+                load_mesh_timer.elapsed_millis());
+
+    m_is_tet_mesh = kind == MeshKind::Tet;
+    if (m_is_tet_mesh) {
+        throw std::runtime_error(
+            "RXMeshStatic tet topology is not implemented yet");
+    }
+
+    this->init(simplices,
                patcher_file,
                capacity_factor,
                patch_alloc_factor,
@@ -46,7 +65,7 @@ RXMeshStatic::RXMeshStatic(const std::string file_path,
     add_vertex_coordinates(vertices, name);
 }
 
-RXMeshStatic::RXMeshStatic(std::vector<std::vector<uint32_t>>& fv,
+RXMeshStatic::RXMeshStatic(std::vector<std::vector<uint32_t>>& simplices,
                            const std::string                   patcher_file,
                            const uint32_t                      patch_size,
                            const float                         capacity_factor,
@@ -55,12 +74,34 @@ RXMeshStatic::RXMeshStatic(std::vector<std::vector<uint32_t>>& fv,
     : RXMesh(patch_size), m_input_vertex_coordinates(nullptr)
 {
     m_num_regions = 1;
-    this->init(fv,
+    m_is_tet_mesh = !simplices.empty() && simplices.front().size() == 4;
+    if (m_is_tet_mesh) {
+        throw std::runtime_error(
+            "RXMeshStatic tet topology is not implemented yet");
+    }
+    this->init(simplices,
                patcher_file,
                capacity_factor,
                patch_alloc_factor,
                lp_hashtable_load_factor);
     m_attr_container = std::make_shared<AttributeContainer>();
+}
+
+RXMeshStatic::RXMeshStatic(std::vector<std::vector<rx_coord_t>>& vertices,
+                           std::vector<std::vector<uint32_t>>&   simplices,
+                           const std::string                     patcher_file,
+                           const uint32_t                        patch_size,
+                           const float capacity_factor,
+                           const float patch_alloc_factor,
+                           const float lp_hashtable_load_factor)
+    : RXMeshStatic(simplices,
+                   patcher_file,
+                   patch_size,
+                   capacity_factor,
+                   patch_alloc_factor,
+                   lp_hashtable_load_factor)
+{
+    add_vertex_coordinates(vertices);
 }
 
 RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
@@ -69,33 +110,60 @@ RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
 {
     m_num_regions = static_cast<int>(files_path.size());
 
-    std::vector<std::vector<uint32_t>>   fv;
+    std::vector<std::vector<uint32_t>>   simplices;
     std::vector<std::vector<rx_coord_t>> vertices;
 
-    std::vector<int> region_num_faces;
+    std::vector<int> region_num_simplices;
     std::vector<int> region_num_vertices;
 
-    CPUTimer load_obj_timer;
-    load_obj_timer.start();
-    for (auto path : files_path) {
-        if (!import_obj(path, vertices, fv, true)) {
-            load_obj_timer.stop();
-            RXMESH_INFO("RXMeshStatic: load_obj took= {} (ms)",
-                        load_obj_timer.elapsed_millis());
-            RXMESH_ERROR(
-                "RXMeshStatic::RXMeshStatic could not read the input file "
-                "{}",
+    CPUTimer load_mesh_timer;
+    load_mesh_timer.start();
+    bool first_mesh = true;
+    for (const auto& path : files_path) {
+
+        std::string extension = get_file_extension(path);
+
+        MeshKind kind;
+        if (extension == ".obj") {
+            kind = MeshKind::Triangle;
+            if (!import_obj(path, vertices, simplices, true)) {
+                RXMESH_ERROR(
+                    "RXMeshStatic::RXMeshStatic could not read the input file "
+                    "{}",
+                    path);
+                exit(EXIT_FAILURE);
+            }
+        } else if (extension == ".msh") {
+            kind = load_msh(path, vertices, simplices, true);
+        } else {
+            throw std::invalid_argument(
+                "RXMeshStatic::RXMeshStatic only support .obj or .msh files. "
+                "Input file: " +
                 path);
-            exit(EXIT_FAILURE);
         }
-        region_num_faces.push_back(static_cast<int>(fv.size()));
+
+        if (first_mesh) {
+            m_is_tet_mesh = kind == MeshKind::Tet;
+            first_mesh    = false;
+        } else if ((m_is_tet_mesh && kind != MeshKind::Tet) ||
+                   (!m_is_tet_mesh && kind != MeshKind::Triangle)) {
+            throw std::invalid_argument(
+                "RXMeshStatic::RXMeshStatic can only accept all-triangle or "
+                "all-tet list of meshes");
+        }
+        region_num_simplices.push_back(static_cast<int>(simplices.size()));
         region_num_vertices.push_back(static_cast<int>(vertices.size()));
     }
-    load_obj_timer.stop();
-    RXMESH_INFO("RXMeshStatic: load_obj took= {} (ms)",
-                load_obj_timer.elapsed_millis());
+    load_mesh_timer.stop();
+    RXMESH_INFO("RXMeshStatic: load_mesh took= {} (ms)",
+                load_mesh_timer.elapsed_millis());
 
-    this->init(fv, "", 1.0, 1.0, 0.8);
+    if (m_is_tet_mesh) {
+        throw std::runtime_error(
+            "RXMeshStatic tet topology is not implemented yet");
+    }
+
+    this->init(simplices, "", 1.0, 1.0, 0.8);
 
     m_attr_container = std::make_shared<AttributeContainer>();
 
@@ -121,10 +189,10 @@ RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
             int id = map_to_global(fh);
 
             auto upper = std::upper_bound(
-                region_num_faces.begin(), region_num_faces.end(), id);
+                region_num_simplices.begin(), region_num_simplices.end(), id);
 
             int label = static_cast<int>(
-                std::distance(region_num_faces.begin(), upper));
+                std::distance(region_num_simplices.begin(), upper));
 
             (*m_face_label)(fh) = label;
         },
@@ -759,7 +827,7 @@ void RXMeshStatic::create_face_list(std::vector<glm::uvec3>& f_list) const
 void RXMeshStatic::create_face_list(uint32_t* f_list,
                                     bool      use_global_order) const
 {
-    //TODO should combine this implementation and the one above into one 
+    // TODO should combine this implementation and the one above into one
     if (f_list == nullptr && get_num_faces() != 0) {
         RXMESH_ERROR("RXMeshStatic::create_face_list output buffer is null");
         return;

@@ -1,6 +1,8 @@
 #pragma once
 #include <cuda_runtime.h>
 #include <algorithm>
+#include <cctype>
+#include <filesystem>
 #include <fstream>
 #include <numeric>
 #include <random>
@@ -326,6 +328,20 @@ inline std::string remove_extension(const std::string& filename)
     if (lastdot == std::string::npos)
         return filename;
     return filename.substr(0, lastdot);
+}
+
+/**
+ * @brief get file extension in lowercase
+ */
+inline const std::string get_file_extension(const std::string& file_path)
+{
+    std::string ext = std::filesystem::path(file_path).extension().string();
+
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
+        return std::tolower(c);
+    });
+
+    return ext;
 }
 
 /**
