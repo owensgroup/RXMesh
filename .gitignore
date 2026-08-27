@@ -26,3 +26,4 @@ scripts/*.ini
 scripts/*.nsys-rep
 scripts/*.sqlite
 scripts/*.obj
+RXMesh.log
