@@ -1,5 +1,3 @@
-#include <stdexcept>
-
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/rxmesh_static.inl"
 #include "rxmesh/util/MshLoader.h"
@@ -35,8 +33,11 @@ RXMeshStatic::RXMeshStatic(const std::string file_path,
     } else if (extension == ".msh") {
         kind = load_msh(file_path, vertices, simplices);
     } else {
-        throw std::invalid_argument(
-            "RXMeshStatic supports .obj and .msh files");
+        RXMESH_ERROR(
+            "RXMeshStatic::RXMeshStatic supports only .obj and .msh. Input: "
+            "{}",
+            file_path);
+        exit(EXIT_FAILURE);
     }
 
     load_mesh_timer.stop();
@@ -45,8 +46,8 @@ RXMeshStatic::RXMeshStatic(const std::string file_path,
 
     m_is_tet_mesh = kind == MeshKind::Tet;
     if (m_is_tet_mesh) {
-        throw std::runtime_error(
-            "RXMeshStatic tet topology is not implemented yet");
+        RXMESH_ERROR("RXMeshStatic tet topology is not implemented yet");
+        exit(EXIT_FAILURE);
     }
 
     this->init(simplices,
@@ -76,8 +77,8 @@ RXMeshStatic::RXMeshStatic(std::vector<std::vector<uint32_t>>& simplices,
     m_num_regions = 1;
     m_is_tet_mesh = !simplices.empty() && simplices.front().size() == 4;
     if (m_is_tet_mesh) {
-        throw std::runtime_error(
-            "RXMeshStatic tet topology is not implemented yet");
+        RXMESH_ERROR("RXMeshStatic tet topology is not implemented yet");
+        exit(EXIT_FAILURE);
     }
     this->init(simplices,
                patcher_file,
@@ -136,10 +137,11 @@ RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
         } else if (extension == ".msh") {
             kind = load_msh(path, vertices, simplices, true);
         } else {
-            throw std::invalid_argument(
+            RXMESH_ERROR(
                 "RXMeshStatic::RXMeshStatic only support .obj or .msh files. "
-                "Input file: " +
+                "Input file: {}",
                 path);
+            exit(EXIT_FAILURE);
         }
 
         if (first_mesh) {
@@ -147,9 +149,10 @@ RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
             first_mesh    = false;
         } else if ((m_is_tet_mesh && kind != MeshKind::Tet) ||
                    (!m_is_tet_mesh && kind != MeshKind::Triangle)) {
-            throw std::invalid_argument(
+            RXMESH_ERROR(
                 "RXMeshStatic::RXMeshStatic can only accept all-triangle or "
                 "all-tet list of meshes");
+            exit(EXIT_FAILURE);
         }
         region_num_simplices.push_back(static_cast<int>(simplices.size()));
         region_num_vertices.push_back(static_cast<int>(vertices.size()));
@@ -159,8 +162,8 @@ RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
                 load_mesh_timer.elapsed_millis());
 
     if (m_is_tet_mesh) {
-        throw std::runtime_error(
-            "RXMeshStatic tet topology is not implemented yet");
+        RXMESH_ERROR("RXMeshStatic tet topology is not implemented yet");
+        exit(EXIT_FAILURE);
     }
 
     this->init(simplices, "", 1.0, 1.0, 0.8);

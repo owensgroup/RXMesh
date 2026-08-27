@@ -660,8 +660,8 @@ MeshKind load_msh(const std::string&                    filename,
 
     const uint32_t        invalid = std::numeric_limits<uint32_t>::max();
     std::vector<uint32_t> old_to_new(num_nodes, invalid);
-    const size_t vertex_offset = append ? vertices.size() : 0;
-    const size_t max_vertices =
+    const size_t          vertex_offset = append ? vertices.size() : 0;
+    const size_t          max_vertices =
         static_cast<size_t>(std::numeric_limits<uint32_t>::max());
     if (num_used_vertices > max_vertices ||
         vertex_offset > max_vertices - num_used_vertices) {

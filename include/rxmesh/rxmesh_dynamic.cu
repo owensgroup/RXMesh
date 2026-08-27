@@ -1,5 +1,4 @@
 #include <numeric>
-#include <stdexcept>
 
 #include <cooperative_groups.h>
 
@@ -24,8 +23,8 @@ namespace {
 const std::string& check_obj_file(const std::string& file_path)
 {
     if (get_file_extension(file_path) != ".obj") {
-        throw std::invalid_argument(
-            "RXMeshDynamic only accepts .obj triangle meshes");
+        RXMESH_ERROR("RXMeshDynamic only accepts .obj triangle meshes");
+        exit(EXIT_FAILURE);
     }
     return file_path;
 }
