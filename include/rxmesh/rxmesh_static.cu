@@ -45,10 +45,6 @@ RXMeshStatic::RXMeshStatic(const std::string file_path,
                 load_mesh_timer.elapsed_millis());
 
     m_is_tet_mesh = kind == MeshKind::Tet;
-    if (m_is_tet_mesh) {
-        RXMESH_ERROR("RXMeshStatic tet topology is not implemented yet");
-        exit(EXIT_FAILURE);
-    }
 
     this->init(simplices,
                patcher_file,
@@ -76,10 +72,6 @@ RXMeshStatic::RXMeshStatic(std::vector<std::vector<uint32_t>>& simplices,
 {
     m_num_regions = 1;
     m_is_tet_mesh = !simplices.empty() && simplices.front().size() == 4;
-    if (m_is_tet_mesh) {
-        RXMESH_ERROR("RXMeshStatic tet topology is not implemented yet");
-        exit(EXIT_FAILURE);
-    }
     this->init(simplices,
                patcher_file,
                capacity_factor,
@@ -160,11 +152,6 @@ RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
     load_mesh_timer.stop();
     RXMESH_INFO("RXMeshStatic: load_mesh took= {} (ms)",
                 load_mesh_timer.elapsed_millis());
-
-    if (m_is_tet_mesh) {
-        RXMESH_ERROR("RXMeshStatic tet topology is not implemented yet");
-        exit(EXIT_FAILURE);
-    }
 
     this->init(simplices, "", 1.0, 1.0, 0.8);
 

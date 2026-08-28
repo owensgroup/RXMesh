@@ -2,6 +2,7 @@
 #include <omp.h>
 #include <filesystem>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <new>
 #include <numeric>
@@ -19,6 +20,7 @@ namespace rxmesh {
 RXMesh::RXMesh(uint32_t patch_size)
     : m_num_edges(0),
       m_num_faces(0),
+      m_num_tets(0),
       m_num_vertices(0),
       m_max_edge_capacity(0),
       m_max_face_capacity(0),
@@ -86,7 +88,7 @@ RXMesh::RXMesh(uint32_t patch_size)
 {
 }
 
-void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
+void RXMesh::init(const std::vector<std::vector<uint32_t>>& simplices,
                   const std::string                         patcher_file,
                   const float                               capacity_factor,
                   const float                               patch_alloc_factor,
@@ -97,9 +99,10 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
     m_patch_alloc_factor       = patch_alloc_factor;
 
     // Build everything from scratch including patches
-    if (fv.empty()) {
+    if (simplices.empty()) {
         RXMESH_ERROR(
-            "RXMesh::init input fv is empty. Can not build RXMesh properly");
+            "RXMesh::init input simplices is empty. Can not build RXMesh "
+            "properly");
     }
     if (m_capacity_factor < 1.0) {
         RXMESH_ERROR("RXMesh::init capacity factor should be at least one");
@@ -126,7 +129,7 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
     m_timers.start("init.total");
 
     m_timers.start("build");
-    build(fv, patcher_file);
+    build(simplices, patcher_file);
     m_timers.stop("build");
 
     m_timers.start("populate_patch_stash");
@@ -287,18 +290,28 @@ RXMesh::~RXMesh()
     GPU_FREE(m_d_f_handles);
 }
 
-void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
+void RXMesh::build(const std::vector<std::vector<uint32_t>>& simplices,
                    const std::string                         patcher_file)
 {
-    std::vector<uint32_t>                ff_values;
-    std::vector<uint32_t>                ff_offset;
+    // this is FF for triangle mesh or TT for tet mesh (used for patching)
+    std::vector<uint32_t> adjacency_values;
+    std::vector<uint32_t> adjacency_offset;
+
     std::vector<std::array<uint32_t, 2>> ev;
+    std::vector<std::array<uint32_t, 3>> fe;
+    std::vector<std::array<uint32_t, 4>> tf;
 
     m_max_capacity_lp_v = 0;
     m_max_capacity_lp_e = 0;
     m_max_capacity_lp_f = 0;
 
-    build_supporting_structures(fv, ev, ff_offset, ff_values);
+    build_supporting_structures(
+        simplices, ev, fe, tf, adjacency_offset, adjacency_values);
+
+    if (m_is_tet_mesh) {
+        RXMESH_ERROR("RXMesh tet patching is not implemented yet");
+        exit(EXIT_FAILURE);
+    }
 
     if (!patcher_file.empty()) {
         if (!std::filesystem::exists(patcher_file)) {
@@ -307,9 +320,9 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
                 "patches.",
                 patcher_file);
             m_patcher = std::make_unique<patcher::Patcher>(m_patch_size,
-                                                           ff_offset,
-                                                           ff_values,
-                                                           fv,
+                                                           adjacency_offset,
+                                                           adjacency_values,
+                                                           simplices,
                                                            m_edges_map,
                                                            m_num_vertices,
                                                            m_num_edges,
@@ -319,9 +332,9 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
         }
     } else {
         m_patcher = std::make_unique<patcher::Patcher>(m_patch_size,
-                                                       ff_offset,
-                                                       ff_values,
-                                                       fv,
+                                                       adjacency_offset,
+                                                       adjacency_values,
+                                                       simplices,
                                                        m_edges_map,
                                                        m_num_vertices,
                                                        m_num_edges,
@@ -347,7 +360,7 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
 
 #pragma omp parallel for
     for (int p = 0; p < static_cast<int>(get_num_patches()); ++p) {
-        build_single_patch_ltog(fv, ev, p);
+        build_single_patch_ltog(simplices, ev, p);
     }
 
     // calc max elements for use in build_device (which populates
@@ -378,7 +391,7 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
 
 #pragma omp parallel for
     for (int p = 0; p < static_cast<int>(get_num_patches()); ++p) {
-        build_single_patch_topology(fv, p);
+        build_single_patch_topology(simplices, p);
     }
 
     const uint32_t patches_1_bytes =
@@ -516,11 +529,210 @@ void RXMesh::create_handles()
                           cudaMemcpyHostToDevice));
 }
 void RXMesh::build_supporting_structures(
-    const std::vector<std::vector<uint32_t>>& fv,
+    const std::vector<std::vector<uint32_t>>& simplices,
     std::vector<std::array<uint32_t, 2>>&     ev,
-    std::vector<uint32_t>&                    ff_offset,
-    std::vector<uint32_t>&                    ff_values)
+    std::vector<std::array<uint32_t, 3>>&     fe,
+    std::vector<std::array<uint32_t, 4>>&     tf,
+    std::vector<uint32_t>&                    adjacency_offset,
+    std::vector<uint32_t>&                    adjacency_values)
 {
+    fe.clear();
+    tf.clear();
+
+    if (m_is_tet_mesh) {
+        constexpr uint32_t tet_edges[6][2] = {
+            {0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}};
+        constexpr uint32_t tet_faces[4][3] = {
+            {1, 2, 3}, {0, 3, 2}, {0, 1, 3}, {0, 2, 1}};
+
+        m_num_tets     = static_cast<uint32_t>(simplices.size());
+        m_num_faces    = 0;
+        m_num_edges    = 0;
+        m_num_vertices = 0;
+
+        m_edges_map.clear();
+        m_edges_map.max_load_factor(0.7f);
+        m_edges_map.reserve(static_cast<size_t>(m_num_tets) * 6);
+
+        ev.clear();
+        ev.reserve(static_cast<size_t>(m_num_tets) * 6);
+        fe.reserve(static_cast<size_t>(m_num_tets) * 4);
+        tf.resize(m_num_tets);
+
+        adjacency_offset.clear();
+        adjacency_values.clear();
+
+        m_input_max_edge_incident_faces = 0;
+        m_input_max_face_adjacent_faces = 0;
+        m_input_max_valence             = 0;
+        m_is_input_closed               = true;
+        m_is_input_edge_manifold        = true;
+
+        std::vector<uint32_t> vertex_valence;
+        std::vector<uint32_t> edge_face_count;
+
+        auto add_vertex_valence = [&](uint32_t v) {
+            if (v >= vertex_valence.size()) {
+                vertex_valence.resize(static_cast<size_t>(v) + 1, 0);
+            }
+            m_input_max_valence =
+                std::max(m_input_max_valence, ++vertex_valence[v]);
+        };
+
+        auto add_edge = [&](uint32_t v0, uint32_t v1) {
+            const auto edge       = detail::edge_key(v0, v1);
+            auto [iter, inserted] = m_edges_map.emplace(edge, m_num_edges);
+            if (inserted) {
+                ev.push_back({edge.first, edge.second});
+                edge_face_count.push_back(0);
+                add_vertex_valence(edge.first);
+                add_vertex_valence(edge.second);
+                ++m_num_edges;
+            }
+            return iter->second;
+        };
+
+        auto pack_edge = [&](uint32_t v0, uint32_t v1) {
+            const uint32_t edge_id = add_edge(v0, v1);
+            const uint32_t dir     = v0 < v1;
+            return (edge_id << 1) | dir;
+        };
+
+        // Face ID, first incident tet, its local face slot, and its parity.
+        std::map<std::array<uint32_t, 3>, std::array<uint32_t, 4>> face_map;
+
+        std::vector<std::array<uint32_t, 4>> tet_neighbors(m_num_tets);
+        for (auto& neighbors : tet_neighbors) {
+            neighbors.fill(INVALID32);
+        }
+
+        uint32_t num_boundary_faces = 0;
+
+        for (uint32_t t = 0; t < m_num_tets; ++t) {
+            if (simplices[t].size() != 4) {
+                RXMESH_ERROR(
+                    "rxmesh::build_supporting_structures() Tet {} does not "
+                    "have four vertices",
+                    t);
+                exit(EXIT_FAILURE);
+            }
+
+            std::array<uint32_t, 4> tet = {simplices[t][0],
+                                           simplices[t][1],
+                                           simplices[t][2],
+                                           simplices[t][3]};
+
+            auto sorted_tet = tet;
+
+            std::sort(sorted_tet.begin(), sorted_tet.end());
+            if (std::adjacent_find(sorted_tet.begin(), sorted_tet.end()) !=
+                sorted_tet.end()) {
+                RXMESH_ERROR(
+                    "rxmesh::build_supporting_structures() Tet {} has "
+                    "repeated vertices",
+                    t);
+                exit(EXIT_FAILURE);
+            }
+
+            for (uint32_t v : tet) {
+                m_num_vertices = std::max(m_num_vertices, v);
+            }
+
+            for (const auto& edge : tet_edges) {
+                add_edge(tet[edge[0]], tet[edge[1]]);
+            }
+
+            for (uint32_t f = 0; f < 4; ++f) {
+                std::array<uint32_t, 3> oriented_face = {tet[tet_faces[f][0]],
+                                                         tet[tet_faces[f][1]],
+                                                         tet[tet_faces[f][2]]};
+
+                auto face_key = oriented_face;
+                std::sort(face_key.begin(), face_key.end());
+
+                // parity records the orientation of a tet’s face relative to
+                // its canonical sorted vertex order
+                // 0 means even permutation, i.e., same cyclic orientation
+                // 1 means odd permutation, i.e., reversed orientation
+                uint32_t parity = 0;
+                for (uint32_t i = 0; i < 3; ++i) {
+                    for (uint32_t j = i + 1; j < 3; ++j) {
+                        parity ^= oriented_face[i] > oriented_face[j];
+                    }
+                }
+
+                auto [face_iter, inserted] = face_map.emplace(
+                    face_key,
+                    std::array<uint32_t, 4>{m_num_faces, t, f, parity});
+                const uint32_t face_id = face_iter->second[0];
+
+                if (inserted) {
+                    ++m_num_faces;
+                    ++num_boundary_faces;
+
+                    fe.push_back({pack_edge(face_key[0], face_key[1]),
+                                  pack_edge(face_key[1], face_key[2]),
+                                  pack_edge(face_key[2], face_key[0])});
+
+                    for (uint32_t packed_edge : fe.back()) {
+                        const uint32_t edge_id = packed_edge >> 1;
+                        m_input_max_edge_incident_faces =
+                            std::max(m_input_max_edge_incident_faces,
+                                     ++edge_face_count[edge_id]);
+                    }
+
+                } else {
+                    const uint32_t other_tet  = face_iter->second[1];
+                    const uint32_t other_slot = face_iter->second[2];
+
+                    if (tet_neighbors[other_tet][other_slot] != INVALID32) {
+                        RXMESH_ERROR(
+                            "rxmesh::build_supporting_structures() Face {} "
+                            "has more than two incident tets",
+                            face_id);
+                        exit(EXIT_FAILURE);
+                    }
+
+                    if (face_iter->second[3] == parity) {
+                        RXMESH_WARN(
+                            "rxmesh::build_supporting_structures() Tets {} "
+                            "and {} have the same orientation on face {}",
+                            other_tet,
+                            t,
+                            face_id);
+                    }
+
+                    tet_neighbors[t][f]                  = other_tet;
+                    tet_neighbors[other_tet][other_slot] = t;
+
+                    --num_boundary_faces;
+                }
+
+                // save the orientation bit in tf
+                tf[t][f] = (face_id << 1) | parity;
+            }
+        }
+
+        ++m_num_vertices;
+        m_is_input_closed = num_boundary_faces == 0;
+
+        adjacency_offset.resize(static_cast<size_t>(m_num_tets) + 1);
+        for (uint32_t t = 0; t < m_num_tets; ++t) {
+            adjacency_offset[t] =
+                static_cast<uint32_t>(adjacency_values.size());
+            for (uint32_t neighbor : tet_neighbors[t]) {
+                if (neighbor != INVALID32) {
+                    adjacency_values.push_back(neighbor);
+                }
+            }
+        }
+        adjacency_offset[m_num_tets] =
+            static_cast<uint32_t>(adjacency_values.size());
+        return;
+    }
+
+    m_num_tets = 0;
+
     struct EdgeFaces
     {
         uint32_t              faces[2] = {0, 0};
@@ -553,7 +765,7 @@ void RXMesh::build_supporting_structures(
         }
     };
 
-    m_num_faces    = static_cast<uint32_t>(fv.size());
+    m_num_faces    = static_cast<uint32_t>(simplices.size());
     m_num_vertices = 0;
     m_num_edges    = 0;
     m_edges_map.clear();
@@ -586,8 +798,8 @@ void RXMesh::build_supporting_structures(
         m_input_max_valence = std::max(m_input_max_valence, ++vv_count[v]);
     };
 
-    for (uint32_t f = 0; f < fv.size(); ++f) {
-        if (fv[f].size() != 3) {
+    for (uint32_t f = 0; f < simplices.size(); ++f) {
+        if (simplices[f].size() != 3) {
             RXMESH_ERROR(
                 "rxmesh::build_supporting_structures() Face {} is not "
                 "triangle. Non-triangular faces are not supported",
@@ -595,9 +807,9 @@ void RXMesh::build_supporting_structures(
             exit(EXIT_FAILURE);
         }
 
-        for (uint32_t v = 0; v < fv[f].size(); ++v) {
-            uint32_t v0 = fv[f][v];
-            uint32_t v1 = fv[f][(v + 1) % 3];
+        for (uint32_t v = 0; v < simplices[f].size(); ++v) {
+            uint32_t v0 = simplices[f][v];
+            uint32_t v1 = simplices[f][(v + 1) % 3];
 
             m_num_vertices = std::max(m_num_vertices, v0);
             m_num_vertices = std::max(m_num_vertices, v1);
@@ -648,17 +860,17 @@ void RXMesh::build_supporting_structures(
         exit(EXIT_FAILURE);
     }
 
-    ff_offset.resize(m_num_faces + 1);
+    adjacency_offset.resize(m_num_faces + 1);
     uint32_t ff_count = 0;
     for (uint32_t f = 0; f < m_num_faces; ++f) {
-        ff_offset[f] = ff_count;
+        adjacency_offset[f] = ff_count;
         ff_count += ff_size[f];
         m_input_max_face_adjacent_faces =
             std::max(m_input_max_face_adjacent_faces, ff_size[f]);
     }
-    ff_offset[m_num_faces] = ff_count;
-    ff_values.clear();
-    ff_values.resize(ff_offset.back());
+    adjacency_offset[m_num_faces] = ff_count;
+    adjacency_values.clear();
+    adjacency_values.resize(adjacency_offset.back());
     std::fill(ff_size.begin(), ff_size.end(), 0);
 
     for (uint32_t e = 0; e < m_num_edges; ++e) {
@@ -670,11 +882,11 @@ void RXMesh::build_supporting_structures(
 
                 uint32_t f0_offset = ff_size[f0]++;
                 uint32_t f1_offset = ff_size[f1]++;
-                f0_offset += ff_offset[f0];
-                f1_offset += ff_offset[f1];
+                f0_offset += adjacency_offset[f0];
+                f1_offset += adjacency_offset[f1];
 
-                ff_values[f0_offset] = f1;
-                ff_values[f1_offset] = f0;
+                adjacency_values[f0_offset] = f1;
+                adjacency_values[f1_offset] = f0;
             }
         }
     }

@@ -475,7 +475,7 @@ class RXMesh
 
     /**
      * @brief init all the data structures
-     * @param fv the mesh connectivity as an index triangle
+     * @param simplices the triangle or tet mesh connectivity
      * @param patcher_file optional file to load the patches
      * @param capacity_factor capacity factor the determine the max allocation
      * size of a patch as a fraction of its size. For example, a patch with x
@@ -486,37 +486,37 @@ class RXMesh
      * @param lp_hashtable_load_factor loading factor for the hashtable use for
      * the not-owned vertices/edges/faces
      */
-    void init(const std::vector<std::vector<uint32_t>>& fv,
+    void init(const std::vector<std::vector<uint32_t>>& simplices,
               const std::string                         patcher_file    = "",
               const float                               capacity_factor = 1.8,
               const float patch_alloc_factor                            = 5.0,
               const float lp_hashtable_load_factor                      = 0.5);
 
     /**
-     * @brief build different supporting data structure used to build RXMesh
-     *
-     * Set the number of vertices, edges, and faces, populate edge_map (which
-     * takes two connected vertices and returns their edge id), build
-     * face-incident-faces data structure (used to in creating patches). This is
-     * done using a single pass over FV
-     *
-     * @param fv input face incident vertices
-     * @param ef output edge incident faces
-     * @param ef output face adjacent faces
+     * @brief build different supporting data structure used to build RXMesh Set
+     * the number of vertices, edges, faces, and tets, populate edge_map (which
+     * takes two connected vertices and returns their edge id), and build the
+     * top-simplex adjacency used to create patches.
+     * @param simplices input faces or tets incident vertices
+     * @param ev output edge incident vertices
+     * @param fe output packed face incident edges for tet meshes
+     * @param tf output packed tet incident faces for tet meshes
+     * @param adjacency_offset output top-simplex adjacency offsets
+     * @param adjacency_values output top-simplex adjacency values
      */
     void build_supporting_structures(
-        const std::vector<std::vector<uint32_t>>& fv,
+        const std::vector<std::vector<uint32_t>>& simplices,
         std::vector<std::array<uint32_t, 2>>&     ev,
-        std::vector<uint32_t>&                    ff_offset,
-        std::vector<uint32_t>&                    ff_values);
+        std::vector<std::array<uint32_t, 3>>&     fe,
+        std::vector<std::array<uint32_t, 4>>&     tf,
+        std::vector<uint32_t>&                    adjacency_offset,
+        std::vector<uint32_t>&                    adjacency_values);
 
     /**
-     * @brief Calculate various statistics for the input mesh
-     *
-     * Calculate max valence, max edge incident faces, max face adjacent faces,
-     * if the input is closed, if the input is edge manifold, and max number of
+     * @brief Calculate various statistics for the input mesh Calculate max
+     * valence, max edge incident faces, max face adjacent faces, if the input
+     * is closed, if the input is edge manifold, and max number of
      * vertices/edges/faces per patch
-     *
      * @param fv input face incident vertices
      * @param ef input edge incident faces
      */
@@ -568,7 +568,7 @@ class RXMesh
         }
     }
 
-    void build(const std::vector<std::vector<uint32_t>>& fv,
+    void build(const std::vector<std::vector<uint32_t>>& simplices,
                const std::string                         patcher_file);
 
     void build_single_patch_ltog(const std::vector<std::vector<uint32_t>>&   fv,
@@ -586,7 +586,7 @@ class RXMesh
     uint16_t get_per_patch_max_face_capacity() const;
 
     void build_device();
-    
+
     void patch_graph_coloring();
 
     void populate_patch_stash();
@@ -605,7 +605,7 @@ class RXMesh
     EdgeMapT m_edges_map;
 
     // Should be updated with update_host
-    uint32_t m_num_edges, m_num_faces, m_num_vertices;
+    uint32_t m_num_edges, m_num_faces, m_num_tets, m_num_vertices;
 
     uint32_t m_max_edge_capacity, m_max_face_capacity, m_max_vertex_capacity;
 
