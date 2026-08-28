@@ -24,7 +24,7 @@ __global__ static void test_iterator(uint32_t*       num_failures,
     const uint16_t local_id = static_cast<uint16_t>(thread_id);
 
     LPHashTable       ht;
-    const PatchStash  stash;
+    PatchStash        stash = PatchStash();
     Iterator<HandleT> iter(
         local_id,
         reinterpret_cast<const typename HandleT::LocalT*>(patch_output),
