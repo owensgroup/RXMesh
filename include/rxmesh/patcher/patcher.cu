@@ -22,44 +22,139 @@ namespace rxmesh {
 
 namespace patcher {
 
-Patcher::Patcher(std::string filename)
-{
-    RXMESH_TRACE("Patcher: Reading {}", filename);
-    std::ifstream                      is(filename, std::ios::binary);
-    cereal::PortableBinaryInputArchive archive(is);
-    archive(*this);
-    print_statistics();
-}
-
-Patcher::Patcher(uint32_t                                         patch_size,
+Patcher::Patcher(std::string                                      filename,
+                 MeshKind                                         mesh_kind,
                  const std::vector<uint32_t>&                     ff_offset,
                  const std::vector<uint32_t>&                     ff_values,
-                 const std::vector<std::vector<uint32_t>>&        fv,
+                 const std::vector<std::vector<uint32_t>>&        simplices,
+                 const std::vector<std::array<uint32_t, 4>>&      tf,
                  const std::unordered_map<std::pair<uint32_t, uint32_t>,
                                           uint32_t,
                                           detail::edge_key_hash>& edges_map,
                  const uint32_t                                   num_vertices,
                  const uint32_t                                   num_edges,
-                 bool                                             use_metis)
-    : m_patch_size(patch_size),
+                 const uint32_t                                   num_faces)
+    : m_mesh_kind(mesh_kind),
+      m_patch_size(0),
       m_num_patches(0),
       m_num_vertices(num_vertices),
       m_num_edges(num_edges),
-      m_num_faces(fv.size()),
+      m_num_faces(num_faces),
+      m_num_top_simplices(static_cast<uint32_t>(simplices.size())),
       m_num_seeds(0),
       m_max_num_patches(0),
       m_num_components(0),
       m_num_lloyd_run(0),
       m_patching_time_ms(0.0)
-
 {
+    RXMESH_TRACE("Patcher: Reading {}", filename);
 
-    m_num_patches =
-        m_num_faces / m_patch_size + ((m_num_faces % m_patch_size) ? 1 : 0);
+    std::ifstream is(filename, std::ios::binary);
+    if (!is.is_open()) {
+        RXMESH_ERROR("Patcher: Failed to open {}", filename);
+        exit(EXIT_FAILURE);
+    }
+
+    cereal::PortableBinaryInputArchive archive(is);
+
+    uint32_t magic = 0;
+    archive(magic);
+    if (magic != archive_magic) {
+        RXMESH_ERROR("Patcher: {} uses an unsupported patcher archive format",
+                     filename);
+        exit(EXIT_FAILURE);
+    }
+
+    MeshKind archive_mesh_kind = MeshKind::Triangle;
+    archive(archive_mesh_kind);
+    if (archive_mesh_kind != mesh_kind) {
+        RXMESH_ERROR("Patcher: {} was saved for a different mesh kind",
+                     filename);
+        exit(EXIT_FAILURE);
+    }
+
+    m_mesh_kind = archive_mesh_kind;
+    archive(m_patch_size, m_top_simplex_patch);
+
+    if (m_top_simplex_patch.size() != m_num_top_simplices) {
+        RXMESH_ERROR(
+            "Patcher: {} contains {} top simplices but the input has {}",
+            filename,
+            m_top_simplex_patch.size(),
+            m_num_top_simplices);
+        exit(EXIT_FAILURE);
+    }
+
+    uint32_t max_patch = 0;
+    for (uint32_t p : m_top_simplex_patch) {
+        if (p == INVALID32 || p >= m_num_top_simplices) {
+            RXMESH_ERROR("Patcher: {} contains an invalid patch ID", filename);
+            exit(EXIT_FAILURE);
+        }
+        max_patch = std::max(max_patch, p);
+    }
+
+    m_num_patches = max_patch + 1;
+    std::vector<bool> patch_found(m_num_patches, false);
+    for (uint32_t p : m_top_simplex_patch) {
+        patch_found[p] = true;
+    }
+    if (std::find(patch_found.begin(), patch_found.end(), false) !=
+        patch_found.end()) {
+        RXMESH_ERROR("Patcher: {} contains an empty patch", filename);
+        exit(EXIT_FAILURE);
+    }
+
+    m_num_seeds        = m_num_patches;
+    m_max_num_patches  = m_num_patches;
+    m_num_lloyd_run    = 0;
+    m_patching_time_ms = 0.0;
+
+    std::vector<uint32_t> seeds;
+    allocate_memory(seeds);
+    compute_inital_compressed_patches();
+
+    std::vector<std::vector<uint32_t>> components;
+    get_multi_components(components, ff_offset, ff_values);
+    m_num_components = static_cast<uint32_t>(components.size());
+
+    extract_ribbons(simplices);
+    assign_patch(simplices, tf, edges_map);
+    print_statistics();
+}
+
+Patcher::Patcher(MeshKind                                         mesh_kind,
+                 uint32_t                                         patch_size,
+                 const std::vector<uint32_t>&                     ff_offset,
+                 const std::vector<uint32_t>&                     ff_values,
+                 const std::vector<std::vector<uint32_t>>&        simplices,
+                 const std::vector<std::array<uint32_t, 4>>&      tf,
+                 const std::unordered_map<std::pair<uint32_t, uint32_t>,
+                                          uint32_t,
+                                          detail::edge_key_hash>& edges_map,
+                 const uint32_t                                   num_vertices,
+                 const uint32_t                                   num_edges,
+                 const uint32_t                                   num_faces,
+                 bool                                             use_metis)
+    : m_mesh_kind(mesh_kind),
+      m_patch_size(patch_size),
+      m_num_patches(0),
+      m_num_vertices(num_vertices),
+      m_num_edges(num_edges),
+      m_num_faces(num_faces),
+      m_num_top_simplices(static_cast<uint32_t>(simplices.size())),
+      m_num_seeds(0),
+      m_max_num_patches(0),
+      m_num_components(0),
+      m_num_lloyd_run(0),
+      m_patching_time_ms(0.0)
+{
+    m_num_patches = m_num_top_simplices / m_patch_size +
+                    ((m_num_top_simplices % m_patch_size) ? 1 : 0);
 
     m_max_num_patches = 5 * m_num_patches;
+    m_num_seeds       = m_num_patches;
 
-    m_num_seeds = m_num_patches;
     std::vector<uint32_t> seeds;
 
     uint32_t* d_face_patch            = nullptr;
@@ -80,86 +175,59 @@ Patcher::Patcher(uint32_t                                         patch_size,
 
     allocate_memory(seeds);
 
-    // degenerate cases
     if (m_num_patches <= 1) {
-        m_patches_offset[0] = m_num_faces;
+        m_patches_offset[0] = m_num_top_simplices;
         m_num_seeds         = 1;
         m_num_components    = 1;
         m_num_lloyd_run     = 0;
-        for (uint32_t i = 0; i < m_num_faces; ++i) {
-            m_face_patch[i]  = 0;
-            m_patches_val[i] = i;
+        for (uint32_t i = 0; i < m_num_top_simplices; ++i) {
+            m_top_simplex_patch[i] = 0;
+            m_patches_val[i]       = i;
         }
-        allocate_device_memory(seeds,
-                               ff_offset,
-                               ff_values,
-                               d_face_patch,
-                               d_queue,
-                               d_queue_ptr,
-                               d_ff_values,
-                               d_ff_offset,
-                               d_cub_temp_storage_scan,
-                               d_cub_temp_storage_max,
-                               cub_scan_bytes,
-                               cub_max_bytes,
-                               d_seeds,
-                               d_new_num_patches,
-                               d_max_patch_size,
-                               d_patches_offset,
-                               d_patches_size,
-                               d_patches_val);
-        assign_patch(fv, edges_map);
     } else {
-
-        if (false) {
-            grid(fv);
+        if (use_metis) {
+            metis_kway(ff_offset, ff_values);
         } else {
-            if (use_metis) {
-                metis_kway(ff_offset, ff_values);
-            } else {
-                initialize_random_seeds(seeds, ff_offset, ff_values);
-                allocate_device_memory(seeds,
-                                       ff_offset,
-                                       ff_values,
-                                       d_face_patch,
-                                       d_queue,
-                                       d_queue_ptr,
-                                       d_ff_values,
-                                       d_ff_offset,
-                                       d_cub_temp_storage_scan,
-                                       d_cub_temp_storage_max,
-                                       cub_scan_bytes,
-                                       cub_max_bytes,
-                                       d_seeds,
-                                       d_new_num_patches,
-                                       d_max_patch_size,
-                                       d_patches_offset,
-                                       d_patches_size,
-                                       d_patches_val);
-                run_lloyd(d_face_patch,
-                          d_queue,
-                          d_queue_ptr,
-                          d_ff_values,
-                          d_ff_offset,
-                          d_cub_temp_storage_scan,
-                          d_cub_temp_storage_max,
-                          cub_scan_bytes,
-                          cub_max_bytes,
-                          d_seeds,
-                          d_new_num_patches,
-                          d_max_patch_size,
-                          d_patches_offset,
-                          d_patches_size,
-                          d_patches_val);
-            }
+            initialize_random_seeds(seeds, ff_offset, ff_values);
+            allocate_device_memory(seeds,
+                                   ff_offset,
+                                   ff_values,
+                                   d_face_patch,
+                                   d_queue,
+                                   d_queue_ptr,
+                                   d_ff_values,
+                                   d_ff_offset,
+                                   d_cub_temp_storage_scan,
+                                   d_cub_temp_storage_max,
+                                   cub_scan_bytes,
+                                   cub_max_bytes,
+                                   d_seeds,
+                                   d_new_num_patches,
+                                   d_max_patch_size,
+                                   d_patches_offset,
+                                   d_patches_size,
+                                   d_patches_val);
+            run_lloyd(d_face_patch,
+                      d_queue,
+                      d_queue_ptr,
+                      d_ff_values,
+                      d_ff_offset,
+                      d_cub_temp_storage_scan,
+                      d_cub_temp_storage_max,
+                      cub_scan_bytes,
+                      cub_max_bytes,
+                      d_seeds,
+                      d_new_num_patches,
+                      d_max_patch_size,
+                      d_patches_offset,
+                      d_patches_size,
+                      d_patches_val);
         }
-        extract_ribbons(fv);
-        // bfs(ff_offset, ff_values);
-        assign_patch(fv, edges_map);
+
+        extract_ribbons(simplices);
     }
 
-
-    // calc_edge_cut(fv, ff_offset, ff_values);
+    assign_patch(simplices, tf, edges_map);
 
     print_statistics();
 
@@ -178,49 +246,17 @@ Patcher::Patcher(uint32_t                                         patch_size,
     GPU_FREE(d_patches_val);
 }
 
-void Patcher::grid(const std::vector<std::vector<uint32_t>>& fv)
+void Patcher::save(std::string filename)
 {
-    // this only work if the input is a mesh coming from create_plane()
-    // where are laid out sequentially and so we can just group them using
-    // their id
-
-    // m_num_patches = DIVIDE_UP(m_num_faces, m_patch_size);
-    // for (uint32_t f = 0; f < m_num_faces; ++f) {
-    //     m_face_patch[f] = f / m_patch_size;
-    // }
-
-    uint32_t num_v          = std::sqrt(m_num_vertices);
-    uint32_t num_v_per_part = std::floor(std::sqrt(float(m_patch_size / 2.f)));
-    uint32_t num_parts      = num_v / num_v_per_part;
-
-    m_num_patches = num_parts * num_parts;
-
-    auto calc_id = [&](uint32_t vid) {
-        uint32_t x = vid / num_v;
-        uint32_t y = vid % num_v;
-
-        uint32_t x_id = x / num_v_per_part;
-        uint32_t y_id = y / num_v_per_part;
-
-        uint32_t id = x_id * num_parts + y_id;
-
-        return id;
-    };
-
-    for (uint32_t f = 0; f < m_num_faces; ++f) {
-        // uint32_t minn(std::numeric_limits<uint32_t>::max());
-        // for (uint32_t v = 0; v < fv[f].size(); ++v) {
-        //     minn = std::min(fv[f][v], minn);
-        // }
-        uint32_t id0 = calc_id(fv[f][0]);
-        uint32_t id1 = calc_id(fv[f][1]);
-        uint32_t id2 = calc_id(fv[f][2]);
-
-        m_face_patch[f] = std::max(id0, std::max(id1, id2));
+    std::ofstream ss(filename, std::ios::binary);
+    if (!ss.is_open()) {
+        RXMESH_ERROR("Patcher: Failed to open {}", filename);
+        exit(EXIT_FAILURE);
     }
 
-
-    compute_inital_compressed_patches();
+    cereal::PortableBinaryOutputArchive archive(ss);
+    uint32_t                            magic = archive_magic;
+    archive(magic, m_mesh_kind, m_patch_size, m_top_simplex_patch);
 }
 
 Patcher::~Patcher()
@@ -231,27 +267,23 @@ void Patcher::allocate_memory(std::vector<uint32_t>& seeds)
 {
     seeds.reserve(m_num_seeds);
 
-    // patches assigned to each face, vertex, and edge
-    m_face_patch.resize(m_num_faces);
-    std::fill(m_face_patch.begin(), m_face_patch.end(), INVALID32);
+    if (m_top_simplex_patch.empty()) {
+        m_top_simplex_patch.resize(m_num_top_simplices, INVALID32);
+    }
 
-    m_vertex_patch.resize(m_num_vertices);
-    std::fill(m_vertex_patch.begin(), m_vertex_patch.end(), INVALID32);
+    if (m_mesh_kind == MeshKind::Tet) {
+        m_face_patch.resize(m_num_faces, INVALID32);
+    }
 
-    m_edge_patch.resize(m_num_edges);
-    std::fill(m_edge_patch.begin(), m_edge_patch.end(), INVALID32);
+    m_vertex_patch.resize(m_num_vertices, INVALID32);
+    m_edge_patch.resize(m_num_edges, INVALID32);
 
-    // explicit patches in compressed format
-    m_patches_val.resize(m_num_faces);
-
-    // we allow up to double the number of faces due to patch bisecting
+    m_patches_val.resize(m_num_top_simplices);
     m_patches_offset.resize(m_max_num_patches);
 
-    // external ribbon. it assumes first that all faces will be in there and
-    // then shrink to fit after the construction is done
     m_ribbon_ext_offset.resize(m_max_num_patches, 0);
-
-    m_ribbon_ext_val.resize(m_num_faces);
+    m_ribbon_ext_val.clear();
+    m_ribbon_ext_val.reserve(m_num_top_simplices);
 }
 
 void Patcher::allocate_device_memory(const std::vector<uint32_t>& seeds,
@@ -289,8 +321,8 @@ void Patcher::allocate_device_memory(const std::vector<uint32_t>& seeds,
                           ff_offset.size() * sizeof(uint32_t),
                           cudaMemcpyHostToDevice));
     // face/vertex/edge patch
-    CUDA_ERROR(
-        cudaMalloc((void**)&d_face_patch, m_num_faces * sizeof(uint32_t)));
+    CUDA_ERROR(cudaMalloc((void**)&d_face_patch,
+                          m_num_top_simplices * sizeof(uint32_t)));
 
     // seeds
     CUDA_ERROR(
@@ -306,7 +338,8 @@ void Patcher::allocate_device_memory(const std::vector<uint32_t>& seeds,
     // 1-> queue end
     // 2-> next queue end
     std::vector<uint32_t> h_queue_ptr{0, m_num_patches, m_num_patches};
-    CUDA_ERROR(cudaMalloc((void**)&d_queue, m_num_faces * sizeof(uint32_t)));
+    CUDA_ERROR(
+        cudaMalloc((void**)&d_queue, m_num_top_simplices * sizeof(uint32_t)));
     CUDA_ERROR(cudaMalloc((void**)&d_queue_ptr, 3 * sizeof(uint32_t)));
     CUDA_ERROR(cudaMemcpy(d_queue_ptr,
                           h_queue_ptr.data(),
@@ -318,8 +351,8 @@ void Patcher::allocate_device_memory(const std::vector<uint32_t>& seeds,
                           m_max_num_patches * sizeof(uint32_t)));
     CUDA_ERROR(cudaMalloc((void**)&d_patches_size,
                           m_max_num_patches * sizeof(uint32_t)));
-    CUDA_ERROR(
-        cudaMalloc((void**)&d_patches_val, m_num_faces * sizeof(uint32_t)));
+    CUDA_ERROR(cudaMalloc((void**)&d_patches_val,
+                          m_num_top_simplices * sizeof(uint32_t)));
     CUDA_ERROR(cudaMalloc((void**)&d_max_patch_size, sizeof(uint32_t)));
 
     CUDA_ERROR(cudaMalloc((void**)&d_new_num_patches, sizeof(uint32_t)));
@@ -348,7 +381,7 @@ void Patcher::allocate_device_memory(const std::vector<uint32_t>& seeds,
     CUDA_ERROR(cudaMalloc((void**)&d_cub_temp_storage_max, cub_max_bytes));
 }
 
-void Patcher::calc_edge_cut(const std::vector<std::vector<uint32_t>>& fv,
+void Patcher::calc_edge_cut(const std::vector<std::vector<uint32_t>>& simplices,
                             const std::vector<uint32_t>&              ff_offset,
                             const std::vector<uint32_t>&              ff_values)
 {
@@ -356,10 +389,10 @@ void Patcher::calc_edge_cut(const std::vector<std::vector<uint32_t>>& fv,
     // are connected in this graph if two faces share an edge, we calculate
     // the edge cut fo such a graph
     uint32_t face_edge_cut = 0;
-    for (uint32_t f = 0; f < m_num_faces; ++f) {
+    for (uint32_t f = 0; f < m_num_top_simplices; ++f) {
         for (uint32_t i = ff_offset[f]; i < ff_offset[f + 1]; ++i) {
             uint32_t n = ff_values[i];
-            if (f < n && m_face_patch[f] != m_face_patch[n]) {
+            if (f < n && m_top_simplex_patch[f] != m_top_simplex_patch[n]) {
                 face_edge_cut++;
             }
         }
@@ -374,11 +407,11 @@ void Patcher::calc_edge_cut(const std::vector<std::vector<uint32_t>>& fv,
     EdgeMapT edges_map;
     uint32_t num_edges = 0;
 
-    for (uint32_t f = 0; f < m_num_faces; ++f) {
-        for (uint32_t i = 0; i < fv[f].size(); ++i) {
+    for (uint32_t f = 0; f < m_num_top_simplices; ++f) {
+        for (uint32_t i = 0; i < simplices[f].size(); ++i) {
 
-            uint32_t v0 = fv[f][i];
-            uint32_t v1 = fv[f][(i + 1) % fv[f].size()];
+            uint32_t v0 = simplices[f][i];
+            uint32_t v1 = simplices[f][(i + 1) % simplices[f].size()];
 
             std::pair<uint32_t, uint32_t> edge = detail::edge_key(v0, v1);
 
@@ -415,7 +448,8 @@ void Patcher::print_statistics()
                                   m_patching_time_ms / float(m_num_lloyd_run)));
 
     // max-min patch size
-    uint32_t max_patch_size(0), min_patch_size(m_num_faces), avg_patch_size(0);
+    uint32_t max_patch_size(0), min_patch_size(m_num_top_simplices),
+        avg_patch_size(0);
     get_max_min_avg_patch_size(min_patch_size, max_patch_size, avg_patch_size);
     RXMESH_INFO(
         "Patcher: max_patch_size= {}, min_patch_size= {}, avg_patch_size= {}",
@@ -483,8 +517,8 @@ void Patcher::initialize_random_seeds(std::vector<uint32_t>&       seeds,
                 uint32_t size = comp.size();
                 // this weight tells how many extra faces this component
                 // have from num_remaining_seeds
-                float weight =
-                    static_cast<float>(size) / static_cast<float>(m_num_faces);
+                float weight = static_cast<float>(size) /
+                               static_cast<float>(m_num_top_simplices);
                 uint32_t component_num_seeds = static_cast<uint32_t>(std::ceil(
                     weight * static_cast<float>(num_remaining_seeds)));
 
@@ -514,7 +548,7 @@ void Patcher::initialize_random_seeds_single_component(
     std::vector<uint32_t>& seeds)
 {
     // if not multi-component, just generate random number
-    std::vector<uint32_t> rand_num(m_num_faces);
+    std::vector<uint32_t> rand_num(m_num_top_simplices);
     fill_with_sequential_numbers(rand_num.data(), rand_num.size());
     random_shuffle(rand_num.data(), rand_num.size());
     seeds.resize(m_num_seeds);
@@ -548,15 +582,16 @@ void Patcher::get_multi_components(
     const std::vector<uint32_t>&        ff_offset,
     const std::vector<uint32_t>&        ff_values)
 {
-    std::vector<bool> visited(m_num_faces, false);
-    for (uint32_t f = 0; f < m_num_faces; ++f) {
+    std::vector<bool> visited(m_num_top_simplices, false);
+    for (uint32_t f = 0; f < m_num_top_simplices; ++f) {
         if (!visited[f]) {
             std::vector<uint32_t> current_component;
             // just a guess
-            current_component.reserve(
-                static_cast<uint32_t>(static_cast<double>(m_num_faces) / 10.0));
+            current_component.reserve(static_cast<uint32_t>(
+                static_cast<double>(m_num_top_simplices) / 10.0));
 
             current_component.push_back(f);
+            visited[f] = true;
 
             std::queue<uint32_t> face_queue;
             face_queue.push(f);
@@ -595,7 +630,7 @@ void Patcher::bfs(const std::vector<uint32_t>& ff_offset,
             uint32_t face = m_patches_val[f];
             for (uint32_t n = ff_offset[face]; n < ff_offset[face + 1]; ++n) {
                 uint32_t n_face  = ff_values[n];
-                uint32_t n_patch = m_face_patch[n_face];
+                uint32_t n_patch = m_top_simplex_patch[n_face];
                 if (n_patch != p) {
                     if (find_index(n_patch, np) ==
                         std::numeric_limits<uint32_t>::max()) {
@@ -619,9 +654,9 @@ void Patcher::bfs(const std::vector<uint32_t>& ff_offset,
         }
     }
     std::fill(m_patches_offset.begin(), m_patches_offset.end(), 0);
-    for (uint32_t f = 0; f < m_num_faces; ++f) {
-        m_face_patch[f] = bfs_patch_id[m_face_patch[f]];
-        m_patches_offset[m_face_patch[f]]++;
+    for (uint32_t f = 0; f < m_num_top_simplices; ++f) {
+        m_top_simplex_patch[f] = bfs_patch_id[m_top_simplex_patch[f]];
+        m_patches_offset[m_top_simplex_patch[f]]++;
     }
     uint32_t acc = 0;
     for (uint32_t p = 0; p < m_num_patches; ++p) {
@@ -629,200 +664,113 @@ void Patcher::bfs(const std::vector<uint32_t>& ff_offset,
         m_patches_offset[p] = acc;
     }
     std::vector<uint32_t> temp_offset(m_num_patches, 0);
-    for (uint32_t f = 0; f < m_num_faces; ++f) {
-        uint32_t p     = m_face_patch[f];
+    for (uint32_t f = 0; f < m_num_top_simplices; ++f) {
+        uint32_t p     = m_top_simplex_patch[f];
         uint32_t start = (p == 0) ? p : m_patches_offset[p - 1];
         m_patches_val[start + temp_offset[p]] = f;
         temp_offset[p]++;
     }
 }
 
-void Patcher::extract_ribbons(const std::vector<std::vector<uint32_t>>& fv)
+void Patcher::extract_ribbons(
+    const std::vector<std::vector<uint32_t>>& simplices)
 {
-    // Post process the patches by extracting the ribbons
-    // For patch P, we loop over its faces. For each face F, we loop over its
-    // three vertices. For each such vertex V, we loop over its incident faces.
-    // For each such face N, if N's patch is not P, then we add it to the ribbon
-    // faces of P. We also make sure that the ribbon faces list for each patch
-    // does not have duplicates
+    std::vector<std::vector<uint32_t>> vertex_simplices(m_num_vertices);
 
-    // build vertex incident faces
-    std::vector<std::vector<uint32_t>> vf(m_num_vertices,
-                                          std::vector<uint32_t>(10));
-
-    for (uint32_t i = 0; i < vf.size(); ++i) {
-        vf[i].clear();
-    }
-    for (uint32_t face = 0; face < m_num_faces; ++face) {
-        for (uint32_t v = 0; v < fv[face].size(); ++v) {
-            vf[fv[face][v]].push_back(face);
+    for (uint32_t s = 0; s < m_num_top_simplices; ++s) {
+        for (uint32_t v : simplices[s]) {
+            vertex_simplices[v].push_back(s);
         }
     }
 
     std::vector<uint32_t> ribbon;
-    ribbon.reserve(m_num_faces);
+    ribbon.reserve(m_num_top_simplices);
+    m_ribbon_ext_val.clear();
 
-    m_ribbon_ext_offset[0] = 0;
-
-    // for every patch
     for (uint32_t p = 0; p < m_num_patches; ++p) {
-
-        uint32_t p_start = (p == 0) ? 0 : m_patches_offset[p - 1];
-        uint32_t p_end   = m_patches_offset[p];
+        const uint32_t p_start = (p == 0) ? 0 : m_patches_offset[p - 1];
+        const uint32_t p_end   = m_patches_offset[p];
 
         ribbon.clear();
 
-        // for every face in the patch
-        for (uint32_t f = p_start; f < p_end; ++f) {
-            uint32_t face = m_patches_val[f];
+        for (uint32_t s = p_start; s < p_end; ++s) {
+            const uint32_t simplex = m_patches_val[s];
 
-            // for every vertex in this face
-            for (uint32_t i = 0; i < fv[face].size(); ++i) {
-                uint32_t vertex = fv[face][i];
-
-                // for every incident face to this vertex
-                for (uint32_t j = 0; j < vf[vertex].size(); ++j) {
-                    uint32_t n       = vf[vertex][j];
-                    uint32_t n_patch = get_face_patch_id(n);
-
-                    if (n_patch != p) {
-                        auto it = std::find(ribbon.begin(), ribbon.end(), n);
-                        if (it == ribbon.end()) {
-                            ribbon.push_back(n);
-                        }
+            for (uint32_t vertex : simplices[simplex]) {
+                for (uint32_t neighbor : vertex_simplices[vertex]) {
+                    if (get_top_simplex_patch_id(neighbor) != p &&
+                        std::find(ribbon.begin(), ribbon.end(), neighbor) ==
+                            ribbon.end()) {
+                        ribbon.push_back(neighbor);
                     }
                 }
             }
         }
 
-        uint32_t r_start = 0;
-
-        // add ribbon faces to m_ribbon_ext_val
-        if (p == 0) {
-            m_ribbon_ext_offset[p] = ribbon.size();
-        } else {
-            m_ribbon_ext_offset[p] = ribbon.size() + m_ribbon_ext_offset[p - 1];
-
-            r_start = m_ribbon_ext_offset[p - 1];
-        }
-
-
-        for (uint32_t f = 0; f < ribbon.size(); ++f) {
-            m_ribbon_ext_val[r_start + f] = ribbon[f];
-        }
+        m_ribbon_ext_val.insert(
+            m_ribbon_ext_val.end(), ribbon.begin(), ribbon.end());
+        m_ribbon_ext_offset[p] = static_cast<uint32_t>(m_ribbon_ext_val.size());
     }
-
-
-    m_ribbon_ext_val.resize(m_ribbon_ext_offset[m_num_patches - 1]);
 }
 
 void Patcher::assign_patch(
-    const std::vector<std::vector<uint32_t>>&        fv,
+    const std::vector<std::vector<uint32_t>>&        simplices,
+    const std::vector<std::array<uint32_t, 4>>&      tf,
     const std::unordered_map<std::pair<uint32_t, uint32_t>,
                              uint32_t,
                              detail::edge_key_hash>& edges_map)
 {
-    // For every patch p, for every face in the patch, find the three edges
-    // that bound that face, and assign them to the patch. For boundary vertices
-    // and edges assign them to one patch (TODO smallest face count). For now,
-    // we assign it to the first patch
+    constexpr uint32_t tet_edges[6][2] = {
+        {0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}};
 
     for (uint32_t cur_p = 0; cur_p < m_num_patches; ++cur_p) {
+        const uint32_t p_start = (cur_p == 0) ? 0 : m_patches_offset[cur_p - 1];
+        const uint32_t p_end   = m_patches_offset[cur_p];
 
-        uint32_t p_start = (cur_p == 0) ? 0 : m_patches_offset[cur_p - 1];
-        uint32_t p_end   = m_patches_offset[cur_p];
+        for (uint32_t s = p_start; s < p_end; ++s) {
+            const uint32_t simplex = m_patches_val[s];
 
-        for (uint32_t f = p_start; f < p_end; ++f) {
+            if (m_mesh_kind == MeshKind::Triangle) {
+                uint32_t v1 = simplices[simplex].back();
+                for (uint32_t v0 : simplices[simplex]) {
+                    const auto     edge    = detail::edge_key(v0, v1);
+                    const uint32_t edge_id = edges_map.at(edge);
 
-            uint32_t face = m_patches_val[f];
+                    if (m_vertex_patch[v0] == INVALID32) {
+                        m_vertex_patch[v0] = cur_p;
+                    }
+                    if (m_edge_patch[edge_id] == INVALID32) {
+                        m_edge_patch[edge_id] = cur_p;
+                    }
+                    v1 = v0;
+                }
+            } else {
+                const auto& tet = simplices[simplex];
 
-            uint32_t v1 = fv[face].back();
-            for (uint32_t v = 0; v < fv[face].size(); ++v) {
-                uint32_t v0 = fv[face][v];
-
-                std::pair<uint32_t, uint32_t> key = detail::edge_key(v0, v1);
-                uint32_t                      edge_id = edges_map.at(key);
-
-                if (m_vertex_patch[v0] == INVALID32) {
-                    m_vertex_patch[v0] = cur_p;
+                for (uint32_t vertex : tet) {
+                    if (m_vertex_patch[vertex] == INVALID32) {
+                        m_vertex_patch[vertex] = cur_p;
+                    }
                 }
 
-                if (m_edge_patch[edge_id] == INVALID32) {
-                    m_edge_patch[edge_id] = cur_p;
+                for (const auto& edge : tet_edges) {
+                    const auto key =
+                        detail::edge_key(tet[edge[0]], tet[edge[1]]);
+                    const uint32_t edge_id = edges_map.at(key);
+                    if (m_edge_patch[edge_id] == INVALID32) {
+                        m_edge_patch[edge_id] = cur_p;
+                    }
                 }
 
-                v1 = v0;
+                for (uint32_t packed_face : tf[simplex]) {
+                    const uint32_t face_id = packed_face >> 1;
+                    if (m_face_patch[face_id] == INVALID32) {
+                        m_face_patch[face_id] = cur_p;
+                    }
+                }
             }
         }
     }
-
-
-    /* for (uint32_t f = 0; f < m_num_faces; ++f) {
-        uint32_t p0 = m_vertex_patch[fv[f][0]];
-        uint32_t p1 = m_vertex_patch[fv[f][1]];
-        uint32_t p2 = m_vertex_patch[fv[f][2]];
-
-        if (p0 == p1 && p1 == p2 && p0 == p2) {
-            // ideal case
-            continue;
-        }
-        if (p0 != p1 && p0 != p2 && p1 != p2) {
-            // hopeless case
-            continue;
-        }
-
-        // find the index in fv[f] of the odd vertex i.e., the vertex with
-        // different patch id
-        uint32_t odd = (p0 == p1) ? 2 : ((p1 == p2) ? 0 : 1);
-
-        // find the index in fv[f] of the common vertex i.e., any vertex other
-        // than odd
-        uint32_t common = (odd + 1) % 3;
-
-        // the common patch
-        uint32_t common_patch = m_vertex_patch[fv[f][common]];
-
-        // re-assign the odd one to agree with the other two
-        // only if this face is also assigned to the common patch
-        uint32_t f_p = m_face_patch[f];
-        if (f_p == common_patch) {
-            m_vertex_patch[fv[f][odd]] = common_patch;
-        }
-    }*/
-
-    // Refinement: every vertex get re-assigned to the patch where the most of
-    // the vertex neighbors are assigned to
-    /* std::vector<std::vector<uint32_t>> vv(m_num_vertices);
-
-    for (auto& it : edges_map) {
-        uint32_t v0 = it.first.first;
-        uint32_t v1 = it.first.second;
-
-        vv[v0].push_back(v1);
-        vv[v1].push_back(v0);
-    }
-
-    for (uint32_t v = 0; v < m_num_vertices; ++v) {
-        std::unordered_map<uint32_t, uint32_t> neighbour_patch;
-        for (uint32_t i = 0; i < vv[v].size(); ++i) {
-            uint32_t n       = vv[v][i];
-            uint32_t n_patch = m_vertex_patch[n];
-            neighbour_patch[n_patch] += 1;
-        }
-
-        uint32_t pop_patch       = INVALID32;
-        uint32_t pop_patch_count = 0;
-        for (auto& it : neighbour_patch) {
-            uint32_t p       = it.first;
-            uint32_t p_count = it.second;
-            if (p_count > pop_patch_count) {
-                pop_patch       = p;
-                pop_patch_count = p_count;
-            }
-        }
-
-        m_vertex_patch[v] = pop_patch;
-    }*/
 }
 
 void Patcher::run_lloyd(uint32_t* d_face_patch,
@@ -854,7 +802,7 @@ void Patcher::run_lloyd(uint32_t* d_face_patch,
         const uint32_t threads_s = 256;
         const uint32_t blocks_s  = DIVIDE_UP(m_num_patches, threads_s);
         const uint32_t threads_f = 256;
-        const uint32_t blocks_f  = DIVIDE_UP(m_num_faces, threads_f);
+        const uint32_t blocks_f  = DIVIDE_UP(m_num_top_simplices, threads_f);
 
         // add more seeds if needed
         if (m_num_lloyd_run % 5 == 0 && m_num_lloyd_run > 0) {
@@ -880,6 +828,7 @@ void Patcher::run_lloyd(uint32_t* d_face_patch,
                 RXMESH_ERROR(
                     "Patcher::run_lloyd() m_num_patches exceeds "
                     "m_max_num_patches");
+                exit(EXIT_FAILURE);
             }
         }
         h_queue_ptr[0] = 0;
@@ -891,7 +840,7 @@ void Patcher::run_lloyd(uint32_t* d_face_patch,
                               cudaMemcpyHostToDevice));
 
         rxmesh::memsett<<<blocks_f, threads_f>>>(
-            d_face_patch, INVALID32, m_num_faces);
+            d_face_patch, INVALID32, m_num_top_simplices);
 
         rxmesh::memcopy<<<blocks_s, threads_s>>>(
             d_queue, d_seeds, m_num_patches);
@@ -906,14 +855,15 @@ void Patcher::run_lloyd(uint32_t* d_face_patch,
         while (true) {
             // Launch enough threads to cover all the faces. However, only
             // subset will do actual work depending on the queue size
-            cluster_seed_propagation<<<blocks_f, threads_f>>>(m_num_faces,
-                                                              m_num_patches,
-                                                              d_queue_ptr,
-                                                              d_queue,
-                                                              d_face_patch,
-                                                              d_patches_size,
-                                                              d_ff_offset,
-                                                              d_ff_values);
+            cluster_seed_propagation<<<blocks_f, threads_f>>>(
+                m_num_top_simplices,
+                m_num_patches,
+                d_queue_ptr,
+                d_queue,
+                d_face_patch,
+                d_patches_size,
+                d_ff_offset,
+                d_ff_values);
 
             reset_queue_ptr<<<1, 1>>>(d_queue_ptr);
 
@@ -922,7 +872,7 @@ void Patcher::run_lloyd(uint32_t* d_face_patch,
                                   sizeof(uint32_t),
                                   cudaMemcpyDeviceToHost));
 
-            if (h_queue_ptr[0] >= m_num_faces) {
+            if (h_queue_ptr[0] >= m_num_top_simplices) {
                 break;
             }
         }
@@ -942,7 +892,7 @@ void Patcher::run_lloyd(uint32_t* d_face_patch,
         uint32_t threads_i   = 512;
         uint32_t shmem_bytes = max_patch_size * (sizeof(uint32_t));
         rxmesh::memsett<<<blocks_f, threads_f>>>(
-            d_queue, INVALID32, m_num_faces);
+            d_queue, INVALID32, m_num_top_simplices);
         interior<<<m_num_patches, threads_i, shmem_bytes>>>(m_num_patches,
                                                             d_patches_offset,
                                                             d_patches_val,
@@ -954,7 +904,7 @@ void Patcher::run_lloyd(uint32_t* d_face_patch,
 
         if (max_patch_size <= m_patch_size) {
             shift<<<blocks_f, threads_f>>>(
-                m_num_faces, d_face_patch, d_patches_val);
+                m_num_top_simplices, d_face_patch, d_patches_val);
 
             break;
         }
@@ -971,9 +921,9 @@ void Patcher::run_lloyd(uint32_t* d_face_patch,
     // move data to host
     m_num_seeds = m_num_patches;
 
-    CUDA_ERROR(cudaMemcpy(m_face_patch.data(),
+    CUDA_ERROR(cudaMemcpy(m_top_simplex_patch.data(),
                           d_face_patch,
-                          sizeof(uint32_t) * m_num_faces,
+                          sizeof(uint32_t) * m_num_top_simplices,
                           cudaMemcpyDeviceToHost));
     m_patches_offset.resize(m_num_patches);
     CUDA_ERROR(cudaMemcpy(m_patches_offset.data(),
@@ -982,7 +932,7 @@ void Patcher::run_lloyd(uint32_t* d_face_patch,
                           cudaMemcpyDeviceToHost));
     CUDA_ERROR(cudaMemcpy(m_patches_val.data(),
                           d_patches_val,
-                          sizeof(uint32_t) * m_num_faces,
+                          sizeof(uint32_t) * m_num_top_simplices,
                           cudaMemcpyDeviceToHost));
 }
 
@@ -1001,7 +951,7 @@ uint32_t Patcher::construct_patches_compressed_format(
     const uint32_t threads_s      = 256;
     const uint32_t blocks_s       = DIVIDE_UP(m_num_patches, threads_s);
     const uint32_t threads_f      = 256;
-    const uint32_t blocks_f       = DIVIDE_UP(m_num_faces, threads_f);
+    const uint32_t blocks_f       = DIVIDE_UP(m_num_top_simplices, threads_f);
 
     // Compute max patch size
     max_patch_size = 0;
@@ -1023,7 +973,7 @@ uint32_t Patcher::construct_patches_compressed_format(
                                     m_num_patches);
     rxmesh::memsett<<<blocks_s, threads_s>>>(d_patches_size, 0u, m_num_patches);
 
-    construct_patches_compressed<<<blocks_f, threads_f>>>(m_num_faces,
+    construct_patches_compressed<<<blocks_f, threads_f>>>(m_num_top_simplices,
                                                           d_face_patch,
                                                           m_num_patches,
                                                           d_patches_offset,
@@ -1060,12 +1010,12 @@ void Patcher::metis_kway(const std::vector<uint32_t>& ff_offset,
     options[METIS_OPTION_DBGLVL]    = METIS_DBG_TIME;
 
     // number of vertices in the graph
-    idx_t              nvtxs  = m_num_faces;
+    idx_t              nvtxs  = m_num_top_simplices;
     idx_t              ncon   = 1;
     idx_t*             vwgt   = NULL;
     idx_t*             vsize  = NULL;
     idx_t*             adjwgt = NULL;
-    idx_t              nparts = DIVIDE_UP(m_num_faces, m_patch_size);
+    idx_t              nparts = DIVIDE_UP(m_num_top_simplices, m_patch_size);
     real_t*            tpwgts = NULL;
     real_t*            ubvec  = NULL;
     idx_t              objval = 0;
@@ -1103,8 +1053,8 @@ void Patcher::metis_kway(const std::vector<uint32_t>& ff_offset,
 
     m_num_patches = nparts;
 
-    for (uint32_t f = 0; f < m_num_faces; ++f) {
-        m_face_patch[f] = part[f];
+    for (uint32_t f = 0; f < m_num_top_simplices; ++f) {
+        m_top_simplex_patch[f] = part[f];
     }
 
     compute_inital_compressed_patches();
@@ -1115,14 +1065,14 @@ void Patcher::compute_inital_compressed_patches()
     m_patches_offset.resize(m_num_patches, 0);
 
     std::vector<uint32_t> patches_size(m_num_patches, 0);
-    for (uint32_t f = 0; f < m_num_faces; ++f) {
-        patches_size[m_face_patch[f]]++;
+    for (uint32_t f = 0; f < m_num_top_simplices; ++f) {
+        patches_size[m_top_simplex_patch[f]]++;
     }
 
     std::inclusive_scan(
         patches_size.begin(), patches_size.end(), m_patches_offset.begin());
 
-    if (m_patches_offset.back() != m_num_faces) {
+    if (m_patches_offset.back() != m_num_top_simplices) {
         RXMESH_ERROR(
             "Patcher::compute_inital_compressed_patches()  Error with creating "
             "patch graph");
@@ -1131,8 +1081,8 @@ void Patcher::compute_inital_compressed_patches()
 
     std::fill(patches_size.begin(), patches_size.end(), 0);
 
-    for (uint32_t f = 0; f < m_num_faces; ++f) {
-        int p = m_face_patch[f];
+    for (uint32_t f = 0; f < m_num_top_simplices; ++f) {
+        int p = m_top_simplex_patch[f];
 
         uint32_t id = (p == 0) ? 0 : m_patches_offset[p - 1];
 

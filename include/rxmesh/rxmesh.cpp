@@ -308,10 +308,8 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& simplices,
     build_supporting_structures(
         simplices, ev, fe, tf, adjacency_offset, adjacency_values);
 
-    if (m_is_tet_mesh) {
-        RXMESH_ERROR("RXMesh tet patching is not implemented yet");
-        exit(EXIT_FAILURE);
-    }
+    const MeshKind mesh_kind =
+        m_is_tet_mesh ? MeshKind::Tet : MeshKind::Triangle;
 
     if (!patcher_file.empty()) {
         if (!std::filesystem::exists(patcher_file)) {
@@ -319,33 +317,50 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& simplices,
                 "RXMesh::build patch file {} does not exit. Building unique "
                 "patches.",
                 patcher_file);
-            m_patcher = std::make_unique<patcher::Patcher>(m_patch_size,
+            m_patcher = std::make_unique<patcher::Patcher>(mesh_kind,
+                                                           m_patch_size,
                                                            adjacency_offset,
                                                            adjacency_values,
                                                            simplices,
+                                                           tf,
                                                            m_edges_map,
                                                            m_num_vertices,
                                                            m_num_edges,
+                                                           m_num_faces,
                                                            false);
         } else {
-            m_patcher = std::make_unique<patcher::Patcher>(patcher_file);
+            m_patcher = std::make_unique<patcher::Patcher>(patcher_file,
+                                                           mesh_kind,
+                                                           adjacency_offset,
+                                                           adjacency_values,
+                                                           simplices,
+                                                           tf,
+                                                           m_edges_map,
+                                                           m_num_vertices,
+                                                           m_num_edges,
+                                                           m_num_faces);
         }
     } else {
-        m_patcher = std::make_unique<patcher::Patcher>(m_patch_size,
+        m_patcher = std::make_unique<patcher::Patcher>(mesh_kind,
+                                                       m_patch_size,
                                                        adjacency_offset,
                                                        adjacency_values,
                                                        simplices,
+                                                       tf,
                                                        m_edges_map,
                                                        m_num_vertices,
                                                        m_num_edges,
+                                                       m_num_faces,
                                                        false);
     }
-
-
     m_num_patches     = m_patcher->get_num_patches();
     m_max_num_patches = static_cast<uint32_t>(
         std::ceil(m_patch_alloc_factor * static_cast<float>(m_num_patches)));
 
+    if (m_is_tet_mesh) {
+        RXMESH_ERROR("RXMesh tet patch-local topology is not implemented yet");
+        exit(EXIT_FAILURE);
+    }
     m_h_patches_info =
         (PatchInfo*)malloc(get_max_num_patches() * sizeof(PatchInfo));
     for (uint32_t p = 0; p < get_max_num_patches(); ++p) {
@@ -650,7 +665,7 @@ void RXMesh::build_supporting_structures(
                 auto face_key = oriented_face;
                 std::sort(face_key.begin(), face_key.end());
 
-                // parity records the orientation of a tet’s face relative to
+                // parity records the orientation of a tet's face relative to
                 // its canonical sorted vertex order
                 // 0 means even permutation, i.e., same cyclic orientation
                 // 1 means odd permutation, i.e., reversed orientation
