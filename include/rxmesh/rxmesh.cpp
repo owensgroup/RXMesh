@@ -603,11 +603,6 @@ void RXMesh::build_supporting_structures(
     tf.clear();
 
     if (m_is_tet_mesh) {
-        constexpr uint32_t tet_edges[6][2] = {
-            {0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}};
-        constexpr uint32_t tet_faces[4][3] = {
-            {1, 2, 3}, {0, 3, 2}, {0, 1, 3}, {0, 2, 1}};
-
         m_num_tets     = static_cast<uint32_t>(simplices.size());
         m_num_faces    = 0;
         m_num_edges    = 0;
@@ -701,14 +696,14 @@ void RXMesh::build_supporting_structures(
                 m_num_vertices = std::max(m_num_vertices, v);
             }
 
-            for (const auto& edge : tet_edges) {
+            for (const auto& edge : tet_edges()) {
                 add_edge(tet[edge[0]], tet[edge[1]]);
             }
 
+            const auto faces = tet_faces();
             for (uint32_t f = 0; f < 4; ++f) {
-                std::array<uint32_t, 3> oriented_face = {tet[tet_faces[f][0]],
-                                                         tet[tet_faces[f][1]],
-                                                         tet[tet_faces[f][2]]};
+                std::array<uint32_t, 3> oriented_face = {
+                    tet[faces[f][0]], tet[faces[f][1]], tet[faces[f][2]]};
 
                 auto face_key = oriented_face;
                 std::sort(face_key.begin(), face_key.end());
@@ -1069,9 +1064,6 @@ void RXMesh::build_single_patch_ltog(
     const uint32_t r_end = m_patcher->get_external_ribbon_offset()[patch_id];
 
     if (m_is_tet_mesh) {
-        constexpr uint32_t tet_edges[6][2] = {
-            {0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}};
-
         const uint32_t total_patch_num_tets =
             (p_end - p_start) + (r_end - r_start);
 
@@ -1095,7 +1087,7 @@ void RXMesh::build_single_patch_ltog(
                 }
             }
 
-            for (const auto& edge : tet_edges) {
+            for (const auto& edge : tet_edges()) {
                 const uint32_t edge_id =
                     get_edge_id(simplices[global_tet_id][edge[0]],
                                 simplices[global_tet_id][edge[1]]);

@@ -720,9 +720,6 @@ void Patcher::assign_patch(
                              uint32_t,
                              detail::edge_key_hash>& edges_map)
 {
-    constexpr uint32_t tet_edges[6][2] = {
-        {0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}};
-
     for (uint32_t cur_p = 0; cur_p < m_num_patches; ++cur_p) {
         const uint32_t p_start = (cur_p == 0) ? 0 : m_patches_offset[cur_p - 1];
         const uint32_t p_end   = m_patches_offset[cur_p];
@@ -753,7 +750,7 @@ void Patcher::assign_patch(
                     }
                 }
 
-                for (const auto& edge : tet_edges) {
+                for (const auto& edge : tet_edges()) {
                     const auto key =
                         detail::edge_key(tet[edge[0]], tet[edge[1]]);
                     const uint32_t edge_id = edges_map.at(key);

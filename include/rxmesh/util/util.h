@@ -2,6 +2,7 @@
 #include <cuda_runtime.h>
 #include <algorithm>
 #include <cctype>
+#include <cuda/std/array>
 #include <filesystem>
 #include <fstream>
 #include <numeric>
@@ -12,6 +13,18 @@
 #include <Eigen/Dense>
 
 namespace rxmesh {
+
+__host__ __device__ constexpr cuda::std::array<cuda::std::array<uint32_t, 2>, 6>
+         tet_edges()
+{
+    return {{{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}}};
+}
+
+__host__ __device__ constexpr cuda::std::array<cuda::std::array<uint32_t, 3>, 4>
+         tet_faces()
+{
+    return {{{1, 2, 3}, {0, 3, 2}, {0, 1, 3}, {0, 2, 1}}};
+}
 
 /**
  * @brief Set the maximum dynamic shared memory for a kernel to the device's
