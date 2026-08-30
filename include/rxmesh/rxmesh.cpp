@@ -25,6 +25,7 @@ RXMesh::RXMesh(uint32_t patch_size)
       m_max_edge_capacity(0),
       m_max_face_capacity(0),
       m_max_vertex_capacity(0),
+      m_max_tet_capacity(0),
       m_input_max_valence(0),
       m_input_max_edge_incident_faces(0),
       m_input_max_face_adjacent_faces(0),
@@ -36,9 +37,11 @@ RXMesh::RXMesh(uint32_t patch_size)
       m_max_capacity_lp_v(0),
       m_max_capacity_lp_e(0),
       m_max_capacity_lp_f(0),
+      m_max_capacity_lp_t(0),
       m_max_vertices_per_patch(0),
       m_max_edges_per_patch(0),
       m_max_faces_per_patch(0),
+      m_max_tets_per_patch(0),
       m_h_vertex_prefix(nullptr),
       m_h_edge_prefix(nullptr),
       m_h_face_prefix(nullptr),
@@ -135,6 +138,11 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& simplices,
     m_timers.start("populate_patch_stash");
     populate_patch_stash();
     m_timers.stop("populate_patch_stash");
+
+    if (m_is_tet_mesh) {
+        RXMESH_ERROR("RXMesh tet device lifecycle is not implemented yet");
+        exit(EXIT_FAILURE);
+    }
 
     m_timers.start("coloring");
     patch_graph_coloring();
@@ -235,6 +243,7 @@ RXMesh::~RXMesh()
         for (uint32_t p = 0; p < get_max_num_patches(); ++p) {
             free(m_h_patches_info[p].ev);
             free(m_h_patches_info[p].fe);
+            free(m_h_patches_info[p].tf);
             free(m_h_patches_info[p].active_mask_v);
             free(m_h_patches_info[p].active_mask_e);
             free(m_h_patches_info[p].active_mask_f);
@@ -304,6 +313,7 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& simplices,
     m_max_capacity_lp_v = 0;
     m_max_capacity_lp_e = 0;
     m_max_capacity_lp_f = 0;
+    m_max_capacity_lp_t = 0;
 
     build_supporting_structures(
         simplices, ev, fe, tf, adjacency_offset, adjacency_values);
@@ -357,10 +367,6 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& simplices,
     m_max_num_patches = static_cast<uint32_t>(
         std::ceil(m_patch_alloc_factor * static_cast<float>(m_num_patches)));
 
-    if (m_is_tet_mesh) {
-        RXMESH_ERROR("RXMesh tet patch-local topology is not implemented yet");
-        exit(EXIT_FAILURE);
-    }
     m_h_patches_info =
         (PatchInfo*)malloc(get_max_num_patches() * sizeof(PatchInfo));
     for (uint32_t p = 0; p < get_max_num_patches(); ++p) {
@@ -373,9 +379,14 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& simplices,
     m_h_num_owned_v.resize(get_max_num_patches(), 0);
     m_h_num_owned_e.resize(get_max_num_patches(), 0);
 
+    if (m_is_tet_mesh) {
+        m_h_patches_ltog_t.resize(get_num_patches());
+        m_h_num_owned_t.resize(get_max_num_patches(), 0);
+    }
+
 #pragma omp parallel for
     for (int p = 0; p < static_cast<int>(get_num_patches()); ++p) {
-        build_single_patch_ltog(simplices, ev, p);
+        build_single_patch_ltog(simplices, ev, tf, p);
     }
 
     // calc max elements for use in build_device (which populates
@@ -383,6 +394,7 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& simplices,
     m_max_vertices_per_patch = 0;
     m_max_edges_per_patch    = 0;
     m_max_faces_per_patch    = 0;
+    m_max_tets_per_patch     = 0;
     for (uint32_t p = 0; p < get_num_patches(); ++p) {
         m_max_vertices_per_patch =
             std::max(m_max_vertices_per_patch,
@@ -393,20 +405,86 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& simplices,
         m_max_faces_per_patch =
             std::max(m_max_faces_per_patch,
                      static_cast<uint32_t>(m_h_patches_ltog_f[p].size()));
+        if (m_is_tet_mesh) {
+            m_max_tets_per_patch =
+                std::max(m_max_tets_per_patch,
+                         static_cast<uint32_t>(m_h_patches_ltog_t[p].size()));
+        }
     }
 
-    m_max_vertex_capacity = static_cast<uint16_t>(std::ceil(
-        m_capacity_factor * static_cast<float>(m_max_vertices_per_patch)));
+    if (m_max_vertices_per_patch > INVALID16 ||
+        m_max_tets_per_patch > INVALID16 ||
+        m_max_edges_per_patch >= (1u << 15) ||
+        m_max_faces_per_patch >= (1u << 15)) {
+        RXMESH_ERROR(
+            "RXMesh::build patch-local topology exceeds the 16-bit packed "
+            "index representation");
+        exit(EXIT_FAILURE);
+    }
 
-    m_max_edge_capacity = static_cast<uint16_t>(std::ceil(
-        m_capacity_factor * static_cast<float>(m_max_edges_per_patch)));
+    auto calc_capacity = [&](const uint32_t max_elements) {
+        const uint32_t capacity = static_cast<uint32_t>(
+            std::ceil(m_capacity_factor * static_cast<float>(max_elements)));
+        if (capacity > INVALID16) {
+            RXMESH_ERROR(
+                "RXMesh::build patch capacity {} exceeds the 16-bit "
+                "representation",
+                capacity);
+            exit(EXIT_FAILURE);
+        }
+        return capacity;
+    };
 
-    m_max_face_capacity = static_cast<uint16_t>(std::ceil(
-        m_capacity_factor * static_cast<float>(m_max_faces_per_patch)));
+    m_max_vertex_capacity = calc_capacity(m_max_vertices_per_patch);
+    m_max_edge_capacity   = calc_capacity(m_max_edges_per_patch);
+    m_max_face_capacity   = calc_capacity(m_max_faces_per_patch);
+    m_max_tet_capacity =
+        m_is_tet_mesh ? calc_capacity(m_max_tets_per_patch) : 0;
 
 #pragma omp parallel for
     for (int p = 0; p < static_cast<int>(get_num_patches()); ++p) {
-        build_single_patch_topology(simplices, p);
+        build_single_patch_topology(simplices, ev, fe, tf, p);
+    }
+
+    // the hash table capacity should be at least 2* the size of the stash
+    m_max_capacity_lp_v = 2 * LPHashTable::stash_size;
+    m_max_capacity_lp_e = 2 * LPHashTable::stash_size;
+    m_max_capacity_lp_f = 2 * LPHashTable::stash_size;
+    if (m_is_tet_mesh) {
+        m_max_capacity_lp_t = 2 * LPHashTable::stash_size;
+    }
+
+    auto update_lp_capacity = [&](uint16_t&    capacity,
+                                  const size_t num_not_owned) {
+        const uint32_t required = static_cast<uint32_t>(
+            std::ceil(m_capacity_factor * static_cast<float>(num_not_owned) /
+                      m_lp_hashtable_load_factor));
+        if (required > INVALID16) {
+            RXMESH_ERROR(
+                "RXMesh::build LP capacity {} exceeds the 16-bit "
+                "representation",
+                required);
+            exit(EXIT_FAILURE);
+        }
+        capacity = std::max(capacity, static_cast<uint16_t>(required));
+    };
+
+    for (uint32_t p = 0; p < get_num_patches(); ++p) {
+        update_lp_capacity(m_max_capacity_lp_v,
+                           m_h_patches_ltog_v[p].size() - m_h_num_owned_v[p]);
+        update_lp_capacity(m_max_capacity_lp_e,
+                           m_h_patches_ltog_e[p].size() - m_h_num_owned_e[p]);
+        update_lp_capacity(m_max_capacity_lp_f,
+                           m_h_patches_ltog_f[p].size() - m_h_num_owned_f[p]);
+        if (m_is_tet_mesh) {
+            update_lp_capacity(
+                m_max_capacity_lp_t,
+                m_h_patches_ltog_t[p].size() - m_h_num_owned_t[p]);
+        }
+    }
+
+    if (m_is_tet_mesh) {
+        return;
     }
 
     const uint32_t patches_1_bytes =
@@ -424,37 +502,6 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& simplices,
         m_h_vertex_prefix[p + 1] = m_h_vertex_prefix[p] + m_h_num_owned_v[p];
         m_h_edge_prefix[p + 1]   = m_h_edge_prefix[p] + m_h_num_owned_e[p];
         m_h_face_prefix[p + 1]   = m_h_face_prefix[p] + m_h_num_owned_f[p];
-    }
-
-
-    // the hash table capacity should be at least 2* the size of the stash
-    m_max_capacity_lp_v = 2 * LPHashTable::stash_size;
-    m_max_capacity_lp_e = 2 * LPHashTable::stash_size;
-    m_max_capacity_lp_f = 2 * LPHashTable::stash_size;
-    for (uint32_t p = 0; p < get_num_patches(); ++p) {
-        m_max_capacity_lp_v = std::max(
-            m_max_capacity_lp_v,
-            static_cast<uint16_t>(
-                std::ceil(m_capacity_factor *
-                          static_cast<float>(m_h_patches_ltog_v[p].size() -
-                                             m_h_num_owned_v[p]) /
-                          m_lp_hashtable_load_factor)));
-
-        m_max_capacity_lp_e = std::max(
-            m_max_capacity_lp_e,
-            static_cast<uint16_t>(
-                std::ceil(m_capacity_factor *
-                          static_cast<float>(m_h_patches_ltog_e[p].size() -
-                                             m_h_num_owned_e[p]) /
-                          m_lp_hashtable_load_factor)));
-
-        m_max_capacity_lp_f = std::max(
-            m_max_capacity_lp_f,
-            static_cast<uint16_t>(
-                std::ceil(m_capacity_factor *
-                          static_cast<float>(m_h_patches_ltog_f[p].size() -
-                                             m_h_num_owned_f[p]) /
-                          m_lp_hashtable_load_factor)));
     }
 
     CUDA_ERROR(cudaMalloc((void**)&m_d_vertex_prefix, patches_1_bytes));
@@ -543,6 +590,7 @@ void RXMesh::create_handles()
                           sizeof(FaceHandle) * m_num_faces,
                           cudaMemcpyHostToDevice));
 }
+
 void RXMesh::build_supporting_structures(
     const std::vector<std::vector<uint32_t>>& simplices,
     std::vector<std::array<uint32_t, 2>>&     ev,
@@ -979,10 +1027,36 @@ void RXMesh::calc_max_elements()
 }
 
 void RXMesh::build_single_patch_ltog(
-    const std::vector<std::vector<uint32_t>>&   fv,
+    const std::vector<std::vector<uint32_t>>&   simplices,
     const std::vector<std::array<uint32_t, 2>>& ev,
+    const std::vector<std::array<uint32_t, 4>>& tf,
     const uint32_t                              patch_id)
 {
+    auto create_unique_mapping = [&](std::vector<uint32_t>&       ltog_map,
+                                     const std::vector<uint32_t>& patch) {
+        std::sort(ltog_map.begin(), ltog_map.end());
+#ifndef NDEBUG
+        auto unique_end = std::unique(ltog_map.begin(), ltog_map.end());
+        assert(unique_end == ltog_map.end());
+#endif
+
+        // we use stable partition since we want ltog to be sorted so we can
+        // use binary search on it when we populate the topology
+        auto part_end = std::stable_partition(
+            ltog_map.begin(), ltog_map.end(), [&patch, patch_id](uint32_t i) {
+                return patch[i] == patch_id;
+            });
+
+        if (ltog_map.size() > INVALID16) {
+            RXMESH_ERROR(
+                "RXMesh::build_single_patch_ltog patch {} exceeds the "
+                "16-bit local index representation",
+                patch_id);
+            exit(EXIT_FAILURE);
+        }
+        return static_cast<uint16_t>(part_end - ltog_map.begin());
+    };
+
     // patch start and end
     const uint32_t p_start =
         (patch_id == 0) ? 0 : m_patcher->get_patches_offset()[patch_id - 1];
@@ -994,6 +1068,71 @@ void RXMesh::build_single_patch_ltog(
                           m_patcher->get_external_ribbon_offset()[patch_id - 1];
     const uint32_t r_end = m_patcher->get_external_ribbon_offset()[patch_id];
 
+    if (m_is_tet_mesh) {
+        constexpr uint32_t tet_edges[6][2] = {
+            {0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}};
+
+        const uint32_t total_patch_num_tets =
+            (p_end - p_start) + (r_end - r_start);
+
+        m_h_patches_ltog_t[patch_id].resize(total_patch_num_tets);
+        m_h_patches_ltog_v[patch_id].reserve(4 * total_patch_num_tets);
+        m_h_patches_ltog_e[patch_id].reserve(6 * total_patch_num_tets);
+        m_h_patches_ltog_f[patch_id].reserve(4 * total_patch_num_tets);
+
+        std::vector<bool> is_vertex_added(m_num_vertices, false);
+        std::vector<bool> is_edge_added(m_num_edges, false);
+        std::vector<bool> is_face_added(m_num_faces, false);
+
+        auto add_new_tet = [&](const uint32_t global_tet_id,
+                               const uint32_t local_tet_id) {
+            m_h_patches_ltog_t[patch_id][local_tet_id] = global_tet_id;
+
+            for (uint32_t v : simplices[global_tet_id]) {
+                if (!is_vertex_added[v]) {
+                    is_vertex_added[v] = true;
+                    m_h_patches_ltog_v[patch_id].push_back(v);
+                }
+            }
+
+            for (const auto& edge : tet_edges) {
+                const uint32_t edge_id =
+                    get_edge_id(simplices[global_tet_id][edge[0]],
+                                simplices[global_tet_id][edge[1]]);
+                if (!is_edge_added[edge_id]) {
+                    is_edge_added[edge_id] = true;
+                    m_h_patches_ltog_e[patch_id].push_back(edge_id);
+                }
+            }
+
+            for (uint32_t packed_face : tf[global_tet_id]) {
+                const uint32_t face_id = packed_face >> 1;
+                if (!is_face_added[face_id]) {
+                    is_face_added[face_id] = true;
+                    m_h_patches_ltog_f[patch_id].push_back(face_id);
+                }
+            }
+        };
+
+        uint32_t local_tet_id = 0;
+        for (uint32_t t = p_start; t < p_end; ++t) {
+            add_new_tet(m_patcher->get_patches_val()[t], local_tet_id++);
+        }
+        for (uint32_t t = r_start; t < r_end; ++t) {
+            add_new_tet(m_patcher->get_external_ribbon_val()[t],
+                        local_tet_id++);
+        }
+
+        m_h_num_owned_t[patch_id] = create_unique_mapping(
+            m_h_patches_ltog_t[patch_id], m_patcher->get_tet_patch());
+        m_h_num_owned_f[patch_id] = create_unique_mapping(
+            m_h_patches_ltog_f[patch_id], m_patcher->get_face_patch());
+        m_h_num_owned_e[patch_id] = create_unique_mapping(
+            m_h_patches_ltog_e[patch_id], m_patcher->get_edge_patch());
+        m_h_num_owned_v[patch_id] = create_unique_mapping(
+            m_h_patches_ltog_v[patch_id], m_patcher->get_vertex_patch());
+        return;
+    }
 
     const uint32_t total_patch_num_faces =
         (p_end - p_start) + (r_end - r_start);
@@ -1009,8 +1148,8 @@ void RXMesh::build_single_patch_ltog(
         m_h_patches_ltog_f[patch_id][local_face_id] = global_face_id;
 
         for (uint32_t v = 0; v < 3; ++v) {
-            uint32_t v0 = fv[global_face_id][v];
-            uint32_t v1 = fv[global_face_id][(v + 1) % 3];
+            uint32_t v0 = simplices[global_face_id][v];
+            uint32_t v1 = simplices[global_face_id][(v + 1) % 3];
 
             uint32_t edge_id = get_edge_id(v0, v1);
 
@@ -1069,23 +1208,6 @@ void RXMesh::build_single_patch_ltog(
         }
     }
 
-    auto create_unique_mapping = [&](std::vector<uint32_t>&       ltog_map,
-                                     const std::vector<uint32_t>& patch) {
-        std::sort(ltog_map.begin(), ltog_map.end());
-#ifndef NDEBUG
-        auto unique_end = std::unique(ltog_map.begin(), ltog_map.end());
-        assert(unique_end == ltog_map.end());
-#endif
-
-        // we use stable partition since we want ltog to be sorted so we can
-        // use binary search on it when we populate the topology
-        auto part_end = std::stable_partition(
-            ltog_map.begin(), ltog_map.end(), [&patch, patch_id](uint32_t i) {
-                return patch[i] == patch_id;
-            });
-        return static_cast<uint16_t>(part_end - ltog_map.begin());
-    };
-
     m_h_num_owned_f[patch_id] = create_unique_mapping(
         m_h_patches_ltog_f[patch_id], m_patcher->get_face_patch());
 
@@ -1097,9 +1219,98 @@ void RXMesh::build_single_patch_ltog(
 }
 
 void RXMesh::build_single_patch_topology(
-    const std::vector<std::vector<uint32_t>>& fv,
-    const uint32_t                            patch_id)
+    const std::vector<std::vector<uint32_t>>&   simplices,
+    const std::vector<std::array<uint32_t, 2>>& ev,
+    const std::vector<std::array<uint32_t, 3>>& fe,
+    const std::vector<std::array<uint32_t, 4>>& tf,
+    const uint32_t                              patch_id)
 {
+    auto find_local_index = [&patch_id](
+                                const uint32_t               global_id,
+                                const uint32_t               element_patch,
+                                const uint16_t               num_owned_elements,
+                                const std::vector<uint32_t>& ltog) -> uint16_t {
+        uint32_t start = 0;
+        uint32_t end   = num_owned_elements;
+        if (element_patch != patch_id) {
+            start = num_owned_elements;
+            end   = static_cast<uint32_t>(ltog.size());
+        }
+
+        auto it = std::lower_bound(
+            ltog.begin() + start, ltog.begin() + end, global_id);
+        if (it == ltog.begin() + end || *it != global_id) {
+            RXMESH_ERROR(
+                "RXMesh::build_single_patch_topology can not find global "
+                "element {} in patch {}",
+                global_id,
+                patch_id);
+            exit(EXIT_FAILURE);
+        }
+        return static_cast<uint16_t>(it - ltog.begin());
+    };
+
+    if (m_is_tet_mesh) {
+        PatchInfo& patch = m_h_patches_info[patch_id];
+
+        patch.ev = (LocalVertexT*)malloc(m_max_edge_capacity * 2 *
+                                         sizeof(LocalVertexT));
+        patch.fe =
+            (LocalEdgeT*)malloc(m_max_face_capacity * 3 * sizeof(LocalEdgeT));
+        patch.tf =
+            (LocalFaceT*)malloc(m_max_tet_capacity * 4 * sizeof(LocalFaceT));
+
+        for (uint16_t e = 0; e < m_h_patches_ltog_e[patch_id].size(); ++e) {
+            const uint32_t global_edge = m_h_patches_ltog_e[patch_id][e];
+
+            patch.ev[2 * e].id = find_local_index(
+                ev[global_edge][0],
+                m_patcher->get_vertex_patch_id(ev[global_edge][0]),
+                m_h_num_owned_v[patch_id],
+                m_h_patches_ltog_v[patch_id]);
+            patch.ev[2 * e + 1].id = find_local_index(
+                ev[global_edge][1],
+                m_patcher->get_vertex_patch_id(ev[global_edge][1]),
+                m_h_num_owned_v[patch_id],
+                m_h_patches_ltog_v[patch_id]);
+        }
+
+        for (uint16_t f = 0; f < m_h_patches_ltog_f[patch_id].size(); ++f) {
+            const uint32_t global_face = m_h_patches_ltog_f[patch_id][f];
+
+            for (uint32_t e = 0; e < 3; ++e) {
+                const uint32_t packed_global_edge = fe[global_face][e];
+                const uint32_t global_edge        = packed_global_edge >> 1;
+                const uint16_t local_edge =
+                    find_local_index(global_edge,
+                                     m_patcher->get_edge_patch_id(global_edge),
+                                     m_h_num_owned_e[patch_id],
+                                     m_h_patches_ltog_e[patch_id]);
+
+                patch.fe[3 * f + e].id = static_cast<uint16_t>(
+                    (local_edge << 1) | (packed_global_edge & 1));
+            }
+        }
+
+        for (uint16_t t = 0; t < m_h_patches_ltog_t[patch_id].size(); ++t) {
+            const uint32_t global_tet = m_h_patches_ltog_t[patch_id][t];
+
+            for (uint32_t f = 0; f < 4; ++f) {
+                const uint32_t packed_global_face = tf[global_tet][f];
+                const uint32_t global_face        = packed_global_face >> 1;
+                const uint16_t local_face =
+                    find_local_index(global_face,
+                                     m_patcher->get_face_patch_id(global_face),
+                                     m_h_num_owned_f[patch_id],
+                                     m_h_patches_ltog_f[patch_id]);
+
+                patch.tf[4 * t + f].id = static_cast<uint16_t>(
+                    (local_face << 1) | (packed_global_face & 1));
+            }
+        }
+        return;
+    }
+
     // patch start and end
     const uint32_t p_start =
         (patch_id == 0) ? 0 : m_patcher->get_patches_offset()[patch_id - 1];
@@ -1124,27 +1335,6 @@ void RXMesh::build_single_patch_topology(
 
     std::vector<bool> is_added_edge(patch_num_edges, false);
 
-    auto find_local_index = [&patch_id](
-                                const uint32_t               global_id,
-                                const uint32_t               element_patch,
-                                const uint16_t               num_owned_elements,
-                                const std::vector<uint32_t>& ltog) -> uint16_t {
-        uint32_t start = 0;
-        uint32_t end   = num_owned_elements;
-        if (element_patch != patch_id) {
-            start = num_owned_elements;
-            end   = ltog.size();
-        }
-        auto it = std::lower_bound(
-            ltog.begin() + start, ltog.begin() + end, global_id);
-        if (it == ltog.begin() + end) {
-            return INVALID16;
-        } else {
-            return static_cast<uint16_t>(it - ltog.begin());
-        }
-    };
-
-
     auto add_new_face = [&](const uint32_t global_face_id) {
         const uint16_t local_face_id =
             find_local_index(global_face_id,
@@ -1153,10 +1343,8 @@ void RXMesh::build_single_patch_topology(
                              m_h_patches_ltog_f[patch_id]);
 
         for (uint32_t v = 0; v < 3; ++v) {
-
-
-            const uint32_t global_v0 = fv[global_face_id][v];
-            const uint32_t global_v1 = fv[global_face_id][(v + 1) % 3];
+            const uint32_t global_v0 = simplices[global_face_id][v];
+            const uint32_t global_v1 = simplices[global_face_id][(v + 1) % 3];
 
             std::pair<uint32_t, uint32_t> edge_key =
                 detail::edge_key(global_v0, global_v1);
@@ -1178,7 +1366,6 @@ void RXMesh::build_single_patch_topology(
                                  m_h_num_owned_e[patch_id],
                                  m_h_patches_ltog_e[patch_id]);
 
-            assert(local_edge_id != INVALID16);
             if (!is_added_edge[local_edge_id]) {
 
                 is_added_edge[local_edge_id] = true;
@@ -1194,8 +1381,6 @@ void RXMesh::build_single_patch_topology(
                     m_patcher->get_vertex_patch_id(edge_key.second),
                     m_h_num_owned_v[patch_id],
                     m_h_patches_ltog_v[patch_id]);
-
-                assert(local_v0 != INVALID16 && local_v1 != INVALID16);
 
                 m_h_patches_info[patch_id].ev[local_edge_id * 2].id = local_v0;
                 m_h_patches_info[patch_id].ev[local_edge_id * 2 + 1].id =
@@ -1240,7 +1425,6 @@ const FaceHandle RXMesh::map_to_local_face(uint32_t i) const
     return {pl.first, pl.second};
 }
 
-
 template <typename HandleT>
 const std::pair<uint32_t, uint16_t> RXMesh::map_to_local(
     const uint32_t  i,
@@ -1274,7 +1458,6 @@ const std::pair<uint32_t, uint16_t> RXMesh::map_to_local(
     }
     return {patch_id, local_id};
 }
-
 
 uint32_t RXMesh::get_edge_id(const uint32_t v0, const uint32_t v1) const
 {
@@ -1311,10 +1494,12 @@ uint16_t RXMesh::get_per_patch_max_vertex_capacity() const
 {
     return m_max_vertex_capacity;
 }
+
 uint16_t RXMesh::get_per_patch_max_edge_capacity() const
 {
     return m_max_edge_capacity;
 }
+
 uint16_t RXMesh::get_per_patch_max_face_capacity() const
 {
     return m_max_face_capacity;
@@ -1334,7 +1519,15 @@ void RXMesh::populate_patch_stash()
             uint32_t global_id   = ltog[local_id];
             uint32_t owner_patch = element_patch[global_id];
 
-            m_h_patches_info[p].patch_stash.insert_patch(owner_patch);
+            if (m_h_patches_info[p].patch_stash.insert_patch(owner_patch) ==
+                INVALID8) {
+                RXMESH_ERROR(
+                    "RXMesh::populate_patch_stash patch {} has more than {} "
+                    "neighbor patches",
+                    p,
+                    PatchStash::stash_size);
+                exit(EXIT_FAILURE);
+            }
         }
     };
 
@@ -1354,6 +1547,12 @@ void RXMesh::populate_patch_stash()
                              m_h_patches_ltog_f[p],
                              m_patcher->get_face_patch(),
                              m_h_num_owned_f[p]);
+        if (m_is_tet_mesh) {
+            populate_patch_stash(p,
+                                 m_h_patches_ltog_t[p],
+                                 m_patcher->get_tet_patch(),
+                                 m_h_num_owned_t[p]);
+        }
     }
 
     // #pragma omp parallel for

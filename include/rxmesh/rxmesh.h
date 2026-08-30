@@ -571,13 +571,18 @@ class RXMesh
     void build(const std::vector<std::vector<uint32_t>>& simplices,
                const std::string                         patcher_file);
 
-    void build_single_patch_ltog(const std::vector<std::vector<uint32_t>>&   fv,
-                                 const std::vector<std::array<uint32_t, 2>>& ev,
-                                 const uint32_t patch_id);
+    void build_single_patch_ltog(
+        const std::vector<std::vector<uint32_t>>&   simplices,
+        const std::vector<std::array<uint32_t, 2>>& ev,
+        const std::vector<std::array<uint32_t, 4>>& tf,
+        const uint32_t                              patch_id);
 
     void build_single_patch_topology(
-        const std::vector<std::vector<uint32_t>>& fv,
-        const uint32_t                            patch_id);
+        const std::vector<std::vector<uint32_t>>&   simplices,
+        const std::vector<std::array<uint32_t, 2>>& ev,
+        const std::vector<std::array<uint32_t, 3>>& fe,
+        const std::vector<std::array<uint32_t, 4>>& tf,
+        const uint32_t                              patch_id);
 
     // get the max vertex/edge/face capacity i.e., the max number of
     // vertices/edges/faces allowed in a patch (for allocation purposes)
@@ -607,7 +612,8 @@ class RXMesh
     // Should be updated with update_host
     uint32_t m_num_edges, m_num_faces, m_num_tets, m_num_vertices;
 
-    uint32_t m_max_edge_capacity, m_max_face_capacity, m_max_vertex_capacity;
+    uint32_t m_max_edge_capacity, m_max_face_capacity, m_max_vertex_capacity,
+        m_max_tet_capacity;
 
     uint32_t m_input_max_valence, m_input_max_edge_incident_faces,
         m_input_max_face_adjacent_faces;
@@ -623,13 +629,15 @@ class RXMesh
     std::unique_ptr<patcher::Patcher> m_patcher;
 
     // the number of owned mesh elements per patch
-    std::vector<uint16_t> m_h_num_owned_f, m_h_num_owned_e, m_h_num_owned_v;
+    std::vector<uint16_t> m_h_num_owned_f, m_h_num_owned_e, m_h_num_owned_v,
+        m_h_num_owned_t;
 
 
-    uint16_t m_max_capacity_lp_v, m_max_capacity_lp_e, m_max_capacity_lp_f;
+    uint16_t m_max_capacity_lp_v, m_max_capacity_lp_e, m_max_capacity_lp_f,
+        m_max_capacity_lp_t;
 
     uint32_t m_max_vertices_per_patch, m_max_edges_per_patch,
-        m_max_faces_per_patch;
+        m_max_faces_per_patch, m_max_tets_per_patch;
 
     // mappings
     // local to global map for (v)ertices (e)dges and (f)aces
@@ -637,6 +645,7 @@ class RXMesh
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_v;
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_e;
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_f;
+    std::vector<std::vector<uint32_t>> m_h_patches_ltog_t;
 
     // the prefix sum of the owned vertices/edges/faces in patches
     uint32_t *m_h_vertex_prefix, *m_h_edge_prefix, *m_h_face_prefix;
