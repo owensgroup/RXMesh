@@ -566,6 +566,10 @@ class RXMesh
             //     / m_lp_hashtable_load_factor)));
             return m_max_capacity_lp_f;
         }
+
+        if constexpr (std::is_same_v<LocalT, LocalTetT>) {
+            return m_max_capacity_lp_t;
+        }
     }
 
     void build(const std::vector<std::vector<uint32_t>>& simplices,
@@ -647,40 +651,50 @@ class RXMesh
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_f;
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_t;
 
-    // the prefix sum of the owned vertices/edges/faces in patches
-    uint32_t *m_h_vertex_prefix, *m_h_edge_prefix, *m_h_face_prefix;
-    uint32_t *m_d_vertex_prefix, *m_d_edge_prefix, *m_d_face_prefix;
+    // the prefix sum of the owned vertices/edges/faces/tets in patches
+    uint32_t *m_h_vertex_prefix, *m_h_edge_prefix, *m_h_face_prefix,
+        *m_h_tet_prefix;
+    uint32_t *m_d_vertex_prefix, *m_d_edge_prefix, *m_d_face_prefix,
+        *m_d_tet_prefix;
 
-    // Store the mapping from linear_id to Vertex/Edge/FaceHandle
+    // Store the mapping from linear_id to Vertex/Edge/Face/TetHandle
     VertexHandle *m_d_v_handles, *m_h_v_handles;
     EdgeHandle *  m_d_e_handles, *m_h_e_handles;
     FaceHandle *  m_d_f_handles, *m_h_f_handles;
+    TetHandle *   m_d_t_handles, *m_h_t_handles;
 
     PatchInfo *m_d_patches_info, *m_h_patches_info;
 
     // Contiguous topology/mask device buffers for all patch slots.
     LocalVertexT* m_d_evs_all;
     LocalEdgeT*   m_d_fes_all;
+    LocalFaceT*   m_d_tfs_all;
 
     uint32_t* m_d_active_mask_v_all;
     uint32_t* m_d_active_mask_e_all;
     uint32_t* m_d_active_mask_f_all;
+    uint32_t* m_d_active_mask_t_all;
     uint32_t* m_d_owned_mask_v_all;
     uint32_t* m_d_owned_mask_e_all;
     uint32_t* m_d_owned_mask_f_all;
+    uint32_t* m_d_owned_mask_t_all;
     uint16_t* m_d_counts_all;
     int*      m_d_dirty_all;
 
     uint32_t* m_d_patch_stashes_all;
-    LPPair *  m_d_lp_v_tables_all, *m_d_lp_e_tables_all, *m_d_lp_f_tables_all;
-    LPPair *m_d_lp_v_stashes_all, *m_d_lp_e_stashes_all, *m_d_lp_f_stashes_all;
+    LPPair *  m_d_lp_v_tables_all, *m_d_lp_e_tables_all, *m_d_lp_f_tables_all,
+        *m_d_lp_t_tables_all;
+    LPPair *m_d_lp_v_stashes_all, *m_d_lp_e_stashes_all, *m_d_lp_f_stashes_all,
+        *m_d_lp_t_stashes_all;
     uint32_t *m_d_patch_locks_all, *m_d_patch_spins_all;
 
     uint32_t m_ev_stride_elems;
     uint32_t m_fe_stride_elems;
+    uint32_t m_tf_stride_elems;
     uint32_t m_mask_v_stride_words;
     uint32_t m_mask_e_stride_words;
     uint32_t m_mask_f_stride_words;
+    uint32_t m_mask_t_stride_words;
     uint32_t m_counts_stride_elems;
     uint32_t m_dirty_stride_elems;
 

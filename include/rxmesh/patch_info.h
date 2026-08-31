@@ -216,6 +216,9 @@ struct ALIGN(16) PatchInfo
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return num_faces;
         }
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return num_tets;
+        }
         return nullptr;
     }
 
@@ -234,6 +237,9 @@ struct ALIGN(16) PatchInfo
         }
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return faces_capacity;
+        }
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return tets_capacity;
         }
         return 0;
     }
@@ -254,6 +260,9 @@ struct ALIGN(16) PatchInfo
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return active_mask_f;
         }
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return active_mask_t;
+        }
         return nullptr;
     }
 
@@ -272,6 +281,9 @@ struct ALIGN(16) PatchInfo
         }
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return active_mask_f;
+        }
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return active_mask_t;
         }
         return nullptr;
     }
@@ -292,6 +304,9 @@ struct ALIGN(16) PatchInfo
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return owned_mask_f;
         }
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return owned_mask_t;
+        }
         return nullptr;
     }
 
@@ -310,6 +325,9 @@ struct ALIGN(16) PatchInfo
         }
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return owned_mask_f;
+        }
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return owned_mask_t;
         }
         return nullptr;
     }
@@ -330,6 +348,9 @@ struct ALIGN(16) PatchInfo
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return lp_f;
         }
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return lp_t;
+        }
         return lp_v;
     }
 
@@ -348,6 +369,9 @@ struct ALIGN(16) PatchInfo
         }
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return lp_f;
+        }
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return lp_t;
         }
         return lp_v;
     }
@@ -380,6 +404,15 @@ struct ALIGN(16) PatchInfo
     }
 
     /**
+     * @brief check if a tet within this patch is owned by it
+     */
+    __device__ __host__ __forceinline__ bool is_owned(LocalTetT th) const
+    {
+        assert(th.id != INVALID16);
+        return detail::is_owned(th.id, get_owned_mask<TetHandle>());
+    }
+
+    /**
      * @brief check if a vertex within this patch is deleted
      */
     __device__ __host__ __forceinline__ bool is_deleted(LocalVertexT vh) const
@@ -407,6 +440,15 @@ struct ALIGN(16) PatchInfo
     }
 
     /**
+     * @brief check if a tet within this patch is deleted
+     */
+    __device__ __host__ __forceinline__ bool is_deleted(LocalTetT th) const
+    {
+        assert(th.id != INVALID16);
+        return detail::is_deleted(th.id, get_active_mask<TetHandle>());
+    }
+
+    /**
      * @brief count number of owned active elements with type HandleT
      */
     template <typename HandleT>
@@ -421,6 +463,9 @@ struct ALIGN(16) PatchInfo
         }
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return count_num_owned(owned_mask_f, active_mask_f, num_faces[0]);
+        }
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return count_num_owned(owned_mask_t, active_mask_t, num_tets[0]);
         }
         return 0;
     }

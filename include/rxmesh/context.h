@@ -81,7 +81,15 @@ class Context
     }
 
     /**
-     * @brief give a linear id, return the corresponding Vertex/Edge/FaceHandle
+     * @brief Total number of tets in mesh
+     */
+    __device__ __forceinline__ uint32_t* get_num_tets()
+    {
+        return m_num_tets;
+    }
+
+    /**
+     * @brief give a linear id, return the corresponding handle
      */
     template <typename HandleT>
     __device__ __forceinline__ HandleT get_handle(uint32_t i)
@@ -96,6 +104,10 @@ class Context
 
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return get_face_handle(i);
+        }
+
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return get_tet_handle(i);
         }
     }
 
@@ -129,9 +141,18 @@ class Context
         return m_d_f_handles[i];
     }
 
-
     /**
-     * @brief Total number of vertices in mesh
+     * @brief given a linear tet index [0, num_tets - 1], return the
+     * corresponding TetHandle
+     */
+    __device__ __forceinline__ TetHandle get_tet_handle(uint32_t i)
+    {
+        assert(i < m_num_tets[0]);
+        return m_d_t_handles[i];
+    }
+    /**
+     * @brief Total number of vertices/edges/faces/tets in mesh based on
+     * handle type
      */
     template <typename HandleT>
     __device__ __forceinline__ uint32_t get_num() const
@@ -146,6 +167,10 @@ class Context
 
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return m_num_faces[0];
+        }
+
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return m_num_tets[0];
         }
     }
 
@@ -198,6 +223,15 @@ class Context
 #endif
     }
 
+    __device__ __host__ __forceinline__ const uint32_t* tet_prefix() const
+    {
+#ifdef __CUDA_ARCH__
+        return m_d_tet_prefix;
+#else
+        return m_h_tet_prefix;
+#endif
+    }
+
     template <typename HandleT>
     __device__ __host__ __forceinline__ const uint32_t* prefix() const
     {
@@ -211,6 +245,10 @@ class Context
 
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return face_prefix();
+        }
+
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return tet_prefix();
         }
     }
 
@@ -290,6 +328,9 @@ class Context
         if constexpr (std::is_same_v<typename HandleT::Handle, FaceHandle>) {
             return m_d_face_prefix[input.patch_id()] + input.local_id();
         }
+        if constexpr (std::is_same_v<typename HandleT::Handle, TetHandle>) {
+            return m_d_tet_prefix[input.patch_id()] + input.local_id();
+        }
 
         return INVALID32;
     }
@@ -333,6 +374,9 @@ class Context
         if constexpr (std::is_same_v<typename HandleT::Handle, FaceHandle>) {
             return ret + m_d_face_prefix[p_id];
         }
+        if constexpr (std::is_same_v<typename HandleT::Handle, TetHandle>) {
+            return ret + m_d_tet_prefix[p_id];
+        }
     }
 
 
@@ -351,26 +395,33 @@ class Context
     __host__ void init(const uint32_t num_vertices,
                        const uint32_t num_edges,
                        const uint32_t num_faces,
+                       const uint32_t num_tets,
                        const uint32_t max_num_vertices,
                        const uint32_t max_num_edges,
                        const uint32_t max_num_faces,
+                       const uint32_t max_num_tets,
                        const uint32_t num_patches,
                        const uint32_t max_num_patches,
                        const float    capacity_factor,
                        uint32_t*      d_vertex_prefix,
                        uint32_t*      d_edge_prefix,
                        uint32_t*      d_face_prefix,
+                       uint32_t*      d_tet_prefix,
                        uint32_t*      h_vertex_prefix,
                        uint32_t*      h_edge_prefix,
                        uint32_t*      h_face_prefix,
+                       uint32_t*      h_tet_prefix,
                        VertexHandle*  d_v_handles,
                        EdgeHandle*    d_e_handles,
                        FaceHandle*    d_f_handles,
+                       TetHandle*     d_t_handles,
                        PatchInfo*     d_patches,
                        PatchScheduler scheduler)
     {
-        uint32_t* buffer = nullptr;
-        CUDA_ERROR(cudaMalloc((void**)&buffer, 7 * sizeof(uint32_t)));
+        const bool is_tet_mesh = d_tet_prefix != nullptr;
+        uint32_t*  buffer      = nullptr;
+        CUDA_ERROR(cudaMalloc((void**)&buffer,
+                              (is_tet_mesh ? 9 : 7) * sizeof(uint32_t)));
         m_num_vertices     = buffer + 0;
         m_num_edges        = buffer + 1;
         m_num_faces        = buffer + 2;
@@ -378,6 +429,8 @@ class Context
         m_max_num_vertices = buffer + 4;
         m_max_num_edges    = buffer + 5;
         m_max_num_faces    = buffer + 6;
+        m_num_tets         = is_tet_mesh ? buffer + 7 : nullptr;
+        m_max_num_tets     = is_tet_mesh ? buffer + 8 : nullptr;
         m_capacity_factor  = capacity_factor;
         m_max_num_patches  = max_num_patches;
 
@@ -406,18 +459,31 @@ class Context
                               &max_num_faces,
                               sizeof(uint32_t),
                               cudaMemcpyHostToDevice));
+        if (is_tet_mesh) {
+            CUDA_ERROR(cudaMemcpy(m_num_tets,
+                                  &num_tets,
+                                  sizeof(uint32_t),
+                                  cudaMemcpyHostToDevice));
+            CUDA_ERROR(cudaMemcpy(m_max_num_tets,
+                                  &max_num_tets,
+                                  sizeof(uint32_t),
+                                  cudaMemcpyHostToDevice));
+        }
 
         m_h_vertex_prefix = h_vertex_prefix;
         m_h_edge_prefix   = h_edge_prefix;
         m_h_face_prefix   = h_face_prefix;
+        m_h_tet_prefix    = h_tet_prefix;
 
         m_d_vertex_prefix = d_vertex_prefix;
         m_d_edge_prefix   = d_edge_prefix;
         m_d_face_prefix   = d_face_prefix;
+        m_d_tet_prefix    = d_tet_prefix;
 
         m_d_v_handles = d_v_handles;
         m_d_e_handles = d_e_handles;
         m_d_f_handles = d_f_handles;
+        m_d_t_handles = d_t_handles;
 
         m_patches_info = d_patches;
 
@@ -426,7 +492,13 @@ class Context
 
     __host__ void release()
     {
-        CUDA_ERROR(cudaFree(m_num_vertices));
+        if (m_num_vertices != nullptr) {
+            CUDA_ERROR(cudaFree(m_num_vertices));
+            m_num_vertices = nullptr;
+            m_num_edges = m_num_faces = m_num_tets = m_num_patches = nullptr;
+            m_max_num_vertices = m_max_num_edges = m_max_num_faces =
+                m_max_num_tets                   = nullptr;
+        }
     }
 
 
