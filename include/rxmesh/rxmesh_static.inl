@@ -354,6 +354,9 @@ uint32_t RXMeshStatic::linear_id(HandleT input) const
     if constexpr (std::is_same_v<HandleT, FaceHandle>) {
         return ret + m_h_face_prefix[p_id];
     }
+    if constexpr (std::is_same_v<HandleT, TetHandle>) {
+        return ret + m_h_tet_prefix[p_id];
+    }
 }
 
 template <typename HandleT>
@@ -493,6 +496,28 @@ void RXMeshStatic::prepare_launch_box(
                         launch_box.local_mem_per_thread,
                         blockThreads,
                         kernel);
+}
+
+template <uint32_t blockThreads>
+void RXMeshStatic::prepare_launch_box(
+    const std::vector<Op>    op,
+    LaunchBox<blockThreads>& launch_box,
+    const void*              kernel,
+    const bool               oriented,
+    const bool               with_vertex_valence,
+    const bool               is_concurrent,
+    std::function<size_t(uint32_t, uint32_t, uint32_t, uint32_t)> user_shmem)
+    const
+{
+    prepare_launch_box(op,
+                       launch_box,
+                       kernel,
+                       oriented,
+                       with_vertex_valence,
+                       is_concurrent,
+                       [&](uint32_t v, uint32_t e, uint32_t f) {
+                           return user_shmem(v, e, f, m_max_tets_per_patch);
+                       });
 }
 
 template <uint32_t blockThreads>

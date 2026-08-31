@@ -213,6 +213,9 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& simplices,
                 m_num_faces,
                 m_num_edges,
                 m_num_patches);
+    if (m_is_tet_mesh) {
+        RXMESH_INFO("RXMesh: #Tets = {}", m_num_tets);
+    }
     RXMESH_INFO("RXMesh: Input is{} edge manifold",
                 ((m_is_input_edge_manifold) ? "" : " Not"));
     RXMESH_INFO("RXMesh: Input is{} closed",
@@ -228,6 +231,10 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& simplices,
                 m_max_edges_per_patch);
     RXMESH_INFO("RXMesh: per-patch maximum vertex count = {}",
                 m_max_vertices_per_patch);
+    if (m_is_tet_mesh) {
+        RXMESH_INFO("RXMesh: per-patch maximum tet count = {}",
+                    m_max_tets_per_patch);
+    }
 
     RXMESH_INFO("RXMesh::init timings:");
     RXMESH_INFO("  total = {} (ms)", m_timers.elapsed_millis("init.total"));
@@ -1475,6 +1482,12 @@ const EdgeHandle RXMesh::map_to_local_edge(uint32_t i) const
 const FaceHandle RXMesh::map_to_local_face(uint32_t i) const
 {
     auto pl = map_to_local<FaceHandle>(i, m_h_face_prefix);
+    return {pl.first, pl.second};
+}
+
+const TetHandle RXMesh::map_to_local_tet(uint32_t i) const
+{
+    auto pl = map_to_local<TetHandle>(i, m_h_tet_prefix);
     return {pl.first, pl.second};
 }
 

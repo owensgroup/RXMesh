@@ -104,8 +104,27 @@ class RXMesh
     }
 
     /**
-     * @brief return the number of mesh elements (vertices, edges, or faces)
-     * based on a template paramter input.
+     * @brief Total number of tets in the mesh
+     */
+    uint32_t get_num_tets() const
+    {
+        return m_num_tets;
+    }
+
+    uint32_t get_num_tets(bool from_device)
+    {
+        if (from_device && m_is_tet_mesh) {
+            CUDA_ERROR(cudaMemcpy(&m_num_tets,
+                                  m_rxmesh_context.m_num_tets,
+                                  sizeof(uint32_t),
+                                  cudaMemcpyDeviceToHost));
+        }
+        return m_num_tets;
+    }
+
+    /**
+     * @brief return the number of mesh elements (vertices, edges, faces, or
+     * tets) based on a template parameter input.
      */
     template <typename HandleT>
     uint32_t get_num_elements() const
@@ -113,8 +132,9 @@ class RXMesh
         static_assert(
             std::is_same_v<HandleT, VertexHandle> ||
                 std::is_same_v<HandleT, EdgeHandle> ||
-                std::is_same_v<HandleT, FaceHandle>,
-            "Template paramter should be either Vertex/Edge/FaceHandle");
+                std::is_same_v<HandleT, FaceHandle> ||
+                std::is_same_v<HandleT, TetHandle>,
+            "Template paramter should be either Vertex/Edge/Face/TetHandle");
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
             return get_num_vertices();
         }
@@ -125,6 +145,10 @@ class RXMesh
 
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return get_num_faces();
+        }
+
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return get_num_tets();
         }
     }
 
@@ -295,6 +319,25 @@ class RXMesh
     }
 
     /**
+     * @brief Maximum number of tets in a patch
+     */
+    uint32_t get_per_patch_max_tets() const
+    {
+        return m_max_tets_per_patch;
+    }
+
+    uint32_t get_per_patch_max_tets(bool from_device)
+    {
+        if (from_device && m_is_tet_mesh) {
+            CUDA_ERROR(cudaMemcpy(&m_max_tets_per_patch,
+                                  m_rxmesh_context.m_max_num_tets,
+                                  sizeof(uint32_t),
+                                  cudaMemcpyDeviceToHost));
+        }
+        return m_max_tets_per_patch;
+    }
+
+    /**
      * @brief The time used to construct the patches on the GPU
      */
     float get_patching_time() const
@@ -350,6 +393,11 @@ class RXMesh
     const FaceHandle map_to_local_face(uint32_t i) const;
 
     /**
+     * @brief map a compact tet index to a TetHandle
+     */
+    const TetHandle map_to_local_tet(uint32_t i) const;
+
+    /**
      * @brief return the number of owned vertices in a patch
      */
     uint16_t get_num_owned_vertices(const uint32_t p) const
@@ -371,6 +419,14 @@ class RXMesh
     uint16_t get_num_owned_faces(const uint32_t p) const
     {
         return m_h_num_owned_f[p];
+    }
+
+    /**
+     * @brief return the number of owned tets in a patch
+     */
+    uint16_t get_num_owned_tets(const uint32_t p) const
+    {
+        return m_is_tet_mesh ? m_h_num_owned_t[p] : 0;
     }
 
 
@@ -398,6 +454,14 @@ class RXMesh
         return m_h_patches_info[p].num_faces[0];
     }
 
+    /**
+     * @brief return the number of tets in a patch
+     */
+    uint16_t get_num_tets(const uint32_t p) const
+    {
+        return m_is_tet_mesh ? m_h_patches_info[p].num_tets[0] : 0;
+    }
+
     const PatchInfo& get_patch(uint32_t p) const
     {
         assert(p < get_num_patches());
@@ -417,6 +481,10 @@ class RXMesh
 
         if constexpr (std::is_same_v<LocalT, LocalFaceT>) {
             return detail::mask_num_bytes(this->m_max_faces_per_patch);
+        }
+
+        if constexpr (std::is_same_v<LocalT, LocalTetT>) {
+            return detail::mask_num_bytes(this->m_max_tets_per_patch);
         }
     }
 
@@ -453,6 +521,18 @@ class RXMesh
                 return m_h_face_prefix;
             } else if (location == DEVICE) {
                 return m_d_face_prefix;
+            } else {
+                RXMESH_ERROR("RXMesh::get_element_prefix invalid location {}",
+                             location_to_string(location));
+                return nullptr;
+            }
+        }
+
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            if (location == HOST) {
+                return m_h_tet_prefix;
+            } else if (location == DEVICE) {
+                return m_d_tet_prefix;
             } else {
                 RXMESH_ERROR("RXMesh::get_element_prefix invalid location {}",
                              location_to_string(location));

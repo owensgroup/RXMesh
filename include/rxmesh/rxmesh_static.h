@@ -394,7 +394,62 @@ class RXMeshStatic : public RXMesh
 
 
     /**
-     * @brief same as for_each_vertex/edge/face where the type is defined via
+     * @brief Apply a lambda function on all tets in the mesh
+     */
+    template <typename LambdaT>
+    void for_each_tet(locationT    location,
+                      LambdaT      apply,
+                      cudaStream_t stream   = NULL,
+                      bool         with_omp = true) const
+    {
+        if (!m_is_tet_mesh) {
+            return;
+        }
+
+        if ((location & HOST) == HOST) {
+            const int num_patches = this->get_num_patches();
+
+            auto run = [&](int p) {
+                for (uint16_t t = 0; t < this->get_num_tets(p); ++t) {
+                    if (detail::is_owned(t, m_h_patches_info[p].owned_mask_t) &&
+                        !detail::is_deleted(
+                            t, m_h_patches_info[p].active_mask_t)) {
+                        apply(
+                            TetHandle(static_cast<uint32_t>(p), LocalTetT(t)));
+                    }
+                }
+            };
+
+            if (!with_omp) {
+                for (int p = 0; p < num_patches; ++p) {
+                    run(p);
+                }
+            } else {
+#pragma omp parallel for
+                for (int p = 0; p < num_patches; ++p) {
+                    run(p);
+                }
+            }
+        }
+
+        if ((location & DEVICE) == DEVICE) {
+            if constexpr (IS_HD_LAMBDA(LambdaT) || IS_D_LAMBDA(LambdaT)) {
+                const int num_patches = this->get_num_patches();
+                const int threads     = 256;
+                detail::for_each_tet<<<num_patches, threads, 0, stream>>>(
+                    num_patches, this->m_d_patches_info, apply);
+            } else {
+                RXMESH_ERROR(
+                    "RXMeshStatic::for_each_tet() Input lambda function should "
+                    "be annotated with __device__ for execution on device");
+            }
+        }
+    }
+
+
+    /**
+     * @brief same as for_each_vertex/edge/face/tet where the type is
+     * defined via
      * template parameter
      */
     template <typename HandleT, typename LambdaT>
@@ -413,6 +468,10 @@ class RXMeshStatic : public RXMesh
 
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             for_each_face(location, apply, stream, with_omp);
+        }
+
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            for_each_tet(location, apply, stream, with_omp);
         }
     }
 
@@ -606,6 +665,17 @@ class RXMeshStatic : public RXMesh
         const bool               is_concurrent       = false,
         std::function<size_t(uint32_t, uint32_t, uint32_t)> user_shmem =
             [](uint32_t v, uint32_t e, uint32_t f) { return 0; }) const;
+
+    template <uint32_t blockThreads>
+    void prepare_launch_box(
+        const std::vector<Op>    op,
+        LaunchBox<blockThreads>& launch_box,
+        const void*              kernel,
+        const bool               oriented,
+        const bool               with_vertex_valence,
+        const bool               is_concurrent,
+        std::function<size_t(uint32_t, uint32_t, uint32_t, uint32_t)>
+            user_shmem) const;
 
 
     /**
@@ -921,6 +991,11 @@ class RXMeshStatic : public RXMesh
     uint32_t map_to_global(const FaceHandle fh) const;
 
     /**
+     * @brief Map a tet handle to its input tet index
+     */
+    uint32_t map_to_global(const TetHandle th) const;
+
+    /**
      * @brief compute a linear compact index for a give vertex/edge/face handle
      * @tparam HandleT the type of the input handle
      * @param input handle
@@ -1034,6 +1109,19 @@ class RXMeshStatic : public RXMesh
      */
     void create_face_list(uint32_t* f_list,
                           bool      use_global_order = false) const;
+
+    /**
+     * @brief Reconstruct the four incident vertices of every owned tet
+
+     */
+    void create_tet_list(std::vector<glm::uvec4>& t_list) const;
+
+    /**
+     * @brief Reconstruct the four incident vertices of every owned tet
+     * into a
+     * buffer containing 4 * get_num_tets() entries
+     */
+    void create_tet_list(uint32_t* t_list, bool use_global_order = false) const;
 
    protected:
     template <typename AttributeT>

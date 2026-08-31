@@ -227,18 +227,20 @@ void RXMeshStatic::add_vertex_coordinates(
             this->add_vertex_attribute<rx_coord_t>(vertices, "rx:vertices");
 
 #if USE_POLYSCOPE
-        CPUTimer polyscope_timer;
-        polyscope_timer.start();
-        polyscope::init();
-        m_polyscope_mesh_name = mesh_name.empty() ? "RXMesh" : mesh_name;
-        m_polyscope_mesh_name += std::to_string(rand());
-        this->register_polyscope();
-        render_vertex_patch();
-        render_edge_patch();
-        render_face_patch();
-        polyscope_timer.stop();
-        RXMESH_INFO("RXMeshStatic: Register Polyscope took= {} (ms)",
-                    polyscope_timer.elapsed_millis());
+        if (!m_is_tet_mesh) {
+            CPUTimer polyscope_timer;
+            polyscope_timer.start();
+            polyscope::init();
+            m_polyscope_mesh_name = mesh_name.empty() ? "RXMesh" : mesh_name;
+            m_polyscope_mesh_name += std::to_string(rand());
+            this->register_polyscope();
+            render_vertex_patch();
+            render_edge_patch();
+            render_face_patch();
+            polyscope_timer.stop();
+            RXMESH_INFO("RXMeshStatic: Register Polyscope took= {} (ms)",
+                        polyscope_timer.elapsed_millis());
+        }
 #endif
     }
 }
@@ -785,6 +787,12 @@ uint32_t RXMeshStatic::map_to_global(const FaceHandle fh) const
     return m_h_patches_ltog_f[pl.first][pl.second];
 }
 
+uint32_t RXMeshStatic::map_to_global(const TetHandle th) const
+{
+    auto pl = th.unpack();
+    return m_h_patches_ltog_t[pl.first][pl.second];
+}
+
 void RXMeshStatic::create_face_list(std::vector<glm::uvec3>& f_list) const
 {
     f_list.reserve(get_num_faces());
@@ -848,6 +856,89 @@ void RXMeshStatic::create_face_list(uint32_t* f_list,
             }
         }
     }
+}
+
+void RXMeshStatic::create_tet_list(std::vector<glm::uvec4>& t_list) const
+{
+    std::vector<uint32_t> raw_tets(4 * get_num_tets());
+    create_tet_list(raw_tets.data());
+
+    t_list.reserve(t_list.size() + get_num_tets());
+    for (uint32_t t = 0; t < get_num_tets(); ++t) {
+        t_list.emplace_back(raw_tets[4 * t],
+                            raw_tets[4 * t + 1],
+                            raw_tets[4 * t + 2],
+                            raw_tets[4 * t + 3]);
+    }
+}
+
+void RXMeshStatic::create_tet_list(uint32_t* t_list,
+                                   bool      use_global_order) const
+{
+    if (t_list == nullptr && get_num_tets() != 0) {
+        RXMESH_ERROR("RXMeshStatic::create_tet_list output buffer is null");
+        return;
+    }
+
+    for_each_tet(
+        HOST,
+        [&](const TetHandle th) {
+            const uint32_t p     = th.patch_id();
+            const uint16_t t     = th.local_id();
+            const auto&    patch = m_h_patches_info[p];
+
+            uint16_t face_vertices[4][3];
+            for (uint32_t f = 0; f < 4; ++f) {
+                const uint16_t local_f = patch.tf[4 * t + f].id >> 1;
+                for (uint32_t e = 0; e < 3; ++e) {
+                    const uint16_t packed_e = patch.fe[3 * local_f + e].id;
+                    const uint16_t local_e  = packed_e >> 1;
+                    const uint16_t dir      = packed_e & 1;
+                    face_vertices[f][e]     = patch.ev[2 * local_e + dir].id;
+                }
+            }
+
+            const uint32_t row =
+                use_global_order ? map_to_global(th) : linear_id(th);
+
+            for (uint32_t f = 0; f < 4; ++f) {
+                uint16_t missing = INVALID16;
+                for (uint32_t other_f = 0; other_f < 4; ++other_f) {
+                    if (other_f == f) {
+                        continue;
+                    }
+                    for (uint32_t v = 0; v < 3; ++v) {
+                        const uint16_t candidate = face_vertices[other_f][v];
+                        bool           found     = false;
+                        for (uint32_t fv = 0; fv < 3; ++fv) {
+                            found |= candidate == face_vertices[f][fv];
+                        }
+                        if (!found) {
+                            missing = candidate;
+                            break;
+                        }
+                    }
+                    if (missing != INVALID16) {
+                        break;
+                    }
+                }
+
+                if (missing == INVALID16) {
+                    RXMESH_ERROR(
+                        "RXMeshStatic::create_tet_list could not reconstruct "
+                        "tet {} in patch {}",
+                        t,
+                        p);
+                    exit(EXIT_FAILURE);
+                }
+
+                const VertexHandle vh(p, LocalVertexT(missing));
+                t_list[4 * row + f] =
+                    use_global_order ? map_to_global(vh) : linear_id(vh);
+            }
+        },
+        NULL,
+        false);
 }
 
 void RXMeshStatic::add_edge_labels(FaceAttribute<int>& face_label,
@@ -962,10 +1053,11 @@ RXMeshStatic::add_face_attribute<FaceHandle>(const std::vector<FaceHandle>&,
                                              const std::string&,
                                              layoutT);
 
-// linear_id / get_owner_handle for the three handle types
+// linear_id / get_owner_handle for all handle types
 template uint32_t RXMeshStatic::linear_id<VertexHandle>(VertexHandle) const;
 template uint32_t RXMeshStatic::linear_id<EdgeHandle>(EdgeHandle) const;
 template uint32_t RXMeshStatic::linear_id<FaceHandle>(FaceHandle) const;
+template uint32_t RXMeshStatic::linear_id<TetHandle>(TetHandle) const;
 
 template VertexHandle RXMeshStatic::get_owner_handle<VertexHandle>(
     VertexHandle) const;
@@ -973,6 +1065,7 @@ template EdgeHandle RXMeshStatic::get_owner_handle<EdgeHandle>(
     EdgeHandle) const;
 template FaceHandle RXMeshStatic::get_owner_handle<FaceHandle>(
     FaceHandle) const;
+template TetHandle RXMeshStatic::get_owner_handle<TetHandle>(TetHandle) const;
 
 template void RXMeshStatic::prepare_launch_box<128>(
     const std::vector<Op>,
