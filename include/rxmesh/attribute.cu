@@ -70,6 +70,9 @@ __host__ Attribute<T, HandleT>::Attribute(const char*    name,
     if constexpr (std::is_same_v<HandleT, FaceHandle>) {
         m_num_elements = rxmesh->get_num_faces();
     }
+    if constexpr (std::is_same_v<HandleT, TetHandle>) {
+        m_num_elements = rxmesh->get_num_tets();
+    }
 
     if (name != nullptr) {
         this->m_name = (char*)malloc(sizeof(char) * (strlen(name) + 1));
@@ -101,6 +104,9 @@ T& Attribute<T, HandleT>::operator()(size_t i, size_t j)
     if constexpr (std::is_same_v<HandleT, FaceHandle>) {
         return this->operator()(m_rxmesh->map_to_local_face(i), j);
     }
+    if constexpr (std::is_same_v<HandleT, TetHandle>) {
+        return this->operator()(m_rxmesh->map_to_local_tet(i), j);
+    }
 }
 
 template <class T, typename HandleT>
@@ -120,6 +126,9 @@ T& Attribute<T, HandleT>::operator()(size_t i, size_t j) const
     }
     if constexpr (std::is_same_v<HandleT, FaceHandle>) {
         return this->operator()(m_rxmesh->map_to_local_face(i), j);
+    }
+    if constexpr (std::is_same_v<HandleT, TetHandle>) {
+        return this->operator()(m_rxmesh->map_to_local_tet(i), j);
     }
 }
 
@@ -152,6 +161,10 @@ uint32_t Attribute<T, HandleT>::size() const
 
     if constexpr (std::is_same_v<HandleT, FaceHandle>) {
         return m_rxmesh->get_num_faces();
+    }
+
+    if constexpr (std::is_same_v<HandleT, TetHandle>) {
+        return m_rxmesh->get_num_tets();
     }
 
     return m_num_elements;
@@ -195,6 +208,14 @@ std::shared_ptr<DenseMatrix<T, Order>> Attribute<T, HandleT>::to_matrix() const
         });
     }
 
+    if constexpr (std::is_same_v<HandleT, TetHandle>) {
+        m_rxmesh->for_each_tet(HOST, [&](const TetHandle th) {
+            for (uint32_t j = 0; j < cols(); ++j) {
+                (*mat)(th, j) = this->operator()(th, j);
+            }
+        });
+    }
+
     mat->move(HOST, DEVICE);
 
     return mat;
@@ -227,6 +248,14 @@ void Attribute<T, HandleT>::from_matrix(DenseMatrix<T, Order>* mat)
         m_rxmesh->for_each_face(HOST, [&](const FaceHandle fh) {
             for (uint32_t j = 0; j < cols(); ++j) {
                 this->operator()(fh, j) = (*mat)(fh, j);
+            }
+        });
+    }
+
+    if constexpr (std::is_same_v<HandleT, TetHandle>) {
+        m_rxmesh->for_each_tet(HOST, [&](const TetHandle th) {
+            for (uint32_t j = 0; j < cols(); ++j) {
+                this->operator()(th, j) = (*mat)(th, j);
             }
         });
     }
@@ -613,7 +642,8 @@ void AttributeContainer::remove(const AttributeBase* attribute)
 #define RXMESH_ATTRIBUTE_INST_ALL_HANDLES(T) \
     RXMESH_ATTRIBUTE_INST(T, VertexHandle)   \
     RXMESH_ATTRIBUTE_INST(T, EdgeHandle)     \
-    RXMESH_ATTRIBUTE_INST(T, FaceHandle)
+    RXMESH_ATTRIBUTE_INST(T, FaceHandle)     \
+    RXMESH_ATTRIBUTE_INST(T, TetHandle)
 
 #define RXMESH_ATTR_CONTAINER_ADD_INST(AttrT)                       \
     template std::shared_ptr<AttrT> AttributeContainer::add<AttrT>( \
@@ -622,7 +652,8 @@ void AttributeContainer::remove(const AttributeBase* attribute)
 #define RXMESH_ATTR_CONTAINER_ADD_INST_ALL_HANDLES(T)  \
     RXMESH_ATTR_CONTAINER_ADD_INST(VertexAttribute<T>) \
     RXMESH_ATTR_CONTAINER_ADD_INST(EdgeAttribute<T>)   \
-    RXMESH_ATTR_CONTAINER_ADD_INST(FaceAttribute<T>)
+    RXMESH_ATTR_CONTAINER_ADD_INST(FaceAttribute<T>)   \
+    RXMESH_ATTR_CONTAINER_ADD_INST(TetAttribute<T>)
 
 #define RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(T) \
     RXMESH_ATTRIBUTE_INST_ALL_HANDLES(T)                   \
@@ -649,6 +680,7 @@ RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(int64_t)
 RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(VertexHandle)
 RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(EdgeHandle)
 RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(FaceHandle)
+RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(TetHandle)
 
 #undef RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES
 #undef RXMESH_ATTR_CONTAINER_ADD_INST_ALL_HANDLES
@@ -669,7 +701,8 @@ RXMESH_ATTRIBUTE_AND_CONTAINER_INST_ALL_HANDLES(FaceHandle)
 #define RXMESH_ATTR_TM_INST_ALL(T)       \
     RXMESH_ATTR_TM_INST(T, VertexHandle) \
     RXMESH_ATTR_TM_INST(T, EdgeHandle)   \
-    RXMESH_ATTR_TM_INST(T, FaceHandle)
+    RXMESH_ATTR_TM_INST(T, FaceHandle)   \
+    RXMESH_ATTR_TM_INST(T, TetHandle)
 
 RXMESH_ATTR_TM_INST_ALL(float)
 RXMESH_ATTR_TM_INST_ALL(double)
@@ -699,7 +732,8 @@ RXMESH_ATTR_TM_INST_ALL(char)
 #define RXMESH_ATTR_GLM_EIGEN_INST_ALL(T)         \
     RXMESH_ATTR_GLM_EIGEN_INST_N(T, VertexHandle) \
     RXMESH_ATTR_GLM_EIGEN_INST_N(T, EdgeHandle)   \
-    RXMESH_ATTR_GLM_EIGEN_INST_N(T, FaceHandle)
+    RXMESH_ATTR_GLM_EIGEN_INST_N(T, FaceHandle)   \
+    RXMESH_ATTR_GLM_EIGEN_INST_N(T, TetHandle)
 
 RXMESH_ATTR_GLM_EIGEN_INST_ALL(char)
 RXMESH_ATTR_GLM_EIGEN_INST_ALL(int8_t)

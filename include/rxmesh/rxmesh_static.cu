@@ -970,6 +970,18 @@ void RXMeshStatic::add_edge_labels(FaceAttribute<int>& face_label,
     template std::shared_ptr<FaceAttribute<T>>                             \
     RXMeshStatic::add_face_attribute_like<T>(const std::string&,           \
                                              const FaceAttribute<T>&);     \
+    template std::shared_ptr<TetAttribute<T>>                              \
+    RXMeshStatic::add_tet_attribute<T>(                                    \
+        const std::string&, uint32_t, locationT, layoutT);                 \
+    template std::shared_ptr<TetAttribute<T>>                              \
+    RXMeshStatic::add_tet_attribute<T>(                                    \
+        const std::vector<std::vector<T>>&, const std::string&, layoutT);  \
+    template std::shared_ptr<TetAttribute<T>>                              \
+    RXMeshStatic::add_tet_attribute<T>(                                    \
+        const std::vector<T>&, const std::string&, layoutT);               \
+    template std::shared_ptr<TetAttribute<T>>                              \
+    RXMeshStatic::add_tet_attribute_like<T>(const std::string&,            \
+                                            const TetAttribute<T>&);       \
     template std::shared_ptr<EdgeAttribute<T>>                             \
     RXMeshStatic::add_edge_attribute<T>(                                   \
         const std::string&, uint32_t, locationT, layoutT);                 \
@@ -1052,6 +1064,24 @@ template std::shared_ptr<FaceAttribute<FaceHandle>>
 RXMeshStatic::add_face_attribute<FaceHandle>(const std::vector<FaceHandle>&,
                                              const std::string&,
                                              layoutT);
+
+template std::shared_ptr<TetAttribute<TetHandle>>
+RXMeshStatic::add_tet_attribute<TetHandle>(const std::string&,
+                                           uint32_t,
+                                           locationT,
+                                           layoutT);
+template std::shared_ptr<TetAttribute<TetHandle>>
+RXMeshStatic::add_tet_attribute<TetHandle>(
+    const std::vector<std::vector<TetHandle>>&,
+    const std::string&,
+    layoutT);
+template std::shared_ptr<TetAttribute<TetHandle>>
+RXMeshStatic::add_tet_attribute<TetHandle>(const std::vector<TetHandle>&,
+                                           const std::string&,
+                                           layoutT);
+template std::shared_ptr<TetAttribute<TetHandle>>
+RXMeshStatic::add_tet_attribute_like<TetHandle>(const std::string&,
+                                                const TetAttribute<TetHandle>&);
 
 // linear_id / get_owner_handle for all handle types
 template uint32_t RXMeshStatic::linear_id<VertexHandle>(VertexHandle) const;

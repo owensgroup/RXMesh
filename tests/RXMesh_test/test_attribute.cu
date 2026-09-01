@@ -590,3 +590,242 @@ TEST(Attribute, MeshDestructionDoesNotFreeExternalDeviceBuffer)
     EXPECT_EQ(cudaMemset(external, 0, bytes), cudaSuccess);
     GPU_FREE(external);
 }
+
+struct TetCustomMin
+{
+    template <typename T>
+    __device__ __forceinline__ T operator()(const T& a, const T& b) const
+    {
+        return b < a ? b : a;
+    }
+};
+
+static std::vector<std::vector<uint32_t>> make_tet_chain(uint32_t num_tets)
+{
+    std::vector<std::vector<uint32_t>> tets;
+    for (uint32_t t = 0; t < num_tets; ++t) {
+        tets.push_back({t, t + 1, t + 2, t + 3});
+    }
+    return tets;
+}
+
+TEST(Attribute, TetLayoutsAndAPI)
+{
+    auto         tets = make_tet_chain(4);
+    RXMeshStatic rx(tets, "", 1);
+    ASSERT_EQ(rx.get_num_tets(), tets.size());
+    ASSERT_GT(rx.get_num_patches(), 1);
+
+    std::vector<std::vector<float>> values(rx.get_num_tets(),
+                                           std::vector<float>(3));
+    std::vector<float>              scalar_values(rx.get_num_tets());
+    for (uint32_t t = 0; t < rx.get_num_tets(); ++t) {
+        scalar_values[t] = float(10 + t);
+        for (uint32_t c = 0; c < 3; ++c) {
+            values[t][c] = float(100 * c + t);
+        }
+    }
+
+    const std::array<layoutT, 3> layouts = {AoS, AoSoA, SoA};
+
+    TetHandle owner_handle;
+
+
+    for (layoutT layout : layouts) {
+        const std::string suffix = layout_to_string(layout);
+
+        std::shared_ptr<TetAttribute<float>> attr =
+            rx.add_tet_attribute<float>(values, "tet_" + suffix, layout);
+
+        EXPECT_EQ(attr->get_layout(), layout);
+        EXPECT_TRUE(attr->is_host_allocated());
+        EXPECT_TRUE(attr->is_device_allocated());
+        EXPECT_EQ(attr->rows(), rx.get_num_tets());
+        EXPECT_EQ(attr->cols(), 3);
+
+        rx.for_each_tet(
+            HOST,
+            [&](const TetHandle th) {
+                const uint32_t global = rx.map_to_global(th);
+                const uint32_t row    = rx.linear_id(th);
+                for (uint32_t c = 0; c < 3; ++c) {
+                    EXPECT_FLOAT_EQ((*attr)(th, c), values[global][c]);
+                    EXPECT_FLOAT_EQ((*attr)(row, c), values[global][c]);
+                }
+            },
+            nullptr,
+            false);
+
+        CUDA_ERROR(cudaGetLastError());
+
+        auto copy =
+            rx.add_tet_attribute_like<float>("tet_copy_" + suffix, *attr);
+
+        copy->copy_from(*attr, DEVICE, DEVICE);
+        copy->reset(-1.0f, HOST);
+        copy->move(DEVICE, HOST);
+        ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+        auto matrix      = attr->to_matrix<>();
+        auto from_matrix = rx.add_tet_attribute<float>(
+            "tet_matrix_" + suffix, 3, HOST, layout);
+        from_matrix->from_matrix(matrix.get());
+
+        rx.for_each_tet(
+            HOST,
+            [&](const TetHandle th) {
+                const DenseMatrix<float>::IndexT row =
+                    static_cast<DenseMatrix<float>::IndexT>(rx.linear_id(th));
+                for (uint32_t c = 0; c < 3; ++c) {
+                    EXPECT_FLOAT_EQ((*matrix)(row, c), (*attr)(th, c));
+                    EXPECT_FLOAT_EQ((*copy)(th, c), (*attr)(th, c));
+                    EXPECT_FLOAT_EQ((*from_matrix)(th, c), (*attr)(th, c));
+                }
+            },
+            nullptr,
+            false);
+
+        const std::string copy_name = "tet_copy_" + suffix;
+        EXPECT_TRUE(rx.does_attribute_exist(copy_name));
+        rx.remove_attribute(copy_name);
+        EXPECT_FALSE(rx.does_attribute_exist(copy_name));
+    }
+
+
+    auto flat = rx.add_tet_attribute<float>(scalar_values, "tet_flat", SoA);
+    rx.for_each_tet(
+        HOST,
+        [&](const TetHandle th) {
+            EXPECT_FLOAT_EQ((*flat)(th), scalar_values[rx.map_to_global(th)]);
+        },
+        nullptr,
+        false);
+
+    auto host =
+        rx.add_attribute<float, TetHandle>("tet_generic_host", 2, HOST, AoS);
+    host->reset(-4.0f, HOST);
+    auto host_like =
+        rx.add_attribute_like<float, TetHandle>("tet_generic_host_like", *host);
+    host_like->copy_from(*host, HOST, HOST);
+
+    auto device = rx.add_tet_attribute<float>("tet_device", 2, DEVICE, AoSoA);
+    device->reset(6.0f, DEVICE);
+    device->move(DEVICE, HOST);
+    ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    rx.for_each_tet(
+        HOST,
+        [&](const TetHandle th) {
+            for (uint32_t c = 0; c < 2; ++c) {
+                EXPECT_FLOAT_EQ((*host_like)(th, c), -4.0f);
+                EXPECT_FLOAT_EQ((*device)(th, c), 6.0f);
+            }
+        },
+        nullptr,
+        false);
+}
+
+TEST(Attribute, TetReductions)
+{
+    auto         tets = make_tet_chain(4);
+    RXMeshStatic rx(tets, "", 1);
+    ASSERT_GT(rx.get_num_patches(), 1);
+
+    std::vector<std::array<float, 3>> values(rx.get_num_tets());
+    std::vector<std::array<float, 3>> rhs(rx.get_num_tets());
+    for (uint32_t t = 0; t < rx.get_num_tets(); ++t) {
+        values[t] = {float(3 * t) - 5.0f, float(t + 1), float(3 * t) - 2.0f};
+        rhs[t]    = {float(t + 2), -float(t + 1), 0.5f * float(t + 1)};
+    }
+
+    float expected_dot   = 0.0f;
+    float expected_dot_1 = 0.0f;
+    float expected_norm  = 0.0f;
+    float expected_sum_0 = 0.0f;
+    float expected_sum_2 = 0.0f;
+    for (uint32_t t = 0; t < rx.get_num_tets(); ++t) {
+        expected_sum_0 += values[t][0];
+        expected_sum_2 += values[t][2];
+        expected_dot_1 += values[t][1] * rhs[t][1];
+        for (uint32_t c = 0; c < 3; ++c) {
+            expected_dot += values[t][c] * rhs[t][c];
+            expected_norm += values[t][c] * values[t][c];
+        }
+    }
+    expected_norm = std::sqrt(expected_norm);
+
+    float* device_output = nullptr;
+    CUDA_ERROR(cudaMalloc(&device_output, sizeof(float)));
+    cudaStream_t stream = nullptr;
+    CUDA_ERROR(cudaStreamCreate(&stream));
+
+    const std::array<layoutT, 3> layouts = {AoS, AoSoA, SoA};
+    for (layoutT layout : layouts) {
+        const std::string suffix = layout_to_string(layout);
+
+        auto attr = rx.add_tet_attribute<float>(
+            "tet_reduce_" + suffix, 3, LOCATION_ALL, layout);
+
+        auto other = rx.add_tet_attribute<float>(
+            "tet_reduce_rhs_" + suffix, 3, LOCATION_ALL, layout);
+
+        attr->reset(1000.0f, HOST);
+        other->reset(-1000.0f, HOST);
+        rx.for_each_tet(
+            HOST,
+            [&](const TetHandle th) {
+                const uint32_t global = rx.map_to_global(th);
+                for (uint32_t c = 0; c < 3; ++c) {
+                    (*attr)(th, c)  = values[global][c];
+                    (*other)(th, c) = rhs[global][c];
+                }
+            },
+            nullptr,
+            false);
+        attr->move(HOST, DEVICE, stream);
+        other->move(HOST, DEVICE, stream);
+
+        TetReduceHandle<float> reducer(*attr);
+        EXPECT_NEAR(
+            reducer.dot(*attr, *other, INVALID32, stream), expected_dot, 1e-5f);
+        EXPECT_NEAR(
+            reducer.dot(*attr, *other, 1, stream), expected_dot_1, 1e-5f);
+        EXPECT_NEAR(
+            reducer.norm2(*attr, INVALID32, stream), expected_norm, 1e-5f);
+        EXPECT_FLOAT_EQ(reducer.reduce(*attr, cub::Sum(), 0.0f, 0, stream),
+                        expected_sum_0);
+        EXPECT_FLOAT_EQ(reducer.reduce(*attr,
+                                       TetCustomMin(),
+                                       std::numeric_limits<float>::max(),
+                                       0,
+                                       stream),
+                        values.front()[0]);
+        EXPECT_FLOAT_EQ(reducer.reduce(*attr,
+                                       cub::Max(),
+                                       std::numeric_limits<float>::lowest(),
+                                       0,
+                                       stream),
+                        values.back()[0]);
+
+        const auto arg_min = reducer.arg_min(*attr, 0, stream);
+        const auto arg_max = reducer.arg_max(*attr, 0, stream);
+        EXPECT_EQ(rx.map_to_global(arg_min.key), 0);
+        EXPECT_EQ(rx.map_to_global(arg_max.key), rx.get_num_tets() - 1);
+        EXPECT_FLOAT_EQ(arg_min.value, values.front()[0]);
+        EXPECT_FLOAT_EQ(arg_max.value, values.back()[0]);
+
+        reducer.reduce_device(
+            *attr, cub::Sum(), 0.0f, device_output, 2, stream);
+        float output = 0.0f;
+        CUDA_ERROR(cudaMemcpyAsync(&output,
+                                   device_output,
+                                   sizeof(float),
+                                   cudaMemcpyDeviceToHost,
+                                   stream));
+        CUDA_ERROR(cudaStreamSynchronize(stream));
+        EXPECT_FLOAT_EQ(output, expected_sum_2);
+    }
+
+    CUDA_ERROR(cudaStreamDestroy(stream));
+    GPU_FREE(device_output);
+}

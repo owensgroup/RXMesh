@@ -115,11 +115,11 @@ class RXMeshStatic : public RXMesh
 
     /**
      * @brief Add vertex coordinates to the input mesh. When calling
-     * RXMeshStatic constructor that takes the face's vertices, this function
-     * can be called to then add vertex coordinates and also add the mesh to
-     * polyscope if it is active. You don't need to call this function if you
-     * are constructing RXMeshStatic with the constructor that takes the path to
-     * mesh file
+     * RXMeshStatic constructor that takes the simplices's vertices, this
+     * function can be called to then add vertex coordinates and also add the
+     * mesh to polyscope if it is active. You don't need to call this function
+     * if you are constructing RXMeshStatic with the constructor that takes the
+     * path to mesh file
      */
     void add_vertex_coordinates(std::vector<std::vector<rx_coord_t>>& vertices,
                                 std::string mesh_name = "");
@@ -395,6 +395,14 @@ class RXMeshStatic : public RXMesh
 
     /**
      * @brief Apply a lambda function on all tets in the mesh
+     * @tparam LambdaT type of the lambda function (inferred)
+     * @param location the execution location
+     * @param apply lambda function to be applied on all tets. The lambda
+     * function signature takes a TetHandle
+     * @param stream the stream used to run the kernel in case of DEVICE
+     * execution location
+     * @param with_omp for HOST execution, use OpenMP where each patch is
+     * assigned to a thread
      */
     template <typename LambdaT>
     void for_each_tet(locationT    location,
@@ -587,9 +595,9 @@ class RXMeshStatic : public RXMesh
      * @param user_lambda the user lambda function which has the signature
      *      [=]__device__(InputHandle h, OutputIterator iter) {
      *      }
-     * The InputHandle is a vertex, edge, or face handle depending on the input
-     * to the query operation op. The OutputIterator is an vertex, edge, or face
-     * iterator depending on the output of the query operation op.
+     * The InputHandle is a vertex, edge, face, or tet handle depending on the
+     * input to the query operation op. The OutputIterator is an vertex, edge,
+     * face, or tet iterator depending on the output of the query operation op.
      *
      * @param oriented if the query operation op is oriented
      * @param stream the stream to launch the kernel on
@@ -620,9 +628,9 @@ class RXMeshStatic : public RXMesh
      * @param user_lambda the user lambda function which has the signature
      *      [=]__device__(InputHandle h, OutputIterator iter) {
      *      }
-     * The InputHandle is a vertex, edge, or face handle depending on the input
-     * to the query operation op. The OutputIterator is an vertex, edge, or face
-     * iterator depending on the output of the query operation op.
+     * The InputHandle is a vertex, edge, face, or tet handle depending on the
+     * input to the query operation op. The OutputIterator is an vertex, edge,
+     * face, or tet iterator depending on the output of the query operation op.
      *
      * @param oriented if the query operation op is oriented
      * @param stream the stream to launch the kernel on
@@ -666,6 +674,10 @@ class RXMeshStatic : public RXMesh
         std::function<size_t(uint32_t, uint32_t, uint32_t)> user_shmem =
             [](uint32_t v, uint32_t e, uint32_t f) { return 0; }) const;
 
+    /**
+     * @brief same as the above prepare_launch_box but the user_shmem isa
+     * function of the number of vertices, edges, faces, and tets
+     */
     template <uint32_t blockThreads>
     void prepare_launch_box(
         const std::vector<Op>    op,
@@ -743,6 +755,74 @@ class RXMeshStatic : public RXMesh
     template <class T>
     std::shared_ptr<FaceAttribute<T>> add_face_attribute(
         const std::vector<T>& f_attributes,
+        const std::string&    name,
+        layoutT               layout = AoSoA);
+
+    /**
+     * @brief Adding a new tet attribute
+     * @tparam T type of the attribute
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param num_attributes number of the attributes
+     * @param location where to allocate the attributes
+     * @param layout as AoS, AoSoA (patch-local SoA), or SoA (global
+     * column-major) operations
+     * @return shared pointer to the created attribute
+     */
+    template <class T>
+    std::shared_ptr<TetAttribute<T>> add_tet_attribute(
+        const std::string& name,
+        uint32_t           num_attributes,
+        locationT          location = LOCATION_ALL,
+        layoutT            layout   = AoSoA);
+
+    /**
+     * @brief Adding a new tet attribute by reading values from a host buffer
+     * t_attributes where the order of tets is the same as the order of
+     * tets given to the constructor.The attributes are populated on device
+     * and host
+     * @tparam T type of the attribute
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param layout as AoS, AoSoA (patch-local SoA), or SoA (global
+     * column-major) operations
+     * @return shared pointer to the created attribute
+     */
+    template <class T>
+    std::shared_ptr<TetAttribute<T>> add_tet_attribute(
+        const std::vector<std::vector<T>>& t_attributes,
+        const std::string&                 name,
+        layoutT                            layout = AoSoA);
+
+    /**
+     * @brief Adding a new tet attribute similar to another tet attribute
+     * in allocation, number of attributes, and layout
+     * @tparam T type of the returned attribute
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param other the other tet attribute
+     * @return shared pointer to the created tet attribute
+     */
+    template <class T>
+    std::shared_ptr<TetAttribute<T>> add_tet_attribute_like(
+        const std::string&     name,
+        const TetAttribute<T>& other);
+
+    /**
+     * @brief Adding a new tet attribute by reading values from a host buffer
+     * t_attributes where the order of tets is the same as the order of
+     * tets given to the constructor.The attributes are populated on device
+     * and host
+     * @tparam T type of the attribute
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param layout as AoS, AoSoA (patch-local SoA), or SoA (global
+     * column-major) operations
+     * @return shared pointer to the created attribute
+     */
+    template <class T>
+    std::shared_ptr<TetAttribute<T>> add_tet_attribute(
+        const std::vector<T>& t_attributes,
         const std::string&    name,
         layoutT               layout = AoSoA);
 
@@ -849,8 +929,8 @@ class RXMeshStatic : public RXMesh
         layoutT               layout = AoSoA);
 
     /**
-     * @brief similar to add_vertex/edge/face_attribute where the mesh element
-     * type is defined via template parameter
+     * @brief similar to add_vertex/edge/face/tet_attribute where the mesh
+     * element type is defined via template parameter
      * @return
      */
     template <class T, class HandleT>
@@ -863,7 +943,7 @@ class RXMeshStatic : public RXMesh
     /**
      * @brief Adding a new attribute similar to another attribute in allocation,
      * number of attributes, and layout. The type of the attribute (vertex,edge,
-     * or face) is derived automatically from the input attribute (other)
+     * face, or tet) is derived automatically from the input attribute (other)
      * @tparam T type of the returned attribute
      * @tparam HandleT handle type of the returned attribute
      * @param name of the attribute. Should not collide with other attributes
@@ -884,7 +964,7 @@ class RXMeshStatic : public RXMesh
     bool does_attribute_exist(const std::string& name);
 
     /**
-     * @brief Remove an attribute. Could be vertex, edge, or face attribute
+     * @brief Remove an attribute. Could be vertex, edge, face, or tet attribute
      * @param name the attribute name
      */
     void remove_attribute(const std::string& name);
@@ -985,18 +1065,22 @@ class RXMeshStatic : public RXMesh
     /**
      * @brief Map a face handle into a global index as seen in the input
      * to RXMeshStatic
-     * @param vh input face handle
+     * @param fh input face handle
      * @return the global index of fh
      */
     uint32_t map_to_global(const FaceHandle fh) const;
 
     /**
-     * @brief Map a tet handle to its input tet index
+     * @brief Map a tet handle into a global index as seen in the input
+     * to RXMeshStatic
+     * @param th input tet handle
+     * @return the global index of th
      */
     uint32_t map_to_global(const TetHandle th) const;
 
     /**
-     * @brief compute a linear compact index for a give vertex/edge/face handle
+     * @brief compute a linear compact index for a give vertex/edge/face/tet
+     * handle
      * @tparam HandleT the type of the input handle
      * @param input handle
      */

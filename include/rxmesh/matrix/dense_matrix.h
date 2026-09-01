@@ -215,7 +215,6 @@ struct DenseMatrix
 
     /**
      * @brief Whether handle indexing uses the supplied mesh context.
-
      */
     template <typename HandleT>
     __host__ bool has_compatible_context(const RXMesh& rx) const
@@ -227,6 +226,8 @@ struct DenseMatrix
             return m_context.edge_prefix() == other.edge_prefix();
         } else if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return m_context.face_prefix() == other.face_prefix();
+        } else if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return m_context.tet_prefix() == other.tet_prefix();
         } else {
             return false;
         }
@@ -910,6 +911,11 @@ struct DenseMatrix
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             assert(m_context.face_prefix() != nullptr);
             row = m_context.face_prefix()[id.first] + id.second;
+        }
+
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            assert(m_context.tet_prefix() != nullptr);
+            row = m_context.tet_prefix()[id.first] + id.second;
         }
 
         return row;

@@ -101,6 +101,104 @@ std::shared_ptr<FaceAttribute<T>> RXMeshStatic::add_face_attribute(
 }
 
 template <class T>
+std::shared_ptr<TetAttribute<T>> RXMeshStatic::add_tet_attribute(
+    const std::string& name,
+    uint32_t           num_attributes,
+    locationT          location,
+    layoutT            layout)
+{
+    return m_attr_container->template add<TetAttribute<T>>(
+        name.c_str(), num_attributes, location, layout, this);
+}
+
+template <class T>
+std::shared_ptr<TetAttribute<T>> RXMeshStatic::add_tet_attribute_like(
+    const std::string&     name,
+    const TetAttribute<T>& other)
+{
+    return add_tet_attribute<T>(name,
+                                other.get_num_attributes(),
+                                other.get_allocated(),
+                                other.get_layout());
+}
+
+template <class T>
+std::shared_ptr<TetAttribute<T>> RXMeshStatic::add_tet_attribute(
+    const std::vector<std::vector<T>>& t_attributes,
+    const std::string&                 name,
+    layoutT                            layout)
+{
+    if (t_attributes.empty()) {
+        RXMESH_ERROR(
+            "RXMeshStatic::add_tet_attribute() input attribute is empty");
+    }
+
+    if (t_attributes.size() != get_num_tets()) {
+        RXMESH_ERROR(
+            "RXMeshStatic::add_tet_attribute() input attribute size ({}) "
+            "is not the same as number of tets in the input mesh ({})",
+            t_attributes.size(),
+            get_num_tets());
+    }
+
+    uint32_t num_attributes = static_cast<uint32_t>(t_attributes[0].size());
+
+    auto ret = m_attr_container->template add<TetAttribute<T>>(
+        name.c_str(), num_attributes, LOCATION_ALL, layout, this);
+
+    const int num_patches = this->get_num_patches();
+#pragma omp parallel for
+    for (int p = 0; p < num_patches; ++p) {
+        for (uint16_t t = 0; t < this->m_h_num_owned_t[p]; ++t) {
+            const TetHandle t_handle(static_cast<uint32_t>(p), t);
+            uint32_t        global_t = m_h_patches_ltog_t[p][t];
+            for (uint32_t a = 0; a < num_attributes; ++a) {
+                (*ret)(t_handle, a) = t_attributes[global_t][a];
+            }
+        }
+    }
+
+    ret->move(rxmesh::HOST, rxmesh::DEVICE);
+    return ret;
+}
+
+template <class T>
+std::shared_ptr<TetAttribute<T>> RXMeshStatic::add_tet_attribute(
+    const std::vector<T>& t_attributes,
+    const std::string&    name,
+    layoutT               layout)
+{
+    if (t_attributes.empty()) {
+        RXMESH_ERROR(
+            "RXMeshStatic::add_tet_attribute() input attribute is empty");
+    }
+
+    if (t_attributes.size() != get_num_tets()) {
+        RXMESH_ERROR(
+            "RXMeshStatic::add_tet_attribute() input attribute size ({}) "
+            "is not the same as number of tets in the input mesh ({})",
+            t_attributes.size(),
+            get_num_tets());
+    }
+
+    auto ret = m_attr_container->template add<TetAttribute<T>>(
+        name.c_str(), 1, LOCATION_ALL, layout, this);
+
+    const int num_patches = this->get_num_patches();
+#pragma omp parallel for
+    for (int p = 0; p < num_patches; ++p) {
+        for (uint16_t t = 0; t < this->m_h_num_owned_t[p]; ++t) {
+            const TetHandle t_handle(static_cast<uint32_t>(p), t);
+            uint32_t        global_t = m_h_patches_ltog_t[p][t];
+            (*ret)(t_handle, 0)      = t_attributes[global_t];
+        }
+    }
+
+    ret->move(rxmesh::HOST, rxmesh::DEVICE);
+    return ret;
+}
+
+template <class T>
 std::shared_ptr<EdgeAttribute<T>> RXMeshStatic::add_edge_attribute(
     const std::string& name,
     uint32_t           num_attributes,
@@ -248,6 +346,10 @@ std::shared_ptr<Attribute<T, HandleT>> RXMeshStatic::add_attribute(
     if constexpr (std::is_same_v<HandleT, FaceHandle>) {
         return add_face_attribute<T>(name, num_attributes, location, layout);
     }
+
+    if constexpr (std::is_same_v<HandleT, TetHandle>) {
+        return add_tet_attribute<T>(name, num_attributes, location, layout);
+    }
 }
 
 template <class T, class HandleT>
@@ -274,6 +376,13 @@ std::shared_ptr<Attribute<T, HandleT>> RXMeshStatic::add_attribute_like(
                                      other.get_num_attributes(),
                                      other.get_allocated(),
                                      other.get_layout());
+    }
+
+    if constexpr (std::is_same_v<HandleT, TetHandle>) {
+        return add_tet_attribute<T>(name,
+                                    other.get_num_attributes(),
+                                    other.get_allocated(),
+                                    other.get_layout());
     }
 }
 
