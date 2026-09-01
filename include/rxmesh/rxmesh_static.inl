@@ -539,6 +539,10 @@ std::shared_ptr<FaceAttribute<T>> RXMeshStatic::add_face_attribute_like(
 template <typename HandleT>
 std::shared_ptr<Attribute<int, HandleT>> RXMeshStatic::get_region_label()
 {
+    if constexpr (std::is_same_v<HandleT, TetHandle>) {
+        return get_tet_region_label();
+    }
+
     if constexpr (std::is_same_v<HandleT, FaceHandle>) {
         return get_face_region_label();
     }

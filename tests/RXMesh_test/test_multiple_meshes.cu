@@ -31,5 +31,29 @@ TEST(RXMeshStatic, MultipleMeshes)
     rx.get_polyscope_mesh()->updateVertexPositions(x);
 
 
-    //polyscope::show();
+    // polyscope::show();
+}
+
+TEST(RXMeshStatic, MultipleTetMeshes)
+{
+    using namespace rxmesh;
+
+    std::vector<std::string> inputs = {STRINGIFY(INPUT_DIR) "car.msh",
+                                       STRINGIFY(INPUT_DIR) "car.msh"};
+
+    RXMeshStatic rx(inputs);
+
+    ASSERT_EQ(rx.get_num_regions(), 2);
+    ASSERT_GT(rx.get_num_tets(), 0);
+    ASSERT_EQ(rx.get_num_tets() % 2, 0);
+
+    const uint32_t num_tets_per_region = rx.get_num_tets() / 2;
+    auto           tet_label           = rx.get_tet_region_label();
+
+    EXPECT_EQ(tet_label, rx.get_region_label<TetHandle>());
+
+    rx.for_each_tet(HOST, [&](const TetHandle th) {
+        const int expected = rx.map_to_global(th) < num_tets_per_region ? 0 : 1;
+        EXPECT_EQ((*tet_label)(th), expected);
+    });
 }

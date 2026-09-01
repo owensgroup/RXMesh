@@ -167,27 +167,58 @@ RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
 #endif
     add_vertex_coordinates(vertices, name);
 
-    // add region labels for faces, vertices, and edges
-    m_face_label = add_face_attribute<int>("rx:face_label", 1, LOCATION_ALL);
-    m_edge_label = add_edge_attribute<int>("rx:edge_label", 1, LOCATION_ALL);
+    // add region labels
     m_vertex_label =
         add_vertex_attribute<int>("rx:vertex_label", 1, LOCATION_ALL);
 
-    for_each_face(
-        HOST,
-        [=](const FaceHandle fh) {
-            int id = map_to_global(fh);
+    if (m_is_tet_mesh) {
+        m_tet_label = add_tet_attribute<int>("rx:tet_label", 1, LOCATION_ALL);
 
-            auto upper = std::upper_bound(
-                region_num_simplices.begin(), region_num_simplices.end(), id);
+        for_each_tet(
+            HOST,
+            [=](const TetHandle th) {
+                int id = map_to_global(th);
 
-            int label = static_cast<int>(
-                std::distance(region_num_simplices.begin(), upper));
+                auto upper = std::upper_bound(region_num_simplices.begin(),
+                                              region_num_simplices.end(),
+                                              id);
 
-            (*m_face_label)(fh) = label;
-        },
-        NULL,
-        false);
+                int label = static_cast<int>(
+                    std::distance(region_num_simplices.begin(), upper));
+
+                (*m_tet_label)(th) = label;
+            },
+            NULL,
+            false);
+
+        m_tet_label->move(HOST, DEVICE);
+    } else {
+        m_face_label =
+            add_face_attribute<int>("rx:face_label", 1, LOCATION_ALL);
+        m_edge_label =
+            add_edge_attribute<int>("rx:edge_label", 1, LOCATION_ALL);
+
+        for_each_face(
+            HOST,
+            [=](const FaceHandle fh) {
+                int id = map_to_global(fh);
+
+                auto upper = std::upper_bound(region_num_simplices.begin(),
+                                              region_num_simplices.end(),
+                                              id);
+
+                int label = static_cast<int>(
+                    std::distance(region_num_simplices.begin(), upper));
+
+                (*m_face_label)(fh) = label;
+            },
+            NULL,
+            false);
+
+        m_face_label->move(HOST, DEVICE);
+        add_edge_labels(*m_face_label, *m_edge_label);
+        m_edge_label->move(DEVICE, HOST);
+    }
 
     for_each_vertex(
         HOST,
@@ -204,17 +235,14 @@ RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
         },
         NULL,
         false);
-    m_face_label->move(HOST, DEVICE);
     m_vertex_label->move(HOST, DEVICE);
 
-    add_edge_labels(*m_face_label, *m_edge_label);
-
-    m_edge_label->move(DEVICE, HOST);
-
 #if USE_POLYSCOPE
-    m_polyscope_mesh->addFaceScalarQuantity("rx:FLabel", *m_face_label);
-    m_polyscope_mesh->addEdgeScalarQuantity("rx:ELabel", *m_edge_label);
-    m_polyscope_mesh->addVertexScalarQuantity("rx:VLabel", *m_vertex_label);
+    if (!m_is_tet_mesh) {
+        m_polyscope_mesh->addFaceScalarQuantity("rx:FLabel", *m_face_label);
+        m_polyscope_mesh->addEdgeScalarQuantity("rx:ELabel", *m_edge_label);
+        m_polyscope_mesh->addVertexScalarQuantity("rx:VLabel", *m_vertex_label);
+    }
 #endif
 }
 void RXMeshStatic::add_vertex_coordinates(
@@ -678,6 +706,15 @@ std::shared_ptr<FaceAttribute<int>> RXMeshStatic::get_face_region_label()
             "label.");
     }
     return m_face_label;
+}
+
+std::shared_ptr<TetAttribute<int>> RXMeshStatic::get_tet_region_label()
+{
+    if (!m_tet_label) {
+        RXMESH_ERROR(
+            "RXMeshStatic::get_tet_region_label() there is no region label.");
+    }
+    return m_tet_label;
 }
 
 std::shared_ptr<EdgeAttribute<int>> RXMeshStatic::get_edge_region_label()
@@ -1169,5 +1206,7 @@ template std::shared_ptr<Attribute<int, EdgeHandle>>
 RXMeshStatic::get_region_label<EdgeHandle>();
 template std::shared_ptr<Attribute<int, FaceHandle>>
 RXMeshStatic::get_region_label<FaceHandle>();
+template std::shared_ptr<Attribute<int, TetHandle>>
+RXMeshStatic::get_region_label<TetHandle>();
 
 }  // namespace rxmesh

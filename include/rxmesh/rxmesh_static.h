@@ -1015,6 +1015,11 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<FaceAttribute<int>> get_face_region_label();
 
     /**
+     * @brief return a shared pointer of the tet region label
+     */
+    std::shared_ptr<TetAttribute<int>> get_tet_region_label();
+
+    /**
      * @brief return a shared pointer of the edge region label
      */
     std::shared_ptr<EdgeAttribute<int>> get_edge_region_label();
@@ -1453,6 +1458,7 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<AttributeContainer>          m_attr_container;
     std::shared_ptr<VertexAttribute<rx_coord_t>> m_input_vertex_coordinates;
 
+    std::shared_ptr<TetAttribute<int>>    m_tet_label;
     std::shared_ptr<FaceAttribute<int>>   m_face_label;
     std::shared_ptr<EdgeAttribute<int>>   m_edge_label;
     std::shared_ptr<VertexAttribute<int>> m_vertex_label;
