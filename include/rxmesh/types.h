@@ -142,6 +142,28 @@ enum class Op
     TT        = 20,
 };
 
+__host__ __device__ constexpr uint32_t query_fixed_size(const Op op)
+{
+    if (op == Op::EV) {
+        return 2;
+    }
+    if (op == Op::FV || op == Op::FE) {
+        return 3;
+    }
+    if (op == Op::EVDiamond || op == Op::TV || op == Op::TF) {
+        return 4;
+    }
+    if (op == Op::TE) {
+        return 6;
+    }
+    return 0;
+}
+
+__host__ __device__ constexpr uint32_t query_output_shift(const Op op)
+{
+    return uint32_t(op == Op::FE || op == Op::TF);
+}
+
 /**
  * @brief define the transpose of a give query operation
  */

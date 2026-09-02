@@ -639,12 +639,14 @@ size_t RXMeshStatic::calc_shared_memory(const Op   op,
                                         bool       use_capacity) const
 {
     uint32_t max_v(this->m_max_vertices_per_patch),
-        max_e(this->m_max_edges_per_patch), max_f(this->m_max_faces_per_patch);
+        max_e(this->m_max_edges_per_patch), max_f(this->m_max_faces_per_patch),
+        max_t(this->m_max_tets_per_patch);
 
     if (use_capacity) {
         max_v = get_per_patch_max_vertex_capacity();
         max_e = get_per_patch_max_edge_capacity();
         max_f = get_per_patch_max_face_capacity();
+        max_t = m_max_tet_capacity;
     }
 
 
@@ -665,7 +667,67 @@ size_t RXMeshStatic::calc_shared_memory(const Op   op,
     size_t dynamic_smem = 0;
 
 
-    if (op == Op::FE) {
+    if (op == Op::TF) {
+        // TF is the output and stays allocated with the face LP hashtable
+        dynamic_smem = 4 * max_t * sizeof(uint16_t);
+
+        // store tet participant bitmask
+        dynamic_smem += detail::mask_num_bytes(max_t);
+
+        // store output face owned bitmask
+        dynamic_smem += detail::mask_num_bytes(max_f);
+
+        // store face LP hashtable
+        dynamic_smem +=
+            sizeof(LPPair) * max_lp_hashtable_capacity<LocalFaceT>();
+
+        // participant mask, owned mask, TF output, and LP hashtable
+        dynamic_smem += ShmemAllocator::default_alignment * 4;
+
+    } else if (op == Op::TE) {
+        // We load TF and FE, then compute TE. We then reuse the space of FE
+        // to store E hashtable
+        // Additionally, TF needs 3xT and the output TE needs 6xT. So we
+        // allocate 6xT memory to store the input TF (only use the first 4 slots
+        // per tet) and the over-write it with the tet's edges (6 slots per
+        // tet).
+
+        dynamic_smem = 6 * max_t * sizeof(uint16_t);
+
+        // store tet participant bitmask
+        dynamic_smem += detail::mask_num_bytes(max_t);
+
+        // store output edge owned bitmask
+        dynamic_smem += detail::mask_num_bytes(max_e);
+
+        const size_t fe_smem = 3 * max_f * sizeof(uint16_t);
+        const size_t lp_smem =
+            sizeof(LPPair) * max_lp_hashtable_capacity<LocalEdgeT>();
+        dynamic_smem += std::max(fe_smem, lp_smem);
+
+        // participant mask, owned mask, TE output, FE, and LP hashtable
+        dynamic_smem += ShmemAllocator::default_alignment * 5;
+
+    } else if (op == Op::TV) {
+        // TV output stays allocated while temporary FE and EV are reused for
+        // the vertex LP hashtable
+        dynamic_smem = 4 * max_t * sizeof(uint16_t);
+
+        // store tet participant bitmask
+        dynamic_smem += detail::mask_num_bytes(max_t);
+
+        // store output vertex owned bitmask
+        dynamic_smem += detail::mask_num_bytes(max_v);
+
+        const size_t fe_ev_smem = (3 * max_f + 2 * max_e) * sizeof(uint16_t);
+        const size_t lp_smem =
+            sizeof(LPPair) * max_lp_hashtable_capacity<LocalVertexT>();
+        dynamic_smem += std::max(fe_ev_smem, lp_smem);
+
+        // participant mask, owned mask, TV output, FE, EV, and LP hashtable
+        dynamic_smem += ShmemAllocator::default_alignment * 6;
+
+    } else if (op == Op::FE) {
         // only FE will be loaded
         dynamic_smem = 3 * max_f * sizeof(uint16_t);
 

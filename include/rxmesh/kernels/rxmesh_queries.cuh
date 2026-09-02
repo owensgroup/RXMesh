@@ -1021,6 +1021,70 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
                    true);
     }
 
+    if constexpr (op == Op::TV) {
+        const uint16_t num_edges = patch_info.num_edges[0];
+        const uint16_t num_faces = patch_info.num_faces[0];
+        const uint16_t num_tets  = patch_info.num_tets[0];
+
+        s_output_value = shrd_alloc.alloc<uint16_t>(4 * num_tets);
+        uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * num_faces);
+        uint16_t* s_ev = shrd_alloc.alloc<uint16_t>(2 * num_edges);
+
+        load_async(block,
+                   reinterpret_cast<uint16_t*>(patch_info.tf),
+                   4 * num_tets,
+                   s_output_value,
+                   false);
+        load_async(block,
+                   reinterpret_cast<uint16_t*>(patch_info.fe),
+                   3 * num_faces,
+                   s_fe,
+                   false);
+        load_async(block,
+                   reinterpret_cast<uint16_t*>(patch_info.ev),
+                   2 * num_edges,
+                   s_ev,
+                   true);
+
+        block.sync();
+        shrd_alloc.dealloc<uint16_t>(2 * num_edges);
+        shrd_alloc.dealloc<uint16_t>(3 * num_faces);
+    }
+
+    if constexpr (op == Op::TE) {
+        const uint16_t num_faces = patch_info.num_faces[0];
+        const uint16_t num_tets  = patch_info.num_tets[0];
+
+        s_output_value = shrd_alloc.alloc<uint16_t>(6 * num_tets);
+        uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * num_faces);
+
+        for (uint16_t t = threadIdx.x; t < num_tets; t += blockThreads) {
+            for (uint32_t f = 0; f < 4; ++f) {
+                s_output_value[6 * t + f] = patch_info.tf[4 * t + f].id;
+            }
+        }
+
+        load_async(block,
+                   reinterpret_cast<uint16_t*>(patch_info.fe),
+                   3 * num_faces,
+                   s_fe,
+                   true);
+
+        block.sync();
+        shrd_alloc.dealloc<uint16_t>(3 * num_faces);
+    }
+
+    if constexpr (op == Op::TF) {
+        const uint16_t num_tets = patch_info.num_tets[0];
+
+        s_output_value = shrd_alloc.alloc<uint16_t>(4 * num_tets);
+        load_async(block,
+                   reinterpret_cast<uint16_t*>(patch_info.tf),
+                   4 * num_tets,
+                   s_output_value,
+                   true);
+    }
+
     if constexpr (op == Op::FF) {
 
         const uint16_t num_faces = patch_info.num_faces[0];

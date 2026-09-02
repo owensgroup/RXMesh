@@ -163,10 +163,12 @@ __device__ __forceinline__ void Query<blockThreads>::prologue(
     const bool                        oriented,
     const bool                        allow_not_owned)
 {
+    using HandleT = typename InputHandle<op>::type;
+
     prologue<op>(
         block,
         shrd_alloc,
-        [](VertexHandle) { return true; },
+        [](HandleT) { return true; },
         oriented,
         allow_not_owned);
 }
@@ -235,11 +237,7 @@ template <typename IteratorT>
 __device__ __forceinline__ IteratorT
 Query<blockThreads>::get_iterator(uint16_t local_id) const
 {
-    const uint32_t fixed_offset =
-        ((m_op == Op::EV) ? 2 :
-                            ((m_op == Op::FV || m_op == Op::FE) ?
-                                 3 :
-                                 ((m_op == Op::EVDiamond) ? 4 : 0)));
+    const uint32_t fixed_offset = query_fixed_size(m_op);
 
     using LocalT = typename IteratorT::LocalT;
 
@@ -253,7 +251,7 @@ Query<blockThreads>::get_iterator(uint16_t local_id) const
                          m_output_lp_hashtable,
                          m_s_table,
                          m_patch_info->patch_stash,
-                         int(m_op == Op::FE));
+                         query_output_shift(m_op));
     } else {
         return IteratorT(local_id, m_pid);
     }

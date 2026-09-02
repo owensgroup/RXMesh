@@ -80,6 +80,21 @@ template struct Query<1024>;
         cooperative_groups::thread_block&,                       \
         ShmemAllocator&,                                         \
         const bool,                                              \
+        const bool);                                             \
+    template void Query<BLOCK_THREADS>::prologue<Op::TV>(        \
+        cooperative_groups::thread_block&,                       \
+        ShmemAllocator&,                                         \
+        const bool,                                              \
+        const bool);                                             \
+    template void Query<BLOCK_THREADS>::prologue<Op::TE>(        \
+        cooperative_groups::thread_block&,                       \
+        ShmemAllocator&,                                         \
+        const bool,                                              \
+        const bool);                                             \
+    template void Query<BLOCK_THREADS>::prologue<Op::TF>(        \
+        cooperative_groups::thread_block&,                       \
+        ShmemAllocator&,                                         \
+        const bool,                                              \
         const bool);
 
 RXMESH_QUERY_INSTANTIATE_PROLOGUE(128)
