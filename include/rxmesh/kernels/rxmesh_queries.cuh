@@ -1059,6 +1059,8 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
         uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * num_faces);
 
         for (uint16_t t = threadIdx.x; t < num_tets; t += blockThreads) {
+            // TODO improve the loading here by loading a single uint64_t (i.e.,
+            // 4 uint16_t) at a time
             for (uint32_t f = 0; f < 4; ++f) {
                 s_output_value[6 * t + f] = patch_info.tf[4 * t + f].id;
             }
