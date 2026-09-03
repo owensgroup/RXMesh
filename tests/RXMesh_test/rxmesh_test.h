@@ -1,7 +1,10 @@
 #pragma once
 
 #include <assert.h>
+#include <algorithm>
+#include <array>
 #include <iomanip>
+#include <map>
 #include <vector>
 #include "rxmesh/attribute.h"
 #include "rxmesh/context.h"
@@ -338,6 +341,102 @@ class RXMeshTest
             output);
     }
 
+    /**
+     * @brief verify TV query
+     */
+    bool run_test(const rxmesh::RXMeshStatic&                       rx,
+                  const std::vector<std::vector<uint32_t>>&         tv,
+                  const rxmesh::TetAttribute<rxmesh::TetHandle>&    input,
+                  const rxmesh::TetAttribute<rxmesh::VertexHandle>& output)
+    {
+        return verifier<rxmesh::TetHandle, rxmesh::VertexHandle>(
+            tv,
+            rx,
+            rx.m_h_num_owned_t,
+            rx.m_h_patches_ltog_t,
+            rx.m_h_patches_ltog_v,
+            input,
+            output,
+            true);
+    }
+
+    /**
+     * @brief verify TE query
+     */
+    bool run_test(const rxmesh::RXMeshStatic&                     rx,
+                  const std::vector<std::vector<uint32_t>>&       tv,
+                  const rxmesh::TetAttribute<rxmesh::TetHandle>&  input,
+                  const rxmesh::TetAttribute<rxmesh::EdgeHandle>& output)
+    {
+        std::vector<std::vector<uint32_t>> te(tv.size(),
+                                              std::vector<uint32_t>(6));
+        constexpr auto                     edges = rxmesh::tet_edges();
+
+        for (uint32_t t = 0; t < tv.size(); ++t) {
+            for (uint32_t e = 0; e < edges.size(); ++e) {
+                te[t][e] = rx.get_edge_id(rxmesh::detail::edge_key(
+                    tv[t][edges[e][0]], tv[t][edges[e][1]]));
+            }
+        }
+
+        return verifier<rxmesh::TetHandle, rxmesh::EdgeHandle>(
+            te,
+            rx,
+            rx.m_h_num_owned_t,
+            rx.m_h_patches_ltog_t,
+            rx.m_h_patches_ltog_e,
+            input,
+            output,
+            true);
+    }
+
+    /**
+     * @brief verify TF query
+     */
+    bool run_test(const rxmesh::RXMeshStatic&                     rx,
+                  const std::vector<std::vector<uint32_t>>&       tv,
+                  const rxmesh::TetAttribute<rxmesh::TetHandle>&  input,
+                  const rxmesh::TetAttribute<rxmesh::FaceHandle>& output)
+    {
+        std::vector<uint32_t> face_list(3 * rx.get_num_faces());
+        rx.create_face_list(face_list.data(), true);
+
+        std::map<std::array<uint32_t, 3>, uint32_t> face_map;
+        for (uint32_t f = 0; f < rx.get_num_faces(); ++f) {
+            std::array<uint32_t, 3> face = {
+                face_list[3 * f], face_list[3 * f + 1], face_list[3 * f + 2]};
+            std::sort(face.begin(), face.end());
+            face_map.emplace(face, f);
+        }
+
+        std::vector<std::vector<uint32_t>> tf(tv.size(),
+                                              std::vector<uint32_t>(4));
+
+        constexpr auto faces = rxmesh::tet_faces();
+
+        for (uint32_t t = 0; t < tv.size(); ++t) {
+            for (uint32_t f = 0; f < faces.size(); ++f) {
+                std::array<uint32_t, 3> face = {
+                    tv[t][faces[f][0]], tv[t][faces[f][1]], tv[t][faces[f][2]]};
+                std::sort(face.begin(), face.end());
+                const auto iter = face_map.find(face);
+                if (iter == face_map.end()) {
+                    return false;
+                }
+                tf[t][f] = iter->second;
+            }
+        }
+
+        return verifier<rxmesh::TetHandle, rxmesh::FaceHandle>(
+            tf,
+            rx,
+            rx.m_h_num_owned_t,
+            rx.m_h_patches_ltog_t,
+            rx.m_h_patches_ltog_f,
+            input,
+            output,
+            true);
+    }
 
    private:
     template <typename InputHandleT,
@@ -350,7 +449,8 @@ class RXMeshTest
                   const std::vector<std::vector<uint32_t>>& input_ltog,
                   const std::vector<std::vector<uint32_t>>& output_ltog,
                   const InputAttributeT&                    input,
-                  const OutputAttributeT&                   output)
+                  const OutputAttributeT&                   output,
+                  const bool                                ordered = false)
     {
         auto global_id_from_handle = [&](OutputHandleT xxh) -> uint32_t {
             auto pl = xxh.unpack();
@@ -399,11 +499,18 @@ class RXMeshTest
                         // extract local id from xxh's unique id
                         uint32_t xx_global = global_id_from_handle(xxh);
 
-                        uint32_t id =
-                            rxmesh::find_index(xx_global, gt[e_global]);
+                        if (ordered) {
+                            if (i >= gt[e_global].size() ||
+                                xx_global != gt[e_global][i]) {
+                                return false;
+                            }
+                        } else {
+                            uint32_t id =
+                                rxmesh::find_index(xx_global, gt[e_global]);
 
-                        if (id == std::numeric_limits<uint32_t>::max()) {
-                            return false;
+                            if (id == std::numeric_limits<uint32_t>::max()) {
+                                return false;
+                            }
                         }
                     }
                 }

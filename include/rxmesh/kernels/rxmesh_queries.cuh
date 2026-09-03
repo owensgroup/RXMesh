@@ -9,6 +9,7 @@
 #include "rxmesh/kernels/loader.cuh"
 #include "rxmesh/kernels/util.cuh"
 #include "rxmesh/types.h"
+#include "rxmesh/util/util.h"
 
 namespace rxmesh {
 namespace detail {
@@ -148,7 +149,7 @@ __device__ __forceinline__ void block_mat_transpose(
 
     if (num_cols > nnz) {
         // zero-ing the rest of mat
-        for (uint32_t i = threadIdx.x + nnz; i < num_cols; i += blockThreads) {
+        for (int i = threadIdx.x + nnz; i < num_cols; i += blockThreads) {
             mat[i] = 0;
         }
     }
@@ -162,18 +163,18 @@ __device__ __forceinline__ void block_mat_transpose(
 #if __CUDA_ARCH__ >= 700
     // 2) compute the number of items in each bucket/col
     __half* mat_half = (__half*)(mat);
-    for (uint32_t i = 0; i < itemPerThread; ++i) {
+    for (int i = 0; i < itemPerThread; ++i) {
         if (thread_data[i] != INVALID16) {
             local_offset[i] = ::atomicAdd(&mat_half[thread_data[i]], 1);
         }
     }
     __syncthreads();
-    for (uint32_t i = threadIdx.x; i < num_cols; i += blockThreads) {
+    for (int i = threadIdx.x; i < num_cols; i += blockThreads) {
         uint16_t val = uint16_t(mat_half[i]);
         mat[i]       = val;
     }
 #else
-    for (uint32_t i = 0; i < itemPerThread; ++i) {
+    for (int i = 0; i < itemPerThread; ++i) {
         if (thread_data[i] != INVALID16) {
             local_offset[i] = atomicAdd(&mat[thread_data[i]], 1u);
         }
@@ -185,7 +186,7 @@ __device__ __forceinline__ void block_mat_transpose(
     cub_block_exclusive_sum<uint16_t, blockThreads>(mat, num_cols);
 
     // 4) actually write the values
-    for (uint32_t i = 0; i < itemPerThread; ++i) {
+    for (int i = 0; i < itemPerThread; ++i) {
         uint16_t item = thread_data[i];
         if (item != INVALID16) {
             uint16_t offset = mat[item] + local_offset[i];
@@ -388,7 +389,7 @@ __device__ __forceinline__ void orient_edges_around_vertices(
     uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * num_faces);
     uint16_t* s_ef = shrd_alloc.alloc<uint16_t>(2 * num_edges);
 
-    for (uint32_t i = threadIdx.x; i < 2 * num_edges; i += blockThreads) {
+    for (int i = threadIdx.x; i < 2 * num_edges; i += blockThreads) {
         s_ef[i] = INVALID16;
     }
 
@@ -413,7 +414,7 @@ __device__ __forceinline__ void orient_edges_around_vertices(
     __syncthreads();
 
     // TODO check active_mask_v
-    for (uint32_t v = threadIdx.x; v < num_vertices; v += blockDim.x) {
+    for (int v = threadIdx.x; v < num_vertices; v += blockDim.x) {
 
         // TODO if the vertex is not owned by this patch, then there is no
         // reason to orient its edges because no serious computation is done on
@@ -609,7 +610,7 @@ __device__ __forceinline__ void v_v(cooperative_groups::thread_block& block,
     // TODO we can load-balance this better than this
     const uint32_t* s_ev_duplicate32 =
         reinterpret_cast<const uint32_t*>(s_ev_duplicate);
-    for (uint32_t v = threadIdx.x; v < num_vertices; v += blockThreads) {
+    for (int v = threadIdx.x; v < num_vertices; v += blockThreads) {
         if (detail::is_deleted(v, active_mask_v)) {
             continue;
         }
@@ -617,7 +618,7 @@ __device__ __forceinline__ void v_v(cooperative_groups::thread_block& block,
         uint32_t start = s_output_offset[v];
         uint32_t end   = s_output_offset[v + 1];
 
-        for (uint32_t e = start; e < end; ++e) {
+        for (int e = start; e < end; ++e) {
             const uint16_t edge = s_output_value[e];
 
             assert(!detail::is_deleted(edge, active_mask_e));
@@ -659,11 +660,11 @@ __device__ __forceinline__ void f_v(const uint16_t  num_edges,
     // face in d_faces (i.e., three items), then this thread
     // can safely over-write what is in d_faces.
 
-    for (uint32_t f = threadIdx.x; f < num_faces; f += blockThreads) {
+    for (int f = threadIdx.x; f < num_faces; f += blockThreads) {
         uint16_t f_v[3];
         uint32_t f_id = 3 * f;
         if (!is_deleted(f, active_mask_f)) {
-            for (uint32_t i = 0; i < 3; i++) {
+            for (int i = 0; i < 3; i++) {
                 uint16_t e = d_faces[f_id + i];
                 if (e == INVALID16) {
                     f_v[i] = INVALID16;
@@ -676,12 +677,152 @@ __device__ __forceinline__ void f_v(const uint16_t  num_edges,
                 assert(e_id < 2 * num_edges);
                 f_v[i] = d_edges[e_id];
             }
-            for (uint32_t i = 0; i < 3; i++) {
+            for (int i = 0; i < 3; i++) {
                 d_faces[f_id + i] = f_v[i];
             }
         } else {
-            for (uint32_t i = 0; i < 3; i++) {
+            for (int i = 0; i < 3; i++) {
                 d_faces[f_id + i] = INVALID16;
+            }
+        }
+    }
+}
+
+template <uint32_t blockThreads>
+__device__ __forceinline__ void t_e(const uint16_t  num_faces,
+                                    const uint16_t* d_faces,
+                                    const uint16_t  num_tets,
+                                    uint16_t*       d_tets,
+                                    const uint32_t* active_mask_t)
+{
+    // d_faces stores FE, d_tets stores TF such that each tet has 6 allocated
+    // slots in d_tets and only the first 4 contains the tet's faces.
+    // d_tet will contain the output (tets' edges)
+    constexpr auto edges = tet_edges();
+
+    for (int t = threadIdx.x; t < num_tets; t += blockThreads) {
+        const uint32_t t_id = 6 * t;
+
+        if (!is_deleted(t, active_mask_t)) {
+            // the tet's 4 faces
+            uint16_t faces[4];
+
+#pragma unroll
+            for (int f = 0; f < 4; ++f) {
+                faces[f] = d_tets[t_id + f] >> 1;
+                assert(faces[f] < num_faces);
+            }
+
+#pragma unroll
+            // loop over all potential edges
+            for (int e = 0; e < 6; ++e) {
+                uint16_t incident_faces[2];
+                uint32_t num_incident_faces = 0;
+
+#pragma unroll
+                // get the edge's two incident faces
+                for (int f = 0; f < 4; ++f) {
+                    if (f != edges[e][0] && f != edges[e][1]) {
+                        incident_faces[num_incident_faces++] = faces[f];
+                    }
+                }
+                assert(num_incident_faces == 2);
+
+                uint16_t common_edge = INVALID16;
+
+                // find the common edge between these two faces
+                for (int i = 0; i < 3; ++i) {
+                    const uint16_t e0 = d_faces[3 * incident_faces[0] + i] >> 1;
+                    for (int j = 0; j < 3; ++j) {
+                        const uint16_t e1 =
+                            d_faces[3 * incident_faces[1] + j] >> 1;
+                        if (e0 == e1) {
+                            common_edge = e0;
+                        }
+                    }
+                }
+
+                assert(common_edge != INVALID16);
+                d_tets[t_id + e] = common_edge;
+            }
+        } else {
+#pragma unroll
+            for (int e = 0; e < 6; ++e) {
+                d_tets[t_id + e] = INVALID16;
+            }
+        }
+    }
+}
+
+template <uint32_t blockThreads>
+__device__ __forceinline__ void t_v(const uint16_t  num_edges,
+                                    const uint16_t* d_edges,
+                                    const uint16_t  num_faces,
+                                    uint16_t*       d_faces,
+                                    const uint16_t  num_tets,
+                                    uint16_t*       d_tets,
+                                    const uint32_t* active_mask_f,
+                                    const uint32_t* active_mask_t)
+{
+    f_v<blockThreads>(num_edges, d_edges, num_faces, d_faces, active_mask_f);
+    __syncthreads();
+
+    // d_tets stores the tet 4 faces and will at the end stores the tet's 4
+    // vertices
+    // slot 0: stores face (v1,v2,v3), it will store v0
+    // slot 1: stores face (v0,v3,v2), it will store v1
+    // slot 2: stores face (v0,v1,v3), it will store v2
+    // slot 3: stores face (v0,v2,v1), it will store v3
+
+    // thus, after computing FV, and in order to compute the vertex in slot 0
+    // (v0), we do set difference between vertices of f0 and f1 (to find the
+    // vertex that does not exist in f0 slot). We do the same for other slots
+    for (int t = threadIdx.x; t < num_tets; t += blockThreads) {
+        const uint32_t t_id = 4 * t;
+
+        if (!is_deleted(t, active_mask_t)) {
+            uint16_t faces[4];
+            uint16_t vertices[4];
+
+#pragma unroll
+            for (int f = 0; f < 4; ++f) {
+                faces[f]    = d_tets[t_id + f] >> 1;
+                vertices[f] = INVALID16;
+                assert(faces[f] < num_faces);
+            }
+
+#pragma unroll
+            for (int f = 0; f < 4; ++f) {
+                const uint16_t other_face = faces[(f + 1) % 4];
+
+#pragma unroll
+                for (int v = 0; v < 3; ++v) {
+
+                    const uint16_t candidate = d_faces[3 * other_face + v];
+                    bool           in_face   = false;
+
+#pragma unroll
+                    for (int fv = 0; fv < 3; ++fv) {
+                        in_face =
+                            in_face || candidate == d_faces[3 * faces[f] + fv];
+                    }
+
+                    if (!in_face) {
+                        assert(vertices[f] == INVALID16);
+                        vertices[f] = candidate;
+                    }
+                }
+                assert(vertices[f] != INVALID16);
+            }
+
+#pragma unroll
+            for (int v = 0; v < 4; ++v) {
+                d_tets[t_id + v] = vertices[v];
+            }
+        } else {
+#pragma unroll
+            for (int v = 0; v < 4; ++v) {
+                d_tets[t_id + v] = INVALID16;
             }
         }
     }
@@ -1046,7 +1187,15 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
                    s_ev,
                    true);
 
-        block.sync();
+        t_v<blockThreads>(num_edges,
+                          s_ev,
+                          num_faces,
+                          s_fe,
+                          num_tets,
+                          s_output_value,
+                          patch_info.active_mask_f,
+                          patch_info.active_mask_t);
+
         shrd_alloc.dealloc<uint16_t>(2 * num_edges);
         shrd_alloc.dealloc<uint16_t>(3 * num_faces);
     }
@@ -1058,10 +1207,10 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
         s_output_value = shrd_alloc.alloc<uint16_t>(6 * num_tets);
         uint16_t* s_fe = shrd_alloc.alloc<uint16_t>(3 * num_faces);
 
-        for (uint16_t t = threadIdx.x; t < num_tets; t += blockThreads) {
+        for (int t = threadIdx.x; t < num_tets; t += blockThreads) {
             // TODO improve the loading here by loading a single uint64_t (i.e.,
             // 4 uint16_t) at a time
-            for (uint32_t f = 0; f < 4; ++f) {
+            for (int f = 0; f < 4; ++f) {
                 s_output_value[6 * t + f] = patch_info.tf[4 * t + f].id;
             }
         }
@@ -1072,7 +1221,12 @@ __device__ __forceinline__ void query(cooperative_groups::thread_block& block,
                    s_fe,
                    true);
 
-        block.sync();
+        t_e<blockThreads>(num_faces,
+                          s_fe,
+                          num_tets,
+                          s_output_value,
+                          patch_info.active_mask_t);
+
         shrd_alloc.dealloc<uint16_t>(3 * num_faces);
     }
 

@@ -687,7 +687,7 @@ size_t RXMeshStatic::calc_shared_memory(const Op   op,
     } else if (op == Op::TE) {
         // We load TF and FE, then compute TE. We then reuse the space of FE
         // to store E hashtable
-        // Additionally, TF needs 3xT and the output TE needs 6xT. So we
+        // Additionally, TF needs 4xT and the output TE needs 6xT. So we
         // allocate 6xT memory to store the input TF (only use the first 4 slots
         // per tet) and the over-write it with the tet's edges (6 slots per
         // tet).

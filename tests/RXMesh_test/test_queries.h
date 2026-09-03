@@ -5,6 +5,7 @@
 #include "gtest/gtest.h"
 
 #include "rxmesh/rxmesh_static.h"
+#include "rxmesh/util/MshLoader.h"
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh/util/report.h"
 #include "rxmesh_test.h"
@@ -95,7 +96,7 @@ void launcher(const std::vector<std::vector<uint32_t>>& Faces,
                 total_time / float(num_run));
 }
 
-TEST(RXMeshStatic, Queries)
+TEST(RXMeshStatic, TriangleQueries)
 {
     using namespace rxmesh;
 
@@ -216,4 +217,106 @@ TEST(RXMeshStatic, Queries)
     report.write(
         rxmesh_args.output_folder + "/rxmesh",
         "QueryTest_RXMesh_" + extract_file_name(rxmesh_args.obj_file_name));
+}
+
+TEST(RXMeshStatic, TetQueries)
+{
+    using namespace rxmesh;
+
+    const std::string tet_file = STRINGIFY(INPUT_DIR) "car.msh";
+    bool              oriented = false;
+
+    std::vector<std::vector<rx_coord_t>> Verts;
+    std::vector<std::vector<uint32_t>>   Tets;
+    ASSERT_EQ(load_msh(tet_file, Verts, Tets), MeshKind::Tet);
+
+    RXMeshStatic rx(tet_file);
+
+    std::vector<uint32_t> face_list(3 * rx.get_num_faces());
+    rx.create_face_list(face_list.data(), true);
+
+    std::vector<std::vector<uint32_t>> Faces(rx.get_num_faces(),
+                                             std::vector<uint32_t>(3));
+
+    for (uint32_t f = 0; f < rx.get_num_faces(); ++f) {
+        for (uint32_t v = 0; v < 3; ++v) {
+            Faces[f][v] = face_list[3 * f + v];
+        }
+    }
+
+    Report report("QueryTetTest_RXMesh");
+    report.command_line(rxmesh_args.argc, rxmesh_args.argv);
+    report.device();
+    report.system();
+    report.model_data(tet_file, rx);
+    report.add_member("method", std::string("RXMesh"));
+
+    ::RXMeshTest tester(rx, Faces);
+    EXPECT_TRUE(tester.run_ltog_mapping_test(rx, Faces))
+        << "Local-to-global mapping test failed";
+
+    {
+        // EV
+        auto input  = rx.add_edge_attribute<EdgeHandle>("input", 1);
+        auto output = rx.add_edge_attribute<VertexHandle>("output", 2);
+        launcher<Op::EV, EdgeHandle, VertexHandle>(
+            Faces, rx, *input, *output, tester, report, oriented);
+        rx.remove_attribute("input");
+        rx.remove_attribute("output");
+    }
+
+    {
+        // FV
+        auto input  = rx.add_face_attribute<FaceHandle>("input", 1);
+        auto output = rx.add_face_attribute<VertexHandle>("output", 3);
+        launcher<Op::FV, FaceHandle, VertexHandle>(
+            Faces, rx, *input, *output, tester, report, oriented);
+        rx.remove_attribute("input");
+        rx.remove_attribute("output");
+    }
+
+    {
+        // FE
+        auto input  = rx.add_face_attribute<FaceHandle>("input", 1);
+        auto output = rx.add_face_attribute<EdgeHandle>("output", 3);
+        launcher<Op::FE, FaceHandle, EdgeHandle>(
+            Faces, rx, *input, *output, tester, report, oriented);
+        rx.remove_attribute("input");
+        rx.remove_attribute("output");
+    }
+
+    {
+        // TV
+        auto input  = rx.add_tet_attribute<TetHandle>("input", 1);
+        auto output = rx.add_tet_attribute<VertexHandle>("output", 4);
+        launcher<Op::TV, TetHandle, VertexHandle>(
+            Tets, rx, *input, *output, tester, report, oriented);
+        rx.remove_attribute("input");
+        rx.remove_attribute("output");
+    }
+
+    {
+        // TE
+        auto input  = rx.add_tet_attribute<TetHandle>("input", 1);
+        auto output = rx.add_tet_attribute<EdgeHandle>("output", 6);
+        launcher<Op::TE, TetHandle, EdgeHandle>(
+            Tets, rx, *input, *output, tester, report, oriented);
+        rx.remove_attribute("input");
+        rx.remove_attribute("output");
+    }
+
+    {
+        // TF
+        auto input  = rx.add_tet_attribute<TetHandle>("input", 1);
+        auto output = rx.add_tet_attribute<FaceHandle>("output", 4);
+        launcher<Op::TF, TetHandle, FaceHandle>(
+            Tets, rx, *input, *output, tester, report, oriented);
+        rx.remove_attribute("input");
+        rx.remove_attribute("output");
+    }
+
+    // Add reverse and adjacency tet queries here as they are implemented.
+
+    report.write(rxmesh_args.output_folder + "/rxmesh",
+                 "QueryTetTest_RXMesh_" + extract_file_name(tet_file));
 }
