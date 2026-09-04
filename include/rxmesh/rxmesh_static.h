@@ -65,6 +65,14 @@ class RXMeshStatic : public RXMesh
                           const float       patch_alloc_factor       = 1.0,
                           const float       lp_hashtable_load_factor = 0.8);
 
+    explicit RXMeshStatic(const std::string file_path,
+                          const std::string patcher_file,
+                          const uint32_t    patch_size,
+                          const float       capacity_factor,
+                          const float       patch_alloc_factor,
+                          const float       lp_hashtable_load_factor,
+                          layoutT           input_vertex_layout);
+
     /**
      * @brief  Constructor using triangles and vertices
      * @param fv Face incident vertices as read from an obj file
@@ -99,6 +107,10 @@ class RXMeshStatic : public RXMesh
     explicit RXMeshStatic(const std::vector<std::string> files_path,
                           const uint32_t                 patch_size = 512);
 
+    explicit RXMeshStatic(const std::vector<std::string> files_path,
+                          const uint32_t                 patch_size,
+                          layoutT                        input_vertex_layout);
+
     /**
      * @brief Add vertex coordinates to the input mesh. When calling
      * RXMeshStatic constructor that takes the face's vertices, this function
@@ -109,6 +121,9 @@ class RXMeshStatic : public RXMesh
      */
     void add_vertex_coordinates(std::vector<std::vector<rx_coord_t>>& vertices,
                                 std::string mesh_name = "");
+    void add_vertex_coordinates(std::vector<std::vector<rx_coord_t>>& vertices,
+                                std::string                           mesh_name,
+                                layoutT                               layout);
 
     virtual ~RXMeshStatic() = default;
 
