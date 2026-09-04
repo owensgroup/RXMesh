@@ -10,6 +10,23 @@ RXMeshStatic::RXMeshStatic(const std::string file_path,
                            const float       capacity_factor,
                            const float       patch_alloc_factor,
                            const float       lp_hashtable_load_factor)
+    : RXMeshStatic(file_path,
+                   patcher_file,
+                   patch_size,
+                   capacity_factor,
+                   patch_alloc_factor,
+                   lp_hashtable_load_factor,
+                   AoSoA)
+{
+}
+
+RXMeshStatic::RXMeshStatic(const std::string file_path,
+                           const std::string patcher_file,
+                           const uint32_t    patch_size,
+                           const float       capacity_factor,
+                           const float       patch_alloc_factor,
+                           const float       lp_hashtable_load_factor,
+                           layoutT           input_vertex_layout)
     : RXMesh(patch_size)
 {
     m_num_regions = 1;
@@ -59,7 +76,7 @@ RXMeshStatic::RXMeshStatic(const std::string file_path,
     m_polyscope_edge_permute.reserve(this->get_num_edges());
     name = polyscope::guessNiceNameFromPath(file_path);
 #endif
-    add_vertex_coordinates(vertices, name);
+    add_vertex_coordinates(vertices, name, input_vertex_layout);
 }
 
 RXMeshStatic::RXMeshStatic(std::vector<std::vector<uint32_t>>& simplices,
@@ -99,6 +116,13 @@ RXMeshStatic::RXMeshStatic(std::vector<std::vector<rx_coord_t>>& vertices,
 
 RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
                            const uint32_t                 patch_size)
+    : RXMeshStatic(files_path, patch_size, AoSoA)
+{
+}
+
+RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
+                           const uint32_t                 patch_size,
+                           layoutT                        input_vertex_layout)
     : RXMesh(patch_size)
 {
     m_num_regions = static_cast<int>(files_path.size());
@@ -165,7 +189,7 @@ RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
 #if USE_POLYSCOPE
     name = polyscope::guessNiceNameFromPath(name);
 #endif
-    add_vertex_coordinates(vertices, name);
+    add_vertex_coordinates(vertices, name, input_vertex_layout);
 
     // add region labels
     m_vertex_label =
@@ -249,10 +273,18 @@ void RXMeshStatic::add_vertex_coordinates(
     std::vector<std::vector<rx_coord_t>>& vertices,
     std::string                           mesh_name)
 {
+    add_vertex_coordinates(vertices, mesh_name, AoSoA);
+}
+
+void RXMeshStatic::add_vertex_coordinates(
+    std::vector<std::vector<rx_coord_t>>& vertices,
+    std::string                           mesh_name,
+    layoutT                               layout)
+{
     if (m_input_vertex_coordinates == nullptr) {
 
-        m_input_vertex_coordinates =
-            this->add_vertex_attribute<rx_coord_t>(vertices, "rx:vertices");
+        m_input_vertex_coordinates = this->add_vertex_attribute<rx_coord_t>(
+            vertices, "rx:vertices", layout);
 
 #if USE_POLYSCOPE
         if (!m_is_tet_mesh) {
