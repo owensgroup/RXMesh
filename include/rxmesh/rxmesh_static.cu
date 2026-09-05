@@ -292,9 +292,10 @@ void RXMeshStatic::render_edge_patch_and_local_id(
     const uint32_t                              p,
     polyscope::SurfaceMesh*                     polyscope_mesh)
 {
-    update_polyscope_edge_permutation(fv);
+    std::vector<uint32_t> edge_permutation;
+    update_polyscope_edge_permutation(fv, edge_permutation);
 
-    polyscope_mesh->setEdgePermutation(m_polyscope_edge_permute);
+    polyscope_mesh->setEdgePermutation(edge_permutation);
 
     std::string      p_name = "rx:EPatch" + std::to_string(p);
     std::string      l_name = "rx:ELocal" + std::to_string(p);
@@ -306,8 +307,8 @@ void RXMeshStatic::render_edge_patch_and_local_id(
         local_id[linear_id(eh)] = eh.local_id();
     });
 
-    uint32_t max_edge_id = *std::max_element(m_polyscope_edge_permute.begin(),
-                                             m_polyscope_edge_permute.end());
+    uint32_t max_edge_id =
+        *std::max_element(edge_permutation.begin(), edge_permutation.end());
 
     patch_id.resize(max_edge_id + 1);
     local_id.resize(max_edge_id + 1);
@@ -492,11 +493,12 @@ void RXMeshStatic::update_polyscope_edge_map()
 }
 
 void RXMeshStatic::update_polyscope_edge_permutation(
-    const std::vector<std::array<uint32_t, 3>>& fv)
+    const std::vector<std::array<uint32_t, 3>>& fv,
+    std::vector<uint32_t>&                      permutation)
 {
-    m_polyscope_edge_permute.clear();
+    permutation.clear();
 
-    // m_polyscope_edge_permute.resize(this->get_num_edges());
+    // permutation.resize(this->get_num_edges());
     // int eid = 0;
 
     std::vector<bool> visited(this->get_num_edges(), false);
@@ -532,7 +534,7 @@ void RXMeshStatic::update_polyscope_edge_permutation(
 
             if (!visited[id]) {
                 visited[id] = true;
-                m_polyscope_edge_permute.push_back(id);
+                permutation.push_back(id);
                 // m_polyscope_edge_permute[id] = eid;
                 // eid++;
             }
@@ -554,7 +556,7 @@ void RXMeshStatic::register_polyscope()
     }
 
     //  populate m_polyscope_edge_permute
-    update_polyscope_edge_permutation(fv);
+    update_polyscope_edge_permutation(fv, m_polyscope_edge_permute);
 
     m_polyscope_mesh = polyscope::registerSurfaceMesh(
         m_polyscope_mesh_name, *m_input_vertex_coordinates, fv);
@@ -562,6 +564,59 @@ void RXMeshStatic::register_polyscope()
     m_polyscope_mesh->setEdgePermutation(m_polyscope_edge_permute);
 }
 #endif
+
+const std::vector<uint32_t>& RXMeshStatic::get_edge_permutation()
+{
+    if (m_polyscope_edge_permute.size() == get_num_edges()) {
+        return m_polyscope_edge_permute;
+    }
+
+    m_polyscope_edge_permute.clear();
+    m_polyscope_edge_permute.reserve(get_num_edges());
+
+    if (get_num_edges() == 0) {
+        return m_polyscope_edge_permute;
+    }
+
+    std::vector<uint32_t> edges(2 * get_num_edges());
+    create_edge_list(edges.data(), false);
+
+    EdgeMapT edge_map;
+    edge_map.reserve(get_num_edges());
+    for (uint32_t e = 0; e < get_num_edges(); ++e) {
+        edge_map.emplace(detail::edge_key(edges[2 * e], edges[2 * e + 1]), e);
+    }
+
+    std::vector<uint32_t> faces(3 * get_num_faces());
+    create_face_list(faces.data(), false);
+
+    std::vector<bool> visited(get_num_edges(), false);
+    for (uint32_t f = 0; f < get_num_faces(); ++f) {
+        for (uint32_t i = 0; i < 3; ++i) {
+            const uint32_t a    = faces[3 * f + i];
+            const uint32_t b    = faces[3 * f + (i + 1) % 3];
+            const auto     iter = edge_map.find(detail::edge_key(a, b));
+
+            if (iter == edge_map.end()) {
+                RXMESH_ERROR(
+                    "RXMeshStatic::get_edge_permutation could not find edge "
+                    "({}, {})",
+                    a,
+                    b);
+                m_polyscope_edge_permute.clear();
+                return m_polyscope_edge_permute;
+            }
+
+            const uint32_t edge_id = iter->second;
+            if (!visited[edge_id]) {
+                visited[edge_id] = true;
+                m_polyscope_edge_permute.push_back(edge_id);
+            }
+        }
+    }
+
+    return m_polyscope_edge_permute;
+}
 
 bool RXMeshStatic::does_attribute_exist(const std::string& name)
 {
@@ -791,7 +846,7 @@ void RXMeshStatic::create_face_list(std::vector<glm::uvec3>& f_list) const
 void RXMeshStatic::create_face_list(uint32_t* f_list,
                                     bool      use_global_order) const
 {
-    //TODO should combine this implementation and the one above into one 
+    // TODO should combine this implementation and the one above into one
     if (f_list == nullptr && get_num_faces() != 0) {
         RXMESH_ERROR("RXMeshStatic::create_face_list output buffer is null");
         return;
@@ -818,6 +873,34 @@ void RXMeshStatic::create_face_list(uint32_t* f_list,
                     const uint32_t     vid =
                         use_global_order ? map_to_global(vh) : linear_id(vh);
                     f_list[3 * row + e] = vid;
+                }
+            }
+        }
+    }
+}
+
+void RXMeshStatic::create_edge_list(uint32_t* e_list,
+                                    bool      use_global_order) const
+{
+    if (e_list == nullptr && get_num_edges() != 0) {
+        RXMESH_ERROR("RXMeshStatic::create_edge_list output buffer is null");
+        return;
+    }
+
+    for (uint32_t p = 0; p < this->m_num_patches; ++p) {
+        const auto&    patch       = this->m_h_patches_info[p];
+        const uint32_t p_num_edges = patch.num_edges[0];
+        for (uint32_t e = 0; e < p_num_edges; ++e) {
+            const LocalEdgeT local_edge(e);
+            if (!patch.is_deleted(local_edge) && patch.is_owned(local_edge)) {
+                const EdgeHandle eh(p, local_edge);
+                const uint32_t   row =
+                    use_global_order ? map_to_global(eh) : linear_id(eh);
+
+                for (uint32_t i = 0; i < 2; ++i) {
+                    const VertexHandle vh(p, {patch.ev[2 * e + i].id});
+                    e_list[2 * row + i] =
+                        use_global_order ? map_to_global(vh) : linear_id(vh);
                 }
             }
         }
