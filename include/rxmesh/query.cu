@@ -81,6 +81,21 @@ template struct Query<1024>;
         ShmemAllocator&,                                         \
         const bool,                                              \
         const bool);                                             \
+    template void Query<BLOCK_THREADS>::prologue<Op::VT>(        \
+        cooperative_groups::thread_block&,                       \
+        ShmemAllocator&,                                         \
+        const bool,                                              \
+        const bool);                                             \
+    template void Query<BLOCK_THREADS>::prologue<Op::ET>(        \
+        cooperative_groups::thread_block&,                       \
+        ShmemAllocator&,                                         \
+        const bool,                                              \
+        const bool);                                             \
+    template void Query<BLOCK_THREADS>::prologue<Op::FT>(        \
+        cooperative_groups::thread_block&,                       \
+        ShmemAllocator&,                                         \
+        const bool,                                              \
+        const bool);                                             \
     template void Query<BLOCK_THREADS>::prologue<Op::TV>(        \
         cooperative_groups::thread_block&,                       \
         ShmemAllocator&,                                         \
@@ -114,6 +129,8 @@ RXMESH_QUERY_INSTANTIATE_PROLOGUE(1024)
     template DEdgeIterator Query<BLOCK_THREADS>::get_iterator<DEdgeIterator>( \
         uint16_t) const;                                                      \
     template FaceIterator Query<BLOCK_THREADS>::get_iterator<FaceIterator>(   \
+        uint16_t) const;                                                      \
+    template TetIterator Query<BLOCK_THREADS>::get_iterator<TetIterator>(     \
         uint16_t) const;
 
 RXMESH_QUERY_INSTANTIATE_GET_ITERATOR(128)

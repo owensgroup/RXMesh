@@ -28,6 +28,7 @@ __global__ static void query_kernel(
                             const Iterator<OutputHandleT>& iter) {
         input(id) = id;
 
+        assert(iter.size() <= output.get_num_attributes());
         for (uint32_t i = 0; i < iter.size(); ++i) {
             output(id, i) = iter[i];
         }

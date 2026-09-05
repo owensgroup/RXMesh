@@ -1,4 +1,7 @@
+#include <algorithm>
+#include <array>
 #include <functional>
+#include <map>
 #include <numeric>
 #include <vector>
 
@@ -230,7 +233,42 @@ TEST(RXMeshStatic, TetQueries)
     std::vector<std::vector<uint32_t>>   Tets;
     ASSERT_EQ(load_msh(tet_file, Verts, Tets), MeshKind::Tet);
 
+    std::vector<uint32_t> vertex_tet_degree(Verts.size(), 0);
+    std::map<std::pair<uint32_t, uint32_t>, uint32_t> edge_tet_degree;
+    std::map<std::array<uint32_t, 3>, uint32_t>       face_tet_degree;
+    uint32_t                                          max_vt = 0;
+    uint32_t                                          max_et = 0;
+    uint32_t                                          max_ft = 0;
+
+    constexpr auto edges = tet_edges();
+    constexpr auto faces = tet_faces();
+
+    for (const auto& tet : Tets) {
+        for (uint32_t v : tet) {
+            max_vt = std::max(max_vt, ++vertex_tet_degree[v]);
+        }
+        for (const auto& edge : edges) {
+            const auto key = detail::edge_key(tet[edge[0]], tet[edge[1]]);
+            max_et         = std::max(max_et, ++edge_tet_degree[key]);
+        }
+        for (const auto& face_vertices : faces) {
+            std::array<uint32_t, 3> face = {tet[face_vertices[0]],
+                                            tet[face_vertices[1]],
+                                            tet[face_vertices[2]]};
+            std::sort(face.begin(), face.end());
+            max_ft = std::max(max_ft, ++face_tet_degree[face]);
+        }
+    }
+
+    EXPECT_TRUE(std::any_of(face_tet_degree.begin(),
+                            face_tet_degree.end(),
+                            [](const auto& face) { return face.second == 1; }));
+    EXPECT_TRUE(std::any_of(face_tet_degree.begin(),
+                            face_tet_degree.end(),
+                            [](const auto& face) { return face.second == 2; }));
+
     RXMeshStatic rx(tet_file);
+    EXPECT_GT(rx.get_num_patches(), 1u);
 
     std::vector<uint32_t> face_list(3 * rx.get_num_faces());
     rx.create_face_list(face_list.data(), true);
@@ -315,7 +353,35 @@ TEST(RXMeshStatic, TetQueries)
         rx.remove_attribute("output");
     }
 
-    // Add reverse and adjacency tet queries here as they are implemented.
+    {
+        // VT
+        auto input  = rx.add_vertex_attribute<VertexHandle>("input", 1);
+        auto output = rx.add_vertex_attribute<TetHandle>("output", max_vt);
+        launcher<Op::VT, VertexHandle, TetHandle>(
+            Tets, rx, *input, *output, tester, report, oriented);
+        rx.remove_attribute("input");
+        rx.remove_attribute("output");
+    }
+
+    {
+        // ET
+        auto input  = rx.add_edge_attribute<EdgeHandle>("input", 1);
+        auto output = rx.add_edge_attribute<TetHandle>("output", max_et);
+        launcher<Op::ET, EdgeHandle, TetHandle>(
+            Tets, rx, *input, *output, tester, report, oriented);
+        rx.remove_attribute("input");
+        rx.remove_attribute("output");
+    }
+
+    {
+        // FT
+        auto input  = rx.add_face_attribute<FaceHandle>("input", 1);
+        auto output = rx.add_face_attribute<TetHandle>("output", max_ft);
+        launcher<Op::FT, FaceHandle, TetHandle>(
+            Tets, rx, *input, *output, tester, report, oriented);
+        rx.remove_attribute("input");
+        rx.remove_attribute("output");
+    }
 
     report.write(rxmesh_args.output_folder + "/rxmesh",
                  "QueryTetTest_RXMesh_" + extract_file_name(tet_file));

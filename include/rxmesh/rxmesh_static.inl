@@ -570,7 +570,12 @@ void RXMeshStatic::prepare_launch_box(
     launch_box.blocks         = this->m_num_patches;
     launch_box.smem_bytes_dyn = 0;
 
+    bool has_reverse_tet_query = false;
+
     for (auto o : op) {
+        has_reverse_tet_query =
+            has_reverse_tet_query || o == Op::VT || o == Op::ET || o == Op::FT;
+
         size_t sh =
             this->template calc_shared_memory<blockThreads>(o, oriented, false);
         if (is_concurrent) {
@@ -593,6 +598,16 @@ void RXMeshStatic::prepare_launch_box(
         launch_box.smem_bytes_dyn +=
             this->m_max_vertices_per_patch * sizeof(uint8_t) +
             ShmemAllocator::default_alignment;
+    }
+
+    if (m_is_tet_mesh && has_reverse_tet_query) {
+        cudaFuncAttributes func_attr = cudaFuncAttributes();
+        CUDA_ERROR(cudaFuncGetAttributes(&func_attr, kernel));
+
+        if (launch_box.smem_bytes_dyn >
+            static_cast<size_t>(func_attr.maxDynamicSharedSizeBytes)) {
+            set_max_dynamic_smem(kernel);
+        }
     }
 
 
@@ -667,7 +682,61 @@ size_t RXMeshStatic::calc_shared_memory(const Op   op,
     size_t dynamic_smem = 0;
 
 
-    if (op == Op::TF) {
+    if (op == Op::VT) {
+        const size_t offset_smem =
+            std::max(4 * max_t, max_v + 1) * sizeof(uint16_t);
+        const size_t value_smem    = 4 * max_t * sizeof(uint16_t);
+        const size_t topology_smem = (3 * max_f + 2 * max_e) * sizeof(uint16_t);
+        const size_t transpose_smem = (2 * max_v + 1) * sizeof(uint16_t);
+        const size_t lp_smem =
+            sizeof(LPPair) * max_lp_hashtable_capacity<LocalTetT>();
+
+        dynamic_smem = offset_smem;
+        dynamic_smem += detail::mask_num_bytes(max_v);
+        dynamic_smem += detail::mask_num_bytes(max_t);
+        dynamic_smem += std::max(
+            topology_smem, value_smem + std::max(transpose_smem, lp_smem));
+
+        // participant mask, owned mask, offset, FE, EV, value, two transpose
+        // buffers, and LP hashtable
+        dynamic_smem += ShmemAllocator::default_alignment * 9;
+
+    } else if (op == Op::ET) {
+        const size_t offset_smem =
+            std::max(6 * max_t, max_e + 1) * sizeof(uint16_t);
+        const size_t value_smem     = 6 * max_t * sizeof(uint16_t);
+        const size_t topology_smem  = 3 * max_f * sizeof(uint16_t);
+        const size_t transpose_smem = (2 * max_e + 1) * sizeof(uint16_t);
+        const size_t lp_smem =
+            sizeof(LPPair) * max_lp_hashtable_capacity<LocalTetT>();
+
+        dynamic_smem = offset_smem;
+        dynamic_smem += detail::mask_num_bytes(max_e);
+        dynamic_smem += detail::mask_num_bytes(max_t);
+        dynamic_smem += std::max(
+            topology_smem, value_smem + std::max(transpose_smem, lp_smem));
+
+        // participant mask, owned mask, offset, FE, value, two transpose
+        // buffers, and LP hashtable
+        dynamic_smem += ShmemAllocator::default_alignment * 8;
+
+    } else if (op == Op::FT) {
+        const size_t output_smem =
+            (std::max(4 * max_t, max_f + 1) + 4 * max_t) * sizeof(uint16_t);
+        const size_t transpose_smem = (2 * max_f + 1) * sizeof(uint16_t);
+        const size_t lp_smem =
+            sizeof(LPPair) * max_lp_hashtable_capacity<LocalTetT>();
+
+        dynamic_smem = output_smem;
+        dynamic_smem += detail::mask_num_bytes(max_f);
+        dynamic_smem += detail::mask_num_bytes(max_t);
+        dynamic_smem += std::max(transpose_smem, lp_smem);
+
+        // participant mask, owned mask, output, two transpose buffers, and LP
+        // hashtable
+        dynamic_smem += ShmemAllocator::default_alignment * 6;
+
+    } else if (op == Op::TF) {
         // TF is the output and stays allocated with the face LP hashtable
         dynamic_smem = 4 * max_t * sizeof(uint16_t);
 

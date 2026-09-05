@@ -438,6 +438,107 @@ class RXMeshTest
             true);
     }
 
+    /**
+     * @brief verify VT query
+     */
+    bool run_test(const rxmesh::RXMeshStatic&                          rx,
+                  const std::vector<std::vector<uint32_t>>&            tv,
+                  const rxmesh::VertexAttribute<rxmesh::VertexHandle>& input,
+                  const rxmesh::VertexAttribute<rxmesh::TetHandle>&    output)
+    {
+        std::vector<std::vector<uint32_t>> vt(rx.get_num_vertices());
+
+        for (uint32_t t = 0; t < tv.size(); ++t) {
+            for (uint32_t v : tv[t]) {
+                vt[v].push_back(t);
+            }
+        }
+
+        return verifier<rxmesh::VertexHandle, rxmesh::TetHandle>(
+            vt,
+            rx,
+            rx.m_h_num_owned_v,
+            rx.m_h_patches_ltog_v,
+            rx.m_h_patches_ltog_t,
+            input,
+            output);
+    }
+
+    /**
+     * @brief verify ET query
+     */
+    bool run_test(const rxmesh::RXMeshStatic&                      rx,
+                  const std::vector<std::vector<uint32_t>>&        tv,
+                  const rxmesh::EdgeAttribute<rxmesh::EdgeHandle>& input,
+                  const rxmesh::EdgeAttribute<rxmesh::TetHandle>&  output)
+    {
+        std::vector<std::vector<uint32_t>> et(rx.get_num_edges());
+        constexpr auto                     edges = rxmesh::tet_edges();
+
+        for (uint32_t t = 0; t < tv.size(); ++t) {
+            for (const auto& edge : edges) {
+                const uint32_t e = rx.get_edge_id(
+                    rxmesh::detail::edge_key(tv[t][edge[0]], tv[t][edge[1]]));
+                et[e].push_back(t);
+            }
+        }
+
+        return verifier<rxmesh::EdgeHandle, rxmesh::TetHandle>(
+            et,
+            rx,
+            rx.m_h_num_owned_e,
+            rx.m_h_patches_ltog_e,
+            rx.m_h_patches_ltog_t,
+            input,
+            output);
+    }
+
+    /**
+     * @brief verify FT query
+     */
+    bool run_test(const rxmesh::RXMeshStatic&                      rx,
+                  const std::vector<std::vector<uint32_t>>&        tv,
+                  const rxmesh::FaceAttribute<rxmesh::FaceHandle>& input,
+                  const rxmesh::FaceAttribute<rxmesh::TetHandle>&  output)
+    {
+        std::vector<uint32_t> face_list(3 * rx.get_num_faces());
+        rx.create_face_list(face_list.data(), true);
+
+        std::map<std::array<uint32_t, 3>, uint32_t> face_map;
+        for (uint32_t f = 0; f < rx.get_num_faces(); ++f) {
+            std::array<uint32_t, 3> face = {
+                face_list[3 * f], face_list[3 * f + 1], face_list[3 * f + 2]};
+            std::sort(face.begin(), face.end());
+            face_map.emplace(face, f);
+        }
+
+        std::vector<std::vector<uint32_t>> ft(rx.get_num_faces());
+        constexpr auto                     faces = rxmesh::tet_faces();
+
+        for (uint32_t t = 0; t < tv.size(); ++t) {
+            for (const auto& face_vertices : faces) {
+                std::array<uint32_t, 3> face = {tv[t][face_vertices[0]],
+                                                tv[t][face_vertices[1]],
+                                                tv[t][face_vertices[2]]};
+                std::sort(face.begin(), face.end());
+                const auto iter = face_map.find(face);
+                if (iter == face_map.end()) {
+                    return false;
+                }
+                ft[iter->second].push_back(t);
+            }
+        }
+
+        return verifier<rxmesh::FaceHandle, rxmesh::TetHandle>(
+            ft,
+            rx,
+            rx.m_h_num_owned_f,
+            rx.m_h_patches_ltog_f,
+            rx.m_h_patches_ltog_t,
+            input,
+            output);
+    }
+
    private:
     template <typename InputHandleT,
               typename OutputHandleT,
@@ -472,6 +573,10 @@ class RXMeshTest
             if constexpr (std::is_same_v<OutputHandleT, rxmesh::FaceHandle>) {
                 return rxmesh::detail::is_owned(
                     pl.second, rx.m_h_patches_info[pl.first].owned_mask_f);
+            }
+            if constexpr (std::is_same_v<OutputHandleT, rxmesh::TetHandle>) {
+                return rxmesh::detail::is_owned(
+                    pl.second, rx.m_h_patches_info[pl.first].owned_mask_t);
             }
         };
 

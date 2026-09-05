@@ -457,7 +457,7 @@ void Patcher::print_statistics()
         min_patch_size,
         avg_patch_size);
 
-    RXMESH_INFO("Patcher: number external ribbon faces = {} ({:02.2f}%)",
+    RXMESH_INFO("Patcher: number external ribbon elements = {} ({:02.2f}%)",
                 get_num_ext_ribbon_faces(),
                 get_ribbon_overhead());
 }
