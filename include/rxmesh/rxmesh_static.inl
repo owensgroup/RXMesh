@@ -570,12 +570,7 @@ void RXMeshStatic::prepare_launch_box(
     launch_box.blocks         = this->m_num_patches;
     launch_box.smem_bytes_dyn = 0;
 
-    bool has_reverse_tet_query = false;
-
     for (auto o : op) {
-        has_reverse_tet_query =
-            has_reverse_tet_query || o == Op::VT || o == Op::ET || o == Op::FT;
-
         size_t sh =
             this->template calc_shared_memory<blockThreads>(o, oriented, false);
         if (is_concurrent) {
@@ -600,7 +595,7 @@ void RXMeshStatic::prepare_launch_box(
             ShmemAllocator::default_alignment;
     }
 
-    if (m_is_tet_mesh && has_reverse_tet_query) {
+    if (m_is_tet_mesh) {
         cudaFuncAttributes func_attr = cudaFuncAttributes();
         CUDA_ERROR(cudaFuncGetAttributes(&func_attr, kernel));
 

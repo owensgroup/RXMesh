@@ -275,10 +275,13 @@ TEST(RXMeshStatic, TetQueries)
 
     std::vector<std::vector<uint32_t>> Faces(rx.get_num_faces(),
                                              std::vector<uint32_t>(3));
+    std::vector<uint32_t> vertex_face_degree(rx.get_num_vertices(), 0);
+    uint32_t              max_vf = 0;
 
     for (uint32_t f = 0; f < rx.get_num_faces(); ++f) {
         for (uint32_t v = 0; v < 3; ++v) {
             Faces[f][v] = face_list[3 * f + v];
+            max_vf      = std::max(max_vf, ++vertex_face_degree[Faces[f][v]]);
         }
     }
 
@@ -294,10 +297,53 @@ TEST(RXMeshStatic, TetQueries)
         << "Local-to-global mapping test failed";
 
     {
+        // VV
+        auto input  = rx.add_vertex_attribute<VertexHandle>("input", 1);
+        auto output = rx.add_vertex_attribute<VertexHandle>(
+            "output", rx.get_input_max_valence());
+        launcher<Op::VV, VertexHandle, VertexHandle>(
+            Faces, rx, *input, *output, tester, report, oriented);
+        rx.remove_attribute("input");
+        rx.remove_attribute("output");
+    }
+
+    {
+        // VE
+        auto input  = rx.add_vertex_attribute<VertexHandle>("input", 1);
+        auto output = rx.add_vertex_attribute<EdgeHandle>(
+            "output", rx.get_input_max_valence());
+        launcher<Op::VE, VertexHandle, EdgeHandle>(
+            Faces, rx, *input, *output, tester, report, oriented);
+        rx.remove_attribute("input");
+        rx.remove_attribute("output");
+    }
+
+    {
+        // VF
+        auto input  = rx.add_vertex_attribute<VertexHandle>("input", 1);
+        auto output = rx.add_vertex_attribute<FaceHandle>("output", max_vf);
+        launcher<Op::VF, VertexHandle, FaceHandle>(
+            Faces, rx, *input, *output, tester, report, oriented);
+        rx.remove_attribute("input");
+        rx.remove_attribute("output");
+    }
+
+    {
         // EV
         auto input  = rx.add_edge_attribute<EdgeHandle>("input", 1);
         auto output = rx.add_edge_attribute<VertexHandle>("output", 2);
         launcher<Op::EV, EdgeHandle, VertexHandle>(
+            Faces, rx, *input, *output, tester, report, oriented);
+        rx.remove_attribute("input");
+        rx.remove_attribute("output");
+    }
+
+    {
+        // EF
+        auto input  = rx.add_edge_attribute<EdgeHandle>("input", 1);
+        auto output = rx.add_edge_attribute<FaceHandle>(
+            "output", rx.get_input_max_edge_incident_faces());
+        launcher<Op::EF, EdgeHandle, FaceHandle>(
             Faces, rx, *input, *output, tester, report, oriented);
         rx.remove_attribute("input");
         rx.remove_attribute("output");
