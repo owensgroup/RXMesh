@@ -1516,6 +1516,9 @@ class RXMeshStatic : public RXMesh
 #endif
 
    public:
+    void add_face_labels(TetAttribute<int>&  tet_label,
+                         FaceAttribute<int>& face_label);
+
     void add_edge_labels(FaceAttribute<int>& face_label,
                          EdgeAttribute<int>& edge_label);
 

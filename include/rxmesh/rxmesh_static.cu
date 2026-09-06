@@ -218,6 +218,16 @@ RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
             false);
 
         m_tet_label->move(HOST, DEVICE);
+
+        m_face_label =
+            add_face_attribute<int>("rx:face_label", 1, LOCATION_ALL);
+        m_edge_label =
+            add_edge_attribute<int>("rx:edge_label", 1, LOCATION_ALL);
+
+        add_face_labels(*m_tet_label, *m_face_label);
+        add_edge_labels(*m_face_label, *m_edge_label);
+        m_face_label->move(DEVICE, HOST);
+        m_edge_label->move(DEVICE, HOST);
     } else {
         m_face_label =
             add_face_attribute<int>("rx:face_label", 1, LOCATION_ALL);
@@ -1205,6 +1215,20 @@ void RXMeshStatic::create_edge_list(uint32_t* e_list,
             }
         }
     }
+}
+
+void RXMeshStatic::add_face_labels(TetAttribute<int>&  tet_label,
+                                   FaceAttribute<int>& face_label)
+{
+    for_each<Op::TF, 256>([tet_label, face_label] __device__(
+                              const TetHandle th, const FaceIterator iter) {
+        int label = tet_label(th);
+
+        face_label(iter[0]) = label;
+        face_label(iter[1]) = label;
+        face_label(iter[2]) = label;
+        face_label(iter[3]) = label;
+    });
 }
 
 void RXMeshStatic::add_edge_labels(FaceAttribute<int>& face_label,
