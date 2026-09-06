@@ -65,7 +65,6 @@ TEST(RXMeshStatic, MultipleTetMeshes)
     auto volume_mesh = rx.get_polyscope_volume_mesh();
     ASSERT_NE(volume_mesh, nullptr);
     EXPECT_NE(volume_mesh->getQuantity("rx:VLabel"), nullptr);
-    EXPECT_NE(volume_mesh->getQuantity("rx:TLabel"), nullptr);
-    polyscope::show();
+    EXPECT_NE(volume_mesh->getQuantity("rx:TLabel"), nullptr);    
 #endif
 }
