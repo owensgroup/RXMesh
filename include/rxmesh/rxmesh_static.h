@@ -1216,16 +1216,33 @@ class RXMeshStatic : public RXMesh
 
     /**
      * @brief Reconstruct the four incident vertices of every owned tet
-
      */
     void create_tet_list(std::vector<glm::uvec4>& t_list) const;
 
     /**
      * @brief Reconstruct the four incident vertices of every owned tet
-     * into a
-     * buffer containing 4 * get_num_tets() entries
+     * into a buffer containing 4 * get_num_tets() entries
      */
     void create_tet_list(uint32_t* t_list, bool use_global_order = false) const;
+    /**
+     * @brief Copy the mesh edges into a row-major buffer
+     * @parame_list Buffer with room for 2x#E uint32_t values
+     * @param use_global_order If false, rows and vertex IDs use compact linear
+     * ordering. If true, rows use global edge IDs and entries use global vertex
+     * IDs
+     */
+    void create_edge_list(uint32_t* e_list,
+                          bool      use_global_order = false) const;
+
+    /**
+     * @brief Return the mapping from face-traversal edge order to
+     * RXMesh linear edge IDs. The i-th entry is the linear
+     * ID of the i-th unique undirected edge encountered while scanning
+     * create_face_list(..., false). The returned reference remains owned by
+     * this RXMeshStatic instance.
+     */
+    const std::vector<uint32_t>& get_edge_permutation();
+
 
    protected:
     template <typename AttributeT>
@@ -1454,14 +1471,14 @@ class RXMeshStatic : public RXMesh
 
     void update_polyscope_edge_map();
     void update_polyscope_edge_permutation(
-        const std::vector<std::array<uint32_t, 3>>& fv);
+        const std::vector<std::array<uint32_t, 3>>& fv,
+        std::vector<uint32_t>&                      permutation);
 
     void register_polyscope();
 
     std::string             m_polyscope_mesh_name;
     polyscope::SurfaceMesh* m_polyscope_mesh;
     EdgeMapT                m_polyscope_edges_map;
-    std::vector<uint32_t>   m_polyscope_edge_permute;
 #endif
 
    public:
@@ -1473,7 +1490,14 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<AttributeContainer>          m_attr_container;
     std::shared_ptr<VertexAttribute<rx_coord_t>> m_input_vertex_coordinates;
 
-    std::shared_ptr<TetAttribute<int>>    m_tet_label;
+
+    std::shared_ptr<TetAttribute<int>> m_tet_label;
+
+    // Cached on first request and also reused by the optional
+    // native Polyscope integration.
+    std::vector<uint32_t> m_polyscope_edge_permute;
+
+
     std::shared_ptr<FaceAttribute<int>>   m_face_label;
     std::shared_ptr<EdgeAttribute<int>>   m_edge_label;
     std::shared_ptr<VertexAttribute<int>> m_vertex_label;
