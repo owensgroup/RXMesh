@@ -405,26 +405,47 @@ void RXMeshStatic::get_boundary_vertices(VertexAttribute<T>& boundary_v,
 
     constexpr uint32_t blockThreads = 256;
 
-    set_max_dynamic_smem(
-        (void*)detail::identify_boundary_vertices<blockThreads, T>);
-
     LaunchBox<blockThreads> lb;
 
-    prepare_launch_box(
-        {Op::EF, Op::EV},
-        lb,
-        (void*)detail::identify_boundary_vertices<blockThreads, T>,
-        false,
-        false,
-        false,
-        [&](uint32_t v, uint32_t e, uint32_t f) {
-            return detail::mask_num_bytes(e) +
-                   ShmemAllocator::default_alignment;
-        });
+    if (m_is_tet_mesh) {
+        set_max_dynamic_smem(
+            (void*)detail::identify_tet_boundary_vertices<blockThreads, T>);
 
-    detail::identify_boundary_vertices<blockThreads>
-        <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn, stream>>>(
-            get_context(), boundary_v);
+        prepare_launch_box(
+            {Op::FT, Op::FV},
+            lb,
+            (void*)detail::identify_tet_boundary_vertices<blockThreads, T>,
+            false,
+            false,
+            false,
+            [&](uint32_t, uint32_t, uint32_t f, uint32_t) {
+                return detail::mask_num_bytes(f) +
+                       ShmemAllocator::default_alignment;
+            });
+
+        detail::identify_tet_boundary_vertices<blockThreads>
+            <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn, stream>>>(
+                get_context(), boundary_v);
+    } else {
+        set_max_dynamic_smem((
+            void*)detail::identify_triangle_boundary_vertices<blockThreads, T>);
+
+        prepare_launch_box(
+            {Op::EF, Op::EV},
+            lb,
+            (void*)detail::identify_triangle_boundary_vertices<blockThreads, T>,
+            false,
+            false,
+            false,
+            [&](uint32_t v, uint32_t e, uint32_t f) {
+                return detail::mask_num_bytes(e) +
+                       ShmemAllocator::default_alignment;
+            });
+
+        detail::identify_triangle_boundary_vertices<blockThreads>
+            <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn, stream>>>(
+                get_context(), boundary_v);
+    }
 
     if (move_to_host && boundary_v.is_host_allocated()) {
         boundary_v.move(DEVICE, HOST, stream);
@@ -596,6 +617,24 @@ void RXMeshStatic::prepare_launch_box(
     }
 
     if (m_is_tet_mesh) {
+        if (oriented) {
+            RXMESH_ERROR(
+                "RXMeshStatic::prepare_launch_box() oriented queries are not "
+                "supported for tet meshes");
+            exit(EXIT_FAILURE);
+        }
+
+        for (const Op o : op) {
+            if (o == Op::FF || o == Op::TT || o == Op::EE ||
+                o == Op::EVDiamond) {
+                RXMESH_ERROR(
+                    "RXMeshStatic::prepare_launch_box() {} is not supported "
+                    "for tet meshes",
+                    op_to_string(o));
+                exit(EXIT_FAILURE);
+            }
+        }
+
         cudaFuncAttributes func_attr = cudaFuncAttributes();
         CUDA_ERROR(cudaFuncGetAttributes(&func_attr, kernel));
 
