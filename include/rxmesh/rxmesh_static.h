@@ -180,6 +180,18 @@ class RXMeshStatic : public RXMesh
                                          bool with_edge_patch   = true,
                                          bool with_face_patch   = true);
 
+    /**
+     * @brief add a tet patch as a separate VolumeMesh to polyscope. The
+     * patch is added along with its ribbon which could be helpful for
+     * debugging
+     * @param p the patch id which will be added
+     * @param with_vertex_patch add vertex patch and local ID quantities
+     * @param with_tet_patch add tet patch and local ID quantities
+     */
+    polyscope::VolumeMesh* render_patch_volume(const uint32_t p,
+                                               bool with_vertex_patch = true,
+                                               bool with_tet_patch    = true);
+
 
     /**
      * @brief add the face's patch scalar quantity to the polyscope instance
@@ -194,6 +206,13 @@ class RXMeshStatic : public RXMesh
      * @return pointer to polyscope's cell scalar quantity
      */
     polyscope::VolumeMeshCellScalarQuantity* render_tet_patch();
+
+    /**
+     * @brief add the vertex's patch scalar quantity to the polyscope
+     * volume mesh associated with RXMeshStatic @return pointer to polyscope's
+     * volume vertex scalar quantity
+     */
+    polyscope::VolumeMeshVertexScalarQuantity* render_tet_vertex_patch();
 
     /**
      * @brief add the edge's patch scalar quantity to the polyscope instance

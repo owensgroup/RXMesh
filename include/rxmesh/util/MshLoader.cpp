@@ -8,6 +8,7 @@
 // with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #include "rxmesh/util/MshLoader.h"
+#include "rxmesh/util/log.h"
 
 #include <cassert>
 #include <iostream>
@@ -578,6 +579,8 @@ MeshKind load_msh(const std::string&                    filename,
                   std::vector<std::vector<uint32_t>>&   simplices,
                   bool                                  append)
 {
+    RXMESH_INFO("Reading {}", filename);
+
     const MshLoader loader(filename);
     const auto&     nodes    = loader.get_nodes();
     const auto&     elements = loader.get_elements();
@@ -695,6 +698,14 @@ MeshKind load_msh(const std::string&                    filename,
         }
         simplices.push_back(std::move(simplex));
     }
+
+    RXMESH_INFO("load_msh() #vertices= {} ", vertices.size());
+    if (kind == MeshKind::Triangle) {
+        RXMESH_INFO("load_msh() #faces= {} ", simplices.size());
+    } else {
+        RXMESH_INFO("load_msh() #tets= {} ", simplices.size());
+    }
+
     return kind;
 }
 }  // namespace rxmesh

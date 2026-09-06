@@ -303,6 +303,7 @@ void RXMeshStatic::add_vertex_coordinates(
         m_polyscope_mesh_name += std::to_string(rand());
         this->register_polyscope();
         if (m_is_tet_mesh) {
+            render_tet_vertex_patch();
             render_tet_patch();
         } else {
             render_vertex_patch();
@@ -351,6 +352,64 @@ polyscope::SurfaceMesh* RXMeshStatic::render_patch(const uint32_t p,
     }
     if (with_face_patch) {
         render_face_patch_and_local_id(p, ps);
+    }
+
+    return ps;
+}
+
+polyscope::VolumeMesh* RXMeshStatic::render_patch_volume(const uint32_t p,
+                                                         bool with_vertex_patch,
+                                                         bool with_tet_patch)
+{
+    std::vector<glm::uvec4> all_tets;
+    create_tet_list(all_tets);
+
+    std::vector<glm::uvec4> tets;
+    std::vector<int>        tet_patch;
+    std::vector<int>        tet_local;
+    const uint16_t          num_tets = m_h_patches_info[p].num_tets[0];
+    tets.reserve(num_tets);
+    tet_patch.reserve(num_tets);
+    tet_local.reserve(num_tets);
+
+    for (uint16_t t = 0; t < num_tets; ++t) {
+        const LocalTetT lt(t);
+        if (!m_h_patches_info[p].is_deleted(lt)) {
+            const TetHandle th = get_owner_handle<TetHandle>({p, lt});
+            tets.push_back(all_tets[linear_id(th)]);
+            tet_patch.push_back(th.patch_id());
+            tet_local.push_back(th.local_id());
+        }
+    }
+
+    auto ps = polyscope::registerTetMesh(
+        m_polyscope_mesh_name + "_patch_" + std::to_string(p),
+        *m_input_vertex_coordinates,
+        tets);
+
+    if (with_vertex_patch) {
+        std::vector<int> vertex_patch(get_num_vertices());
+        std::vector<int> vertex_local(get_num_vertices());
+        for_each_vertex(
+            HOST,
+            [&](VertexHandle vh) {
+                vertex_patch[linear_id(vh)] = vh.patch_id();
+                vertex_local[linear_id(vh)] = vh.local_id();
+            },
+            NULL,
+            false);
+
+        ps->addVertexScalarQuantity("rx:VPatch" + std::to_string(p),
+                                    vertex_patch)
+            ->setMapRange({0.0, double(get_num_patches() - 1)});
+        ps->addVertexScalarQuantity("rx:VLocal" + std::to_string(p),
+                                    vertex_local);
+    }
+
+    if (with_tet_patch) {
+        ps->addCellScalarQuantity("rx:TPatch" + std::to_string(p), tet_patch)
+            ->setMapRange({0.0, double(get_num_patches() - 1)});
+        ps->addCellScalarQuantity("rx:TLocal" + std::to_string(p), tet_local);
     }
 
     return ps;
@@ -477,6 +536,19 @@ polyscope::VolumeMeshCellScalarQuantity* RXMeshStatic::render_tet_patch()
     std::pair<double, double> range(0.0, double(get_num_patches() - 1));
     ret->setMapRange(range);
 
+    return ret;
+}
+
+polyscope::VolumeMeshVertexScalarQuantity*
+RXMeshStatic::render_tet_vertex_patch()
+{
+    std::string name  = "rx:VPatch";
+    auto vertex_patch = this->add_vertex_attribute<uint32_t>(name, 1, HOST);
+    for_each_vertex(
+        HOST, [&](VertexHandle vh) { (*vertex_patch)(vh) = vh.patch_id(); });
+    auto ret =
+        m_polyscope_volume_mesh->addVertexScalarQuantity(name, *vertex_patch);
+    remove_attribute(name);
     return ret;
 }
 
