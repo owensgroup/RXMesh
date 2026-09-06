@@ -73,7 +73,9 @@ RXMeshStatic::RXMeshStatic(const std::string file_path,
 
     std::string name = extract_file_name(file_path);
 #if USE_POLYSCOPE
-    m_polyscope_edge_permute.reserve(this->get_num_edges());
+    if (!m_is_tet_mesh) {
+        m_polyscope_edge_permute.reserve(this->get_num_edges());
+    }
     name = polyscope::guessNiceNameFromPath(file_path);
 #endif
     add_vertex_coordinates(vertices, name, input_vertex_layout);
@@ -266,6 +268,11 @@ RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
         m_polyscope_mesh->addFaceScalarQuantity("rx:FLabel", *m_face_label);
         m_polyscope_mesh->addEdgeScalarQuantity("rx:ELabel", *m_edge_label);
         m_polyscope_mesh->addVertexScalarQuantity("rx:VLabel", *m_vertex_label);
+    } else {
+        m_polyscope_volume_mesh->addCellScalarQuantity("rx:TLabel",
+                                                       *m_tet_label);
+        m_polyscope_volume_mesh->addVertexScalarQuantity("rx:VLabel",
+                                                         *m_vertex_label);
     }
 #endif
 }
@@ -287,20 +294,24 @@ void RXMeshStatic::add_vertex_coordinates(
             vertices, "rx:vertices", layout);
 
 #if USE_POLYSCOPE
-        if (!m_is_tet_mesh) {
-            CPUTimer polyscope_timer;
-            polyscope_timer.start();
+        CPUTimer polyscope_timer;
+        polyscope_timer.start();
+        if (!polyscope::isInitialized()) {
             polyscope::init();
-            m_polyscope_mesh_name = mesh_name.empty() ? "RXMesh" : mesh_name;
-            m_polyscope_mesh_name += std::to_string(rand());
-            this->register_polyscope();
+        }
+        m_polyscope_mesh_name = mesh_name.empty() ? "RXMesh" : mesh_name;
+        m_polyscope_mesh_name += std::to_string(rand());
+        this->register_polyscope();
+        if (m_is_tet_mesh) {
+            render_tet_patch();
+        } else {
             render_vertex_patch();
             render_edge_patch();
             render_face_patch();
-            polyscope_timer.stop();
-            RXMESH_INFO("RXMeshStatic: Register Polyscope took= {} (ms)",
-                        polyscope_timer.elapsed_millis());
         }
+        polyscope_timer.stop();
+        RXMESH_INFO("RXMeshStatic: Register Polyscope took= {} (ms)",
+                    polyscope_timer.elapsed_millis());
 #endif
     }
 }
@@ -310,6 +321,11 @@ void RXMeshStatic::add_vertex_coordinates(
 polyscope::SurfaceMesh* RXMeshStatic::get_polyscope_mesh()
 {
     return m_polyscope_mesh;
+}
+
+polyscope::VolumeMesh* RXMeshStatic::get_polyscope_volume_mesh()
+{
+    return m_polyscope_volume_mesh;
 }
 
 polyscope::SurfaceMesh* RXMeshStatic::render_patch(const uint32_t p,
@@ -442,6 +458,20 @@ polyscope::SurfaceFaceScalarQuantity* RXMeshStatic::render_face_patch()
     for_each_face(HOST,
                   [&](FaceHandle fh) { (*face_patch)(fh) = fh.patch_id(); });
     auto ret = m_polyscope_mesh->addFaceScalarQuantity(name, *face_patch);
+    remove_attribute(name);
+
+    std::pair<double, double> range(0.0, double(get_num_patches() - 1));
+    ret->setMapRange(range);
+
+    return ret;
+}
+
+polyscope::VolumeMeshCellScalarQuantity* RXMeshStatic::render_tet_patch()
+{
+    std::string name      = "rx:TPatch";
+    auto        tet_patch = this->add_tet_attribute<uint32_t>(name, 1, HOST);
+    for_each_tet(HOST, [&](TetHandle th) { (*tet_patch)(th) = th.patch_id(); });
+    auto ret = m_polyscope_volume_mesh->addCellScalarQuantity(name, *tet_patch);
     remove_attribute(name);
 
     std::pair<double, double> range(0.0, double(get_num_patches() - 1));
@@ -632,6 +662,14 @@ void RXMeshStatic::update_polyscope_edge_permutation(
 
 void RXMeshStatic::register_polyscope()
 {
+    if (m_is_tet_mesh) {
+        std::vector<glm::uvec4> tets;
+        create_tet_list(tets);
+        m_polyscope_volume_mesh = polyscope::registerTetMesh(
+            m_polyscope_mesh_name, *m_input_vertex_coordinates, tets);
+        return;
+    }
+
     // populate m_polyscope_edges_map
     update_polyscope_edge_map();
 
@@ -864,7 +902,11 @@ void RXMeshStatic::scale(glm::fvec3 lower, glm::fvec3 upper)
     coord.move(HOST, DEVICE);
 
 #if USE_POLYSCOPE
-    get_polyscope_mesh()->updateVertexPositions(coord);
+    if (m_is_tet_mesh) {
+        get_polyscope_volume_mesh()->updateVertexPositions(coord);
+    } else {
+        get_polyscope_mesh()->updateVertexPositions(coord);
+    }
 #endif
 }
 

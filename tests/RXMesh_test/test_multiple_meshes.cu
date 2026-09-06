@@ -2,7 +2,7 @@
 
 #include "rxmesh/rxmesh_static.h"
 
-TEST(RXMeshStatic, MultipleMeshes)
+TEST(RXMeshStatic, MultipleTriangleMeshes)
 {
     using namespace rxmesh;
 
@@ -28,7 +28,10 @@ TEST(RXMeshStatic, MultipleMeshes)
         });
     }
 
+#if USE_POLYSCOPE
+    EXPECT_EQ(rx.get_polyscope_volume_mesh(), nullptr);
     rx.get_polyscope_mesh()->updateVertexPositions(x);
+#endif
 
 
     // polyscope::show();
@@ -56,4 +59,13 @@ TEST(RXMeshStatic, MultipleTetMeshes)
         const int expected = rx.map_to_global(th) < num_tets_per_region ? 0 : 1;
         EXPECT_EQ((*tet_label)(th), expected);
     });
+
+#if USE_POLYSCOPE
+    EXPECT_EQ(rx.get_polyscope_mesh(), nullptr);
+    auto volume_mesh = rx.get_polyscope_volume_mesh();
+    ASSERT_NE(volume_mesh, nullptr);
+    EXPECT_NE(volume_mesh->getQuantity("rx:VLabel"), nullptr);
+    EXPECT_NE(volume_mesh->getQuantity("rx:TLabel"), nullptr);
+    polyscope::show();
+#endif
 }

@@ -23,6 +23,7 @@
 
 #if USE_POLYSCOPE
 #include "polyscope/surface_mesh.h"
+#include "polyscope/volume_mesh.h"
 #endif
 
 #include <glm/fwd.hpp>
@@ -156,6 +157,12 @@ class RXMeshStatic : public RXMesh
      */
     polyscope::SurfaceMesh* get_polyscope_mesh();
 
+    /**
+     * @brief return a pointer to the polyscope volume mesh registered
+     * with this instance
+     */
+    polyscope::VolumeMesh* get_polyscope_volume_mesh();
+
 
     /**
      * @brief add a patch as a separate SurfaceMesh to polyscope renderer. The
@@ -180,6 +187,13 @@ class RXMeshStatic : public RXMesh
      * @return pointer to polyscope's face scalar quantity
      */
     polyscope::SurfaceFaceScalarQuantity* render_face_patch();
+
+    /**
+     * @brief add the tet's patch scalar quantity to the polyscope
+     * instance associated with RXMeshStatic
+     * @return pointer to polyscope's cell scalar quantity
+     */
+    polyscope::VolumeMeshCellScalarQuantity* render_tet_patch();
 
     /**
      * @brief add the edge's patch scalar quantity to the polyscope instance
@@ -1477,7 +1491,8 @@ class RXMeshStatic : public RXMesh
     void register_polyscope();
 
     std::string             m_polyscope_mesh_name;
-    polyscope::SurfaceMesh* m_polyscope_mesh;
+    polyscope::SurfaceMesh* m_polyscope_mesh        = nullptr;
+    polyscope::VolumeMesh*  m_polyscope_volume_mesh = nullptr;
     EdgeMapT                m_polyscope_edges_map;
 #endif
 
