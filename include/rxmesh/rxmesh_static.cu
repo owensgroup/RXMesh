@@ -224,6 +224,9 @@ RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
         m_edge_label =
             add_edge_attribute<int>("rx:edge_label", 1, LOCATION_ALL);
 
+        m_face_label->reset(0, DEVICE);
+        m_edge_label->reset(0, DEVICE);
+
         add_face_labels(*m_tet_label, *m_face_label);
         add_edge_labels(*m_face_label, *m_edge_label);
         m_face_label->move(DEVICE, HOST);

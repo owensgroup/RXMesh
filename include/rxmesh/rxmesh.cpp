@@ -1661,7 +1661,7 @@ void RXMesh::build_device()
     m_fe_stride_elems =
         (static_cast<uint32_t>(p_faces_capacity) * 3u + 1u) & ~1u;
     m_tf_stride_elems     = static_cast<uint32_t>(p_tets_capacity) * 4u;
-    m_counts_stride_elems = 4u;
+    m_counts_stride_elems = m_is_tet_mesh ? 4u : 3u;
     m_dirty_stride_elems  = 1u;
 
     m_mask_v_stride_words = static_cast<uint32_t>(
