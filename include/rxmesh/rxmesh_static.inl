@@ -101,6 +101,104 @@ std::shared_ptr<FaceAttribute<T>> RXMeshStatic::add_face_attribute(
 }
 
 template <class T>
+std::shared_ptr<TetAttribute<T>> RXMeshStatic::add_tet_attribute(
+    const std::string& name,
+    uint32_t           num_attributes,
+    locationT          location,
+    layoutT            layout)
+{
+    return m_attr_container->template add<TetAttribute<T>>(
+        name.c_str(), num_attributes, location, layout, this);
+}
+
+template <class T>
+std::shared_ptr<TetAttribute<T>> RXMeshStatic::add_tet_attribute_like(
+    const std::string&     name,
+    const TetAttribute<T>& other)
+{
+    return add_tet_attribute<T>(name,
+                                other.get_num_attributes(),
+                                other.get_allocated(),
+                                other.get_layout());
+}
+
+template <class T>
+std::shared_ptr<TetAttribute<T>> RXMeshStatic::add_tet_attribute(
+    const std::vector<std::vector<T>>& t_attributes,
+    const std::string&                 name,
+    layoutT                            layout)
+{
+    if (t_attributes.empty()) {
+        RXMESH_ERROR(
+            "RXMeshStatic::add_tet_attribute() input attribute is empty");
+    }
+
+    if (t_attributes.size() != get_num_tets()) {
+        RXMESH_ERROR(
+            "RXMeshStatic::add_tet_attribute() input attribute size ({}) "
+            "is not the same as number of tets in the input mesh ({})",
+            t_attributes.size(),
+            get_num_tets());
+    }
+
+    uint32_t num_attributes = static_cast<uint32_t>(t_attributes[0].size());
+
+    auto ret = m_attr_container->template add<TetAttribute<T>>(
+        name.c_str(), num_attributes, LOCATION_ALL, layout, this);
+
+    const int num_patches = this->get_num_patches();
+#pragma omp parallel for
+    for (int p = 0; p < num_patches; ++p) {
+        for (uint16_t t = 0; t < this->m_h_num_owned_t[p]; ++t) {
+            const TetHandle t_handle(static_cast<uint32_t>(p), t);
+            uint32_t        global_t = m_h_patches_ltog_t[p][t];
+            for (uint32_t a = 0; a < num_attributes; ++a) {
+                (*ret)(t_handle, a) = t_attributes[global_t][a];
+            }
+        }
+    }
+
+    ret->move(rxmesh::HOST, rxmesh::DEVICE);
+    return ret;
+}
+
+template <class T>
+std::shared_ptr<TetAttribute<T>> RXMeshStatic::add_tet_attribute(
+    const std::vector<T>& t_attributes,
+    const std::string&    name,
+    layoutT               layout)
+{
+    if (t_attributes.empty()) {
+        RXMESH_ERROR(
+            "RXMeshStatic::add_tet_attribute() input attribute is empty");
+    }
+
+    if (t_attributes.size() != get_num_tets()) {
+        RXMESH_ERROR(
+            "RXMeshStatic::add_tet_attribute() input attribute size ({}) "
+            "is not the same as number of tets in the input mesh ({})",
+            t_attributes.size(),
+            get_num_tets());
+    }
+
+    auto ret = m_attr_container->template add<TetAttribute<T>>(
+        name.c_str(), 1, LOCATION_ALL, layout, this);
+
+    const int num_patches = this->get_num_patches();
+#pragma omp parallel for
+    for (int p = 0; p < num_patches; ++p) {
+        for (uint16_t t = 0; t < this->m_h_num_owned_t[p]; ++t) {
+            const TetHandle t_handle(static_cast<uint32_t>(p), t);
+            uint32_t        global_t = m_h_patches_ltog_t[p][t];
+            (*ret)(t_handle, 0)      = t_attributes[global_t];
+        }
+    }
+
+    ret->move(rxmesh::HOST, rxmesh::DEVICE);
+    return ret;
+}
+
+template <class T>
 std::shared_ptr<EdgeAttribute<T>> RXMeshStatic::add_edge_attribute(
     const std::string& name,
     uint32_t           num_attributes,
@@ -248,6 +346,10 @@ std::shared_ptr<Attribute<T, HandleT>> RXMeshStatic::add_attribute(
     if constexpr (std::is_same_v<HandleT, FaceHandle>) {
         return add_face_attribute<T>(name, num_attributes, location, layout);
     }
+
+    if constexpr (std::is_same_v<HandleT, TetHandle>) {
+        return add_tet_attribute<T>(name, num_attributes, location, layout);
+    }
 }
 
 template <class T, class HandleT>
@@ -275,6 +377,13 @@ std::shared_ptr<Attribute<T, HandleT>> RXMeshStatic::add_attribute_like(
                                      other.get_allocated(),
                                      other.get_layout());
     }
+
+    if constexpr (std::is_same_v<HandleT, TetHandle>) {
+        return add_tet_attribute<T>(name,
+                                    other.get_num_attributes(),
+                                    other.get_allocated(),
+                                    other.get_layout());
+    }
 }
 
 template <typename T>
@@ -296,26 +405,47 @@ void RXMeshStatic::get_boundary_vertices(VertexAttribute<T>& boundary_v,
 
     constexpr uint32_t blockThreads = 256;
 
-    set_max_dynamic_smem(
-        (void*)detail::identify_boundary_vertices<blockThreads, T>);
-
     LaunchBox<blockThreads> lb;
 
-    prepare_launch_box(
-        {Op::EF, Op::EV},
-        lb,
-        (void*)detail::identify_boundary_vertices<blockThreads, T>,
-        false,
-        false,
-        false,
-        [&](uint32_t v, uint32_t e, uint32_t f) {
-            return detail::mask_num_bytes(e) +
-                   ShmemAllocator::default_alignment;
-        });
+    if (m_is_tet_mesh) {
+        set_max_dynamic_smem(
+            (void*)detail::identify_tet_boundary_vertices<blockThreads, T>);
 
-    detail::identify_boundary_vertices<blockThreads>
-        <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn, stream>>>(
-            get_context(), boundary_v);
+        prepare_launch_box(
+            {Op::FT, Op::FV},
+            lb,
+            (void*)detail::identify_tet_boundary_vertices<blockThreads, T>,
+            false,
+            false,
+            false,
+            [&](uint32_t, uint32_t, uint32_t f, uint32_t) {
+                return detail::mask_num_bytes(f) +
+                       ShmemAllocator::default_alignment;
+            });
+
+        detail::identify_tet_boundary_vertices<blockThreads>
+            <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn, stream>>>(
+                get_context(), boundary_v);
+    } else {
+        set_max_dynamic_smem((
+            void*)detail::identify_triangle_boundary_vertices<blockThreads, T>);
+
+        prepare_launch_box(
+            {Op::EF, Op::EV},
+            lb,
+            (void*)detail::identify_triangle_boundary_vertices<blockThreads, T>,
+            false,
+            false,
+            false,
+            [&](uint32_t v, uint32_t e, uint32_t f) {
+                return detail::mask_num_bytes(e) +
+                       ShmemAllocator::default_alignment;
+            });
+
+        detail::identify_triangle_boundary_vertices<blockThreads>
+            <<<lb.blocks, lb.num_threads, lb.smem_bytes_dyn, stream>>>(
+                get_context(), boundary_v);
+    }
 
     if (move_to_host && boundary_v.is_host_allocated()) {
         boundary_v.move(DEVICE, HOST, stream);
@@ -353,6 +483,9 @@ uint32_t RXMeshStatic::linear_id(HandleT input) const
     }
     if constexpr (std::is_same_v<HandleT, FaceHandle>) {
         return ret + m_h_face_prefix[p_id];
+    }
+    if constexpr (std::is_same_v<HandleT, TetHandle>) {
+        return ret + m_h_tet_prefix[p_id];
     }
 }
 
@@ -427,6 +560,10 @@ std::shared_ptr<FaceAttribute<T>> RXMeshStatic::add_face_attribute_like(
 template <typename HandleT>
 std::shared_ptr<Attribute<int, HandleT>> RXMeshStatic::get_region_label()
 {
+    if constexpr (std::is_same_v<HandleT, TetHandle>) {
+        return get_tet_region_label();
+    }
+
     if constexpr (std::is_same_v<HandleT, FaceHandle>) {
         return get_face_region_label();
     }
@@ -479,6 +616,34 @@ void RXMeshStatic::prepare_launch_box(
             ShmemAllocator::default_alignment;
     }
 
+    if (m_is_tet_mesh) {
+        if (oriented) {
+            RXMESH_ERROR(
+                "RXMeshStatic::prepare_launch_box() oriented queries are not "
+                "supported for tet meshes");
+            exit(EXIT_FAILURE);
+        }
+
+        for (const Op o : op) {
+            if (o == Op::FF || o == Op::TT || o == Op::EE ||
+                o == Op::EVDiamond) {
+                RXMESH_ERROR(
+                    "RXMeshStatic::prepare_launch_box() {} is not supported "
+                    "for tet meshes",
+                    op_to_string(o));
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        cudaFuncAttributes func_attr = cudaFuncAttributes();
+        CUDA_ERROR(cudaFuncGetAttributes(&func_attr, kernel));
+
+        if (launch_box.smem_bytes_dyn >
+            static_cast<size_t>(func_attr.maxDynamicSharedSizeBytes)) {
+            set_max_dynamic_smem(kernel);
+        }
+    }
+
 
     RXMESH_TRACE(
         "RXMeshStatic::calc_shared_memory() launching {} blocks with "
@@ -496,17 +661,41 @@ void RXMeshStatic::prepare_launch_box(
 }
 
 template <uint32_t blockThreads>
+void RXMeshStatic::prepare_launch_box(
+    const std::vector<Op>    op,
+    LaunchBox<blockThreads>& launch_box,
+    const void*              kernel,
+    const bool               oriented,
+    const bool               with_vertex_valence,
+    const bool               is_concurrent,
+    std::function<size_t(uint32_t, uint32_t, uint32_t, uint32_t)> user_shmem)
+    const
+{
+    prepare_launch_box(op,
+                       launch_box,
+                       kernel,
+                       oriented,
+                       with_vertex_valence,
+                       is_concurrent,
+                       [&](uint32_t v, uint32_t e, uint32_t f) {
+                           return user_shmem(v, e, f, m_max_tets_per_patch);
+                       });
+}
+
+template <uint32_t blockThreads>
 size_t RXMeshStatic::calc_shared_memory(const Op   op,
                                         const bool oriented,
                                         bool       use_capacity) const
 {
     uint32_t max_v(this->m_max_vertices_per_patch),
-        max_e(this->m_max_edges_per_patch), max_f(this->m_max_faces_per_patch);
+        max_e(this->m_max_edges_per_patch), max_f(this->m_max_faces_per_patch),
+        max_t(this->m_max_tets_per_patch);
 
     if (use_capacity) {
         max_v = get_per_patch_max_vertex_capacity();
         max_e = get_per_patch_max_edge_capacity();
         max_f = get_per_patch_max_face_capacity();
+        max_t = m_max_tet_capacity;
     }
 
 
@@ -527,7 +716,121 @@ size_t RXMeshStatic::calc_shared_memory(const Op   op,
     size_t dynamic_smem = 0;
 
 
-    if (op == Op::FE) {
+    if (op == Op::VT) {
+        const size_t offset_smem =
+            std::max(4 * max_t, max_v + 1) * sizeof(uint16_t);
+        const size_t value_smem    = 4 * max_t * sizeof(uint16_t);
+        const size_t topology_smem = (3 * max_f + 2 * max_e) * sizeof(uint16_t);
+        const size_t transpose_smem = (2 * max_v + 1) * sizeof(uint16_t);
+        const size_t lp_smem =
+            sizeof(LPPair) * max_lp_hashtable_capacity<LocalTetT>();
+
+        dynamic_smem = offset_smem;
+        dynamic_smem += detail::mask_num_bytes(max_v);
+        dynamic_smem += detail::mask_num_bytes(max_t);
+        dynamic_smem += std::max(
+            topology_smem, value_smem + std::max(transpose_smem, lp_smem));
+
+        // participant mask, owned mask, offset, FE, EV, value, two transpose
+        // buffers, and LP hashtable
+        dynamic_smem += ShmemAllocator::default_alignment * 9;
+
+    } else if (op == Op::ET) {
+        const size_t offset_smem =
+            std::max(6 * max_t, max_e + 1) * sizeof(uint16_t);
+        const size_t value_smem     = 6 * max_t * sizeof(uint16_t);
+        const size_t topology_smem  = 3 * max_f * sizeof(uint16_t);
+        const size_t transpose_smem = (2 * max_e + 1) * sizeof(uint16_t);
+        const size_t lp_smem =
+            sizeof(LPPair) * max_lp_hashtable_capacity<LocalTetT>();
+
+        dynamic_smem = offset_smem;
+        dynamic_smem += detail::mask_num_bytes(max_e);
+        dynamic_smem += detail::mask_num_bytes(max_t);
+        dynamic_smem += std::max(
+            topology_smem, value_smem + std::max(transpose_smem, lp_smem));
+
+        // participant mask, owned mask, offset, FE, value, two transpose
+        // buffers, and LP hashtable
+        dynamic_smem += ShmemAllocator::default_alignment * 8;
+
+    } else if (op == Op::FT) {
+        const size_t output_smem =
+            (std::max(4 * max_t, max_f + 1) + 4 * max_t) * sizeof(uint16_t);
+        const size_t transpose_smem = (2 * max_f + 1) * sizeof(uint16_t);
+        const size_t lp_smem =
+            sizeof(LPPair) * max_lp_hashtable_capacity<LocalTetT>();
+
+        dynamic_smem = output_smem;
+        dynamic_smem += detail::mask_num_bytes(max_f);
+        dynamic_smem += detail::mask_num_bytes(max_t);
+        dynamic_smem += std::max(transpose_smem, lp_smem);
+
+        // participant mask, owned mask, output, two transpose buffers, and LP
+        // hashtable
+        dynamic_smem += ShmemAllocator::default_alignment * 6;
+
+    } else if (op == Op::TF) {
+        // TF is the output and stays allocated with the face LP hashtable
+        dynamic_smem = 4 * max_t * sizeof(uint16_t);
+
+        // store tet participant bitmask
+        dynamic_smem += detail::mask_num_bytes(max_t);
+
+        // store output face owned bitmask
+        dynamic_smem += detail::mask_num_bytes(max_f);
+
+        // store face LP hashtable
+        dynamic_smem +=
+            sizeof(LPPair) * max_lp_hashtable_capacity<LocalFaceT>();
+
+        // participant mask, owned mask, TF output, and LP hashtable
+        dynamic_smem += ShmemAllocator::default_alignment * 4;
+
+    } else if (op == Op::TE) {
+        // We load TF and FE, then compute TE. We then reuse the space of FE
+        // to store E hashtable
+        // Additionally, TF needs 4xT and the output TE needs 6xT. So we
+        // allocate 6xT memory to store the input TF (only use the first 4 slots
+        // per tet) and the over-write it with the tet's edges (6 slots per
+        // tet).
+
+        dynamic_smem = 6 * max_t * sizeof(uint16_t);
+
+        // store tet participant bitmask
+        dynamic_smem += detail::mask_num_bytes(max_t);
+
+        // store output edge owned bitmask
+        dynamic_smem += detail::mask_num_bytes(max_e);
+
+        const size_t fe_smem = 3 * max_f * sizeof(uint16_t);
+        const size_t lp_smem =
+            sizeof(LPPair) * max_lp_hashtable_capacity<LocalEdgeT>();
+        dynamic_smem += std::max(fe_smem, lp_smem);
+
+        // participant mask, owned mask, TE output, FE, and LP hashtable
+        dynamic_smem += ShmemAllocator::default_alignment * 5;
+
+    } else if (op == Op::TV) {
+        // TV output stays allocated while temporary FE and EV are reused for
+        // the vertex LP hashtable
+        dynamic_smem = 4 * max_t * sizeof(uint16_t);
+
+        // store tet participant bitmask
+        dynamic_smem += detail::mask_num_bytes(max_t);
+
+        // store output vertex owned bitmask
+        dynamic_smem += detail::mask_num_bytes(max_v);
+
+        const size_t fe_ev_smem = (3 * max_f + 2 * max_e) * sizeof(uint16_t);
+        const size_t lp_smem =
+            sizeof(LPPair) * max_lp_hashtable_capacity<LocalVertexT>();
+        dynamic_smem += std::max(fe_ev_smem, lp_smem);
+
+        // participant mask, owned mask, TV output, FE, EV, and LP hashtable
+        dynamic_smem += ShmemAllocator::default_alignment * 6;
+
+    } else if (op == Op::FE) {
         // only FE will be loaded
         dynamic_smem = 3 * max_f * sizeof(uint16_t);
 

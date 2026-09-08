@@ -106,12 +106,50 @@ __global__ void for_each_face(const uint32_t num_patches,
 }  // namespace detail
 
 
+template <typename LambdaT>
+__device__ __inline__ void for_each_tet(const PatchInfo patch_info,
+                                        LambdaT         apply,
+                                        bool            allow_not_owned = false)
+{
+    if (patch_info.num_tets == nullptr) {
+        return;
+    }
+
+    const uint16_t num_t = patch_info.num_tets[0];
+    for (uint16_t t = threadIdx.x; t < num_t; t += blockDim.x) {
+        if (!detail::is_deleted(t, patch_info.active_mask_t)) {
+            if (!allow_not_owned &&
+                !detail::is_owned(t, patch_info.owned_mask_t)) {
+                continue;
+            }
+            TetHandle t_handle(patch_info.patch_id, LocalTetT(t));
+            apply(t_handle);
+        }
+    }
+}
+
+namespace detail {
+template <typename LambdaT>
+__global__ void for_each_tet(const uint32_t num_patches,
+                             const PatchInfo* const __grid_constant__
+                                     patch_info,
+                             LambdaT apply)
+{
+    const uint32_t p_id = blockIdx.x;
+    if (p_id < num_patches) {
+        for_each_tet(patch_info[p_id], apply);
+    }
+}
+}  // namespace detail
+
+
 /**
  * @brief Apply a lambda function on all mesh elements. The type of the mesh
  * element is inferred from the op which could be
  * 1) Op::V for all vertices,
- * 2) Op::E for all edge, or
- * 3) Op::F for all faces,
+ * 2) Op::E for all edge,
+ * 3) Op::F for all faces, or
+ * 4) Op::T for all tets,
  *
  * @tparam Op the type of query operation
  * @tparam blockThreads the number of CUDA threads in the block
@@ -126,9 +164,9 @@ __global__ void for_each_face(const uint32_t num_patches,
 template <Op op, uint32_t blockThreads, typename computeT>
 __device__ __inline__ void for_each(const Context& context, computeT compute_op)
 {
-    static_assert(op == Op::V || op == Op::E || op == Op::F,
+    static_assert(op == Op::V || op == Op::E || op == Op::F || op == Op::T,
                   "for_each() only accepts unary operator for its template "
-                  "parameter i.e., Op::V, Op::E, or Op::F");
+                  "parameter i.e., Op::V, Op::E, Op::F, or Op::T");
 
     using ComputeTraits  = detail::FunctionTraits<computeT>;
     using ComputeHandleT = typename ComputeTraits::template arg<0>::type;
@@ -142,15 +180,14 @@ __device__ __inline__ void for_each(const Context& context, computeT compute_op)
             static_assert(
                 std::is_same_v<ComputeHandleT, VertexHandle>,
                 "for_each() since input template parameter operation is Op::V, "
-                "the "
-                "lambda function should take VertexHandle as an input");
+                "the lambda function should take VertexHandle as an input");
             for_each_vertex(context.m_patches_info[p_id], compute_op);
         }
         if constexpr (op == Op::E) {
             static_assert(std::is_same_v<ComputeHandleT, EdgeHandle>,
                           "for_each() since input template parameter operation "
-                          "is Op::E, the "
-                          "lambda function should take EdgeHandle as an input");
+                          "is Op::E, the lambda function should take "
+                          "EdgeHandle as an input");
             for_each_edge(context.m_patches_info[p_id], compute_op);
         }
         if constexpr (op == Op::F) {
@@ -160,6 +197,13 @@ __device__ __inline__ void for_each(const Context& context, computeT compute_op)
                 "Op::F, the lambda function should take FaceHandle as an "
                 "input");
             for_each_face(context.m_patches_info[p_id], compute_op);
+        }
+        if constexpr (op == Op::T) {
+            static_assert(
+                std::is_same_v<ComputeHandleT, TetHandle>,
+                "for_each() since input template parameter operation is Op::T, "
+                "the lambda function should take TetHandle as an input");
+            for_each_tet(context.m_patches_info[p_id], compute_op);
         }
     }
     __syncthreads();

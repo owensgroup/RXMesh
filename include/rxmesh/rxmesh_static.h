@@ -23,6 +23,7 @@
 
 #if USE_POLYSCOPE
 #include "polyscope/surface_mesh.h"
+#include "polyscope/volume_mesh.h"
 #endif
 
 #include <glm/fwd.hpp>
@@ -40,11 +41,12 @@ class RXMeshStatic : public RXMesh
     RXMeshStatic(const RXMeshStatic&) = delete;
 
     /**
-     * @brief Constructor that initializes the mesh from an OBJ file.
-     * @param file_path Path to the input OBJ file.
+     * @brief Constructor that initializes the mesh from an OBJ or MSH
+     * file.
+     * @param file_path Path to the input mesh file.
      * @param patcher_file (optional) Path to a patch file previously generated
-     * using save(). If provided, it restores the exact same patch assignment.
-     * This is mainly useful for debugging and reproducibility.
+     * using save(). If provided, it restores the exact same patch
+     * assignment.This is mainly useful for debugging and reproducibility.
      * @param patch_size (optional) Target size of each patch. This is used as
      * input to the k-means clustering algorithm that partitions the mesh.
      * @param capacity_factor (optional) Controls how much extra space each
@@ -74,13 +76,14 @@ class RXMeshStatic : public RXMesh
                           layoutT           input_vertex_layout);
 
     /**
-     * @brief  Constructor using triangles and vertices
-     * @param fv Face incident vertices as read from an obj file
+     * @brief Constructor using triangle or tet connectivity.
+     * @param fv Incident vertices for each input simplex.
      * @param patcher_file (optional) Path to a patch file previously generated
      * using save(). If provided, it restores the exact same patch assignment.
      * This is mainly useful for debugging and reproducibility.
-     * @param patch_size (optional) Target size of each patch. This is used as
-     * input to the k-means clustering algorithm that partitions the mesh.
+     * @param patch_size (optional) Target size
+     * of each patch. This is used as input to the k-means clustering algorithm
+     * that partitions the mesh.
      * @param capacity_factor (optional) Controls how much extra space each
      * patch can hold. The maximum number of vertices/edges/faces per patch is:
      * capacity_factor x (current number of elements in the patch). This allows
@@ -92,12 +95,24 @@ class RXMeshStatic : public RXMesh
      * Load factor for the hash table used to store mappings from
      * mesh elements (not owned by a patch) to their (patch_id, local_id).
      */
-    explicit RXMeshStatic(std::vector<std::vector<uint32_t>>& fv,
+    explicit RXMeshStatic(std::vector<std::vector<uint32_t>>& simplices,
                           const std::string                   patcher_file = "",
                           const uint32_t                      patch_size = 512,
                           const float capacity_factor                    = 1.0,
                           const float patch_alloc_factor                 = 1.0,
                           const float lp_hashtable_load_factor           = 0.8);
+
+    /**
+     * @brief Constructor using vertex positions and triangle or tet
+     * connectivity.
+     */
+    explicit RXMeshStatic(std::vector<std::vector<rx_coord_t>>& vertices,
+                          std::vector<std::vector<uint32_t>>&   simplices,
+                          const std::string patcher_file             = "",
+                          const uint32_t    patch_size               = 512,
+                          const float       capacity_factor          = 1.0,
+                          const float       patch_alloc_factor       = 1.0,
+                          const float       lp_hashtable_load_factor = 0.8);
 
     /**
      * @brief Constructor that initializes the mesh from multiple OBJ file.
@@ -113,11 +128,11 @@ class RXMeshStatic : public RXMesh
 
     /**
      * @brief Add vertex coordinates to the input mesh. When calling
-     * RXMeshStatic constructor that takes the face's vertices, this function
-     * can be called to then add vertex coordinates and also add the mesh to
-     * polyscope if it is active. You don't need to call this function if you
-     * are constructing RXMeshStatic with the constructor that takes the path to
-     * mesh file
+     * RXMeshStatic constructor that takes the simplices's vertices, this
+     * function can be called to then add vertex coordinates and also add the
+     * mesh to polyscope if it is active. You don't need to call this function
+     * if you are constructing RXMeshStatic with the constructor that takes the
+     * path to mesh file
      */
     void add_vertex_coordinates(std::vector<std::vector<rx_coord_t>>& vertices,
                                 std::string mesh_name = "");
@@ -142,6 +157,12 @@ class RXMeshStatic : public RXMesh
      */
     polyscope::SurfaceMesh* get_polyscope_mesh();
 
+    /**
+     * @brief return a pointer to the polyscope volume mesh registered
+     * with this instance
+     */
+    polyscope::VolumeMesh* get_polyscope_volume_mesh();
+
 
     /**
      * @brief add a patch as a separate SurfaceMesh to polyscope renderer. The
@@ -159,6 +180,18 @@ class RXMeshStatic : public RXMesh
                                          bool with_edge_patch   = true,
                                          bool with_face_patch   = true);
 
+    /**
+     * @brief add a tet patch as a separate VolumeMesh to polyscope. The
+     * patch is added along with its ribbon which could be helpful for
+     * debugging
+     * @param p the patch id which will be added
+     * @param with_vertex_patch add vertex patch and local ID quantities
+     * @param with_tet_patch add tet patch and local ID quantities
+     */
+    polyscope::VolumeMesh* render_patch_volume(const uint32_t p,
+                                               bool with_vertex_patch = true,
+                                               bool with_tet_patch    = true);
+
 
     /**
      * @brief add the face's patch scalar quantity to the polyscope instance
@@ -166,6 +199,20 @@ class RXMeshStatic : public RXMesh
      * @return pointer to polyscope's face scalar quantity
      */
     polyscope::SurfaceFaceScalarQuantity* render_face_patch();
+
+    /**
+     * @brief add the tet's patch scalar quantity to the polyscope
+     * instance associated with RXMeshStatic
+     * @return pointer to polyscope's cell scalar quantity
+     */
+    polyscope::VolumeMeshCellScalarQuantity* render_tet_patch();
+
+    /**
+     * @brief add the vertex's patch scalar quantity to the polyscope
+     * volume mesh associated with RXMeshStatic @return pointer to polyscope's
+     * volume vertex scalar quantity
+     */
+    polyscope::VolumeMeshVertexScalarQuantity* render_tet_vertex_patch();
 
     /**
      * @brief add the edge's patch scalar quantity to the polyscope instance
@@ -395,7 +442,70 @@ class RXMeshStatic : public RXMesh
 
 
     /**
-     * @brief same as for_each_vertex/edge/face where the type is defined via
+     * @brief Apply a lambda function on all tets in the mesh
+     * @tparam LambdaT type of the lambda function (inferred)
+     * @param location the execution location
+     * @param apply lambda function to be applied on all tets. The lambda
+     * function signature takes a TetHandle
+     * @param stream the stream used to run the kernel in case of DEVICE
+     * execution location
+     * @param with_omp for HOST execution, use OpenMP where each patch is
+     * assigned to a thread
+     */
+    template <typename LambdaT>
+    void for_each_tet(locationT    location,
+                      LambdaT      apply,
+                      cudaStream_t stream   = NULL,
+                      bool         with_omp = true) const
+    {
+        if (!m_is_tet_mesh) {
+            return;
+        }
+
+        if ((location & HOST) == HOST) {
+            const int num_patches = this->get_num_patches();
+
+            auto run = [&](int p) {
+                for (uint16_t t = 0; t < this->get_num_tets(p); ++t) {
+                    if (detail::is_owned(t, m_h_patches_info[p].owned_mask_t) &&
+                        !detail::is_deleted(
+                            t, m_h_patches_info[p].active_mask_t)) {
+                        apply(
+                            TetHandle(static_cast<uint32_t>(p), LocalTetT(t)));
+                    }
+                }
+            };
+
+            if (!with_omp) {
+                for (int p = 0; p < num_patches; ++p) {
+                    run(p);
+                }
+            } else {
+#pragma omp parallel for
+                for (int p = 0; p < num_patches; ++p) {
+                    run(p);
+                }
+            }
+        }
+
+        if ((location & DEVICE) == DEVICE) {
+            if constexpr (IS_HD_LAMBDA(LambdaT) || IS_D_LAMBDA(LambdaT)) {
+                const int num_patches = this->get_num_patches();
+                const int threads     = 256;
+                detail::for_each_tet<<<num_patches, threads, 0, stream>>>(
+                    num_patches, this->m_d_patches_info, apply);
+            } else {
+                RXMESH_ERROR(
+                    "RXMeshStatic::for_each_tet() Input lambda function should "
+                    "be annotated with __device__ for execution on device");
+            }
+        }
+    }
+
+
+    /**
+     * @brief same as for_each_vertex/edge/face/tet where the type is
+     * defined via
      * template parameter
      */
     template <typename HandleT, typename LambdaT>
@@ -414,6 +524,10 @@ class RXMeshStatic : public RXMesh
 
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             for_each_face(location, apply, stream, with_omp);
+        }
+
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            for_each_tet(location, apply, stream, with_omp);
         }
     }
 
@@ -529,9 +643,9 @@ class RXMeshStatic : public RXMesh
      * @param user_lambda the user lambda function which has the signature
      *      [=]__device__(InputHandle h, OutputIterator iter) {
      *      }
-     * The InputHandle is a vertex, edge, or face handle depending on the input
-     * to the query operation op. The OutputIterator is an vertex, edge, or face
-     * iterator depending on the output of the query operation op.
+     * The InputHandle is a vertex, edge, face, or tet handle depending on the
+     * input to the query operation op. The OutputIterator is an vertex, edge,
+     * face, or tet iterator depending on the output of the query operation op.
      *
      * @param oriented if the query operation op is oriented
      * @param stream the stream to launch the kernel on
@@ -562,9 +676,9 @@ class RXMeshStatic : public RXMesh
      * @param user_lambda the user lambda function which has the signature
      *      [=]__device__(InputHandle h, OutputIterator iter) {
      *      }
-     * The InputHandle is a vertex, edge, or face handle depending on the input
-     * to the query operation op. The OutputIterator is an vertex, edge, or face
-     * iterator depending on the output of the query operation op.
+     * The InputHandle is a vertex, edge, face, or tet handle depending on the
+     * input to the query operation op. The OutputIterator is an vertex, edge,
+     * face, or tet iterator depending on the output of the query operation op.
      *
      * @param oriented if the query operation op is oriented
      * @param stream the stream to launch the kernel on
@@ -607,6 +721,21 @@ class RXMeshStatic : public RXMesh
         const bool               is_concurrent       = false,
         std::function<size_t(uint32_t, uint32_t, uint32_t)> user_shmem =
             [](uint32_t v, uint32_t e, uint32_t f) { return 0; }) const;
+
+    /**
+     * @brief same as the above prepare_launch_box but the user_shmem isa
+     * function of the number of vertices, edges, faces, and tets
+     */
+    template <uint32_t blockThreads>
+    void prepare_launch_box(
+        const std::vector<Op>    op,
+        LaunchBox<blockThreads>& launch_box,
+        const void*              kernel,
+        const bool               oriented,
+        const bool               with_vertex_valence,
+        const bool               is_concurrent,
+        std::function<size_t(uint32_t, uint32_t, uint32_t, uint32_t)>
+            user_shmem) const;
 
 
     /**
@@ -674,6 +803,74 @@ class RXMeshStatic : public RXMesh
     template <class T>
     std::shared_ptr<FaceAttribute<T>> add_face_attribute(
         const std::vector<T>& f_attributes,
+        const std::string&    name,
+        layoutT               layout = AoSoA);
+
+    /**
+     * @brief Adding a new tet attribute
+     * @tparam T type of the attribute
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param num_attributes number of the attributes
+     * @param location where to allocate the attributes
+     * @param layout as AoS, AoSoA (patch-local SoA), or SoA (global
+     * column-major) operations
+     * @return shared pointer to the created attribute
+     */
+    template <class T>
+    std::shared_ptr<TetAttribute<T>> add_tet_attribute(
+        const std::string& name,
+        uint32_t           num_attributes,
+        locationT          location = LOCATION_ALL,
+        layoutT            layout   = AoSoA);
+
+    /**
+     * @brief Adding a new tet attribute by reading values from a host buffer
+     * t_attributes where the order of tets is the same as the order of
+     * tets given to the constructor.The attributes are populated on device
+     * and host
+     * @tparam T type of the attribute
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param layout as AoS, AoSoA (patch-local SoA), or SoA (global
+     * column-major) operations
+     * @return shared pointer to the created attribute
+     */
+    template <class T>
+    std::shared_ptr<TetAttribute<T>> add_tet_attribute(
+        const std::vector<std::vector<T>>& t_attributes,
+        const std::string&                 name,
+        layoutT                            layout = AoSoA);
+
+    /**
+     * @brief Adding a new tet attribute similar to another tet attribute
+     * in allocation, number of attributes, and layout
+     * @tparam T type of the returned attribute
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param other the other tet attribute
+     * @return shared pointer to the created tet attribute
+     */
+    template <class T>
+    std::shared_ptr<TetAttribute<T>> add_tet_attribute_like(
+        const std::string&     name,
+        const TetAttribute<T>& other);
+
+    /**
+     * @brief Adding a new tet attribute by reading values from a host buffer
+     * t_attributes where the order of tets is the same as the order of
+     * tets given to the constructor.The attributes are populated on device
+     * and host
+     * @tparam T type of the attribute
+     * @param name of the attribute. Should not collide with other attributes
+     * names
+     * @param layout as AoS, AoSoA (patch-local SoA), or SoA (global
+     * column-major) operations
+     * @return shared pointer to the created attribute
+     */
+    template <class T>
+    std::shared_ptr<TetAttribute<T>> add_tet_attribute(
+        const std::vector<T>& t_attributes,
         const std::string&    name,
         layoutT               layout = AoSoA);
 
@@ -780,8 +977,8 @@ class RXMeshStatic : public RXMesh
         layoutT               layout = AoSoA);
 
     /**
-     * @brief similar to add_vertex/edge/face_attribute where the mesh element
-     * type is defined via template parameter
+     * @brief similar to add_vertex/edge/face/tet_attribute where the mesh
+     * element type is defined via template parameter
      * @return
      */
     template <class T, class HandleT>
@@ -794,7 +991,7 @@ class RXMeshStatic : public RXMesh
     /**
      * @brief Adding a new attribute similar to another attribute in allocation,
      * number of attributes, and layout. The type of the attribute (vertex,edge,
-     * or face) is derived automatically from the input attribute (other)
+     * face, or tet) is derived automatically from the input attribute (other)
      * @tparam T type of the returned attribute
      * @tparam HandleT handle type of the returned attribute
      * @param name of the attribute. Should not collide with other attributes
@@ -815,7 +1012,7 @@ class RXMeshStatic : public RXMesh
     bool does_attribute_exist(const std::string& name);
 
     /**
-     * @brief Remove an attribute. Could be vertex, edge, or face attribute
+     * @brief Remove an attribute. Could be vertex, edge, face, or tet attribute
      * @param name the attribute name
      */
     void remove_attribute(const std::string& name);
@@ -864,6 +1061,11 @@ class RXMeshStatic : public RXMesh
      * @brief return a shared pointer of the face region label
      */
     std::shared_ptr<FaceAttribute<int>> get_face_region_label();
+
+    /**
+     * @brief return a shared pointer of the tet region label
+     */
+    std::shared_ptr<TetAttribute<int>> get_tet_region_label();
 
     /**
      * @brief return a shared pointer of the edge region label
@@ -916,13 +1118,22 @@ class RXMeshStatic : public RXMesh
     /**
      * @brief Map a face handle into a global index as seen in the input
      * to RXMeshStatic
-     * @param vh input face handle
+     * @param fh input face handle
      * @return the global index of fh
      */
     uint32_t map_to_global(const FaceHandle fh) const;
 
     /**
-     * @brief compute a linear compact index for a give vertex/edge/face handle
+     * @brief Map a tet handle into a global index as seen in the input
+     * to RXMeshStatic
+     * @param th input tet handle
+     * @return the global index of th
+     */
+    uint32_t map_to_global(const TetHandle th) const;
+
+    /**
+     * @brief compute a linear compact index for a give vertex/edge/face/tet
+     * handle
      * @tparam HandleT the type of the input handle
      * @param input handle
      */
@@ -1037,6 +1248,16 @@ class RXMeshStatic : public RXMesh
                           bool      use_global_order = false) const;
 
     /**
+     * @brief Reconstruct the four incident vertices of every owned tet
+     */
+    void create_tet_list(std::vector<glm::uvec4>& t_list) const;
+
+    /**
+     * @brief Reconstruct the four incident vertices of every owned tet
+     * into a buffer containing 4 * get_num_tets() entries
+     */
+    void create_tet_list(uint32_t* t_list, bool use_global_order = false) const;
+    /**
      * @brief Copy the mesh edges into a row-major buffer
      * @parame_list Buffer with room for 2x#E uint32_t values
      * @param use_global_order If false, rows and vertex IDs use compact linear
@@ -1054,6 +1275,7 @@ class RXMeshStatic : public RXMesh
      * this RXMeshStatic instance.
      */
     const std::vector<uint32_t>& get_edge_permutation();
+
 
    protected:
     template <typename AttributeT>
@@ -1288,11 +1510,15 @@ class RXMeshStatic : public RXMesh
     void register_polyscope();
 
     std::string             m_polyscope_mesh_name;
-    polyscope::SurfaceMesh* m_polyscope_mesh;
+    polyscope::SurfaceMesh* m_polyscope_mesh        = nullptr;
+    polyscope::VolumeMesh*  m_polyscope_volume_mesh = nullptr;
     EdgeMapT                m_polyscope_edges_map;
 #endif
 
    public:
+    void add_face_labels(TetAttribute<int>&  tet_label,
+                         FaceAttribute<int>& face_label);
+
     void add_edge_labels(FaceAttribute<int>& face_label,
                          EdgeAttribute<int>& edge_label);
 
@@ -1301,9 +1527,13 @@ class RXMeshStatic : public RXMesh
     std::shared_ptr<AttributeContainer>          m_attr_container;
     std::shared_ptr<VertexAttribute<rx_coord_t>> m_input_vertex_coordinates;
 
-    // Cached on first request and also reused by the optional native
-    // Polyscope integration.
+
+    std::shared_ptr<TetAttribute<int>> m_tet_label;
+
+    // Cached on first request and also reused by the optional
+    // native Polyscope integration.
     std::vector<uint32_t> m_polyscope_edge_permute;
+
 
     std::shared_ptr<FaceAttribute<int>>   m_face_label;
     std::shared_ptr<EdgeAttribute<int>>   m_edge_label;

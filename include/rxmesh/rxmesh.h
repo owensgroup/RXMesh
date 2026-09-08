@@ -104,8 +104,27 @@ class RXMesh
     }
 
     /**
-     * @brief return the number of mesh elements (vertices, edges, or faces)
-     * based on a template paramter input.
+     * @brief Total number of tets in the mesh
+     */
+    uint32_t get_num_tets() const
+    {
+        return m_num_tets;
+    }
+
+    uint32_t get_num_tets(bool from_device)
+    {
+        if (from_device && m_is_tet_mesh) {
+            CUDA_ERROR(cudaMemcpy(&m_num_tets,
+                                  m_rxmesh_context.m_num_tets,
+                                  sizeof(uint32_t),
+                                  cudaMemcpyDeviceToHost));
+        }
+        return m_num_tets;
+    }
+
+    /**
+     * @brief return the number of mesh elements (vertices, edges, faces, or
+     * tets) based on a template parameter input.
      */
     template <typename HandleT>
     uint32_t get_num_elements() const
@@ -113,8 +132,9 @@ class RXMesh
         static_assert(
             std::is_same_v<HandleT, VertexHandle> ||
                 std::is_same_v<HandleT, EdgeHandle> ||
-                std::is_same_v<HandleT, FaceHandle>,
-            "Template paramter should be either Vertex/Edge/FaceHandle");
+                std::is_same_v<HandleT, FaceHandle> ||
+                std::is_same_v<HandleT, TetHandle>,
+            "Template paramter should be either Vertex/Edge/Face/TetHandle");
         if constexpr (std::is_same_v<HandleT, VertexHandle>) {
             return get_num_vertices();
         }
@@ -125,6 +145,10 @@ class RXMesh
 
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return get_num_faces();
+        }
+
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return get_num_tets();
         }
     }
 
@@ -295,6 +319,25 @@ class RXMesh
     }
 
     /**
+     * @brief Maximum number of tets in a patch
+     */
+    uint32_t get_per_patch_max_tets() const
+    {
+        return m_max_tets_per_patch;
+    }
+
+    uint32_t get_per_patch_max_tets(bool from_device)
+    {
+        if (from_device && m_is_tet_mesh) {
+            CUDA_ERROR(cudaMemcpy(&m_max_tets_per_patch,
+                                  m_rxmesh_context.m_max_num_tets,
+                                  sizeof(uint32_t),
+                                  cudaMemcpyDeviceToHost));
+        }
+        return m_max_tets_per_patch;
+    }
+
+    /**
      * @brief The time used to construct the patches on the GPU
      */
     float get_patching_time() const
@@ -350,6 +393,11 @@ class RXMesh
     const FaceHandle map_to_local_face(uint32_t i) const;
 
     /**
+     * @brief map a compact tet index to a TetHandle
+     */
+    const TetHandle map_to_local_tet(uint32_t i) const;
+
+    /**
      * @brief return the number of owned vertices in a patch
      */
     uint16_t get_num_owned_vertices(const uint32_t p) const
@@ -371,6 +419,14 @@ class RXMesh
     uint16_t get_num_owned_faces(const uint32_t p) const
     {
         return m_h_num_owned_f[p];
+    }
+
+    /**
+     * @brief return the number of owned tets in a patch
+     */
+    uint16_t get_num_owned_tets(const uint32_t p) const
+    {
+        return m_is_tet_mesh ? m_h_num_owned_t[p] : 0;
     }
 
 
@@ -398,6 +454,14 @@ class RXMesh
         return m_h_patches_info[p].num_faces[0];
     }
 
+    /**
+     * @brief return the number of tets in a patch
+     */
+    uint16_t get_num_tets(const uint32_t p) const
+    {
+        return m_is_tet_mesh ? m_h_patches_info[p].num_tets[0] : 0;
+    }
+
     const PatchInfo& get_patch(uint32_t p) const
     {
         assert(p < get_num_patches());
@@ -417,6 +481,10 @@ class RXMesh
 
         if constexpr (std::is_same_v<LocalT, LocalFaceT>) {
             return detail::mask_num_bytes(this->m_max_faces_per_patch);
+        }
+
+        if constexpr (std::is_same_v<LocalT, LocalTetT>) {
+            return detail::mask_num_bytes(this->m_max_tets_per_patch);
         }
     }
 
@@ -459,6 +527,18 @@ class RXMesh
                 return nullptr;
             }
         }
+
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            if (location == HOST) {
+                return m_h_tet_prefix;
+            } else if (location == DEVICE) {
+                return m_d_tet_prefix;
+            } else {
+                RXMESH_ERROR("RXMesh::get_element_prefix invalid location {}",
+                             location_to_string(location));
+                return nullptr;
+            }
+        }
     }
 
    protected:
@@ -475,7 +555,7 @@ class RXMesh
 
     /**
      * @brief init all the data structures
-     * @param fv the mesh connectivity as an index triangle
+     * @param simplices the triangle or tet mesh connectivity
      * @param patcher_file optional file to load the patches
      * @param capacity_factor capacity factor the determine the max allocation
      * size of a patch as a fraction of its size. For example, a patch with x
@@ -486,37 +566,37 @@ class RXMesh
      * @param lp_hashtable_load_factor loading factor for the hashtable use for
      * the not-owned vertices/edges/faces
      */
-    void init(const std::vector<std::vector<uint32_t>>& fv,
+    void init(const std::vector<std::vector<uint32_t>>& simplices,
               const std::string                         patcher_file    = "",
               const float                               capacity_factor = 1.8,
               const float patch_alloc_factor                            = 5.0,
               const float lp_hashtable_load_factor                      = 0.5);
 
     /**
-     * @brief build different supporting data structure used to build RXMesh
-     *
-     * Set the number of vertices, edges, and faces, populate edge_map (which
-     * takes two connected vertices and returns their edge id), build
-     * face-incident-faces data structure (used to in creating patches). This is
-     * done using a single pass over FV
-     *
-     * @param fv input face incident vertices
-     * @param ef output edge incident faces
-     * @param ef output face adjacent faces
+     * @brief build different supporting data structure used to build RXMesh Set
+     * the number of vertices, edges, faces, and tets, populate edge_map (which
+     * takes two connected vertices and returns their edge id), and build the
+     * top-simplex adjacency used to create patches.
+     * @param simplices input faces or tets incident vertices
+     * @param ev output edge incident vertices
+     * @param fe output packed face incident edges for tet meshes
+     * @param tf output packed tet incident faces for tet meshes
+     * @param adjacency_offset output top-simplex adjacency offsets
+     * @param adjacency_values output top-simplex adjacency values
      */
     void build_supporting_structures(
-        const std::vector<std::vector<uint32_t>>& fv,
+        const std::vector<std::vector<uint32_t>>& simplices,
         std::vector<std::array<uint32_t, 2>>&     ev,
-        std::vector<uint32_t>&                    ff_offset,
-        std::vector<uint32_t>&                    ff_values);
+        std::vector<std::array<uint32_t, 3>>&     fe,
+        std::vector<std::array<uint32_t, 4>>&     tf,
+        std::vector<uint32_t>&                    adjacency_offset,
+        std::vector<uint32_t>&                    adjacency_values);
 
     /**
-     * @brief Calculate various statistics for the input mesh
-     *
-     * Calculate max valence, max edge incident faces, max face adjacent faces,
-     * if the input is closed, if the input is edge manifold, and max number of
+     * @brief Calculate various statistics for the input mesh Calculate max
+     * valence, max edge incident faces, max face adjacent faces, if the input
+     * is closed, if the input is edge manifold, and max number of
      * vertices/edges/faces per patch
-     *
      * @param fv input face incident vertices
      * @param ef input edge incident faces
      */
@@ -566,18 +646,27 @@ class RXMesh
             //     / m_lp_hashtable_load_factor)));
             return m_max_capacity_lp_f;
         }
+
+        if constexpr (std::is_same_v<LocalT, LocalTetT>) {
+            return m_max_capacity_lp_t;
+        }
     }
 
-    void build(const std::vector<std::vector<uint32_t>>& fv,
+    void build(const std::vector<std::vector<uint32_t>>& simplices,
                const std::string                         patcher_file);
 
-    void build_single_patch_ltog(const std::vector<std::vector<uint32_t>>&   fv,
-                                 const std::vector<std::array<uint32_t, 2>>& ev,
-                                 const uint32_t patch_id);
+    void build_single_patch_ltog(
+        const std::vector<std::vector<uint32_t>>&   simplices,
+        const std::vector<std::array<uint32_t, 2>>& ev,
+        const std::vector<std::array<uint32_t, 4>>& tf,
+        const uint32_t                              patch_id);
 
     void build_single_patch_topology(
-        const std::vector<std::vector<uint32_t>>& fv,
-        const uint32_t                            patch_id);
+        const std::vector<std::vector<uint32_t>>&   simplices,
+        const std::vector<std::array<uint32_t, 2>>& ev,
+        const std::vector<std::array<uint32_t, 3>>& fe,
+        const std::vector<std::array<uint32_t, 4>>& tf,
+        const uint32_t                              patch_id);
 
     // get the max vertex/edge/face capacity i.e., the max number of
     // vertices/edges/faces allowed in a patch (for allocation purposes)
@@ -586,7 +675,7 @@ class RXMesh
     uint16_t get_per_patch_max_face_capacity() const;
 
     void build_device();
-    
+
     void patch_graph_coloring();
 
     void populate_patch_stash();
@@ -605,9 +694,10 @@ class RXMesh
     EdgeMapT m_edges_map;
 
     // Should be updated with update_host
-    uint32_t m_num_edges, m_num_faces, m_num_vertices;
+    uint32_t m_num_edges, m_num_faces, m_num_tets, m_num_vertices;
 
-    uint32_t m_max_edge_capacity, m_max_face_capacity, m_max_vertex_capacity;
+    uint32_t m_max_edge_capacity, m_max_face_capacity, m_max_vertex_capacity,
+        m_max_tet_capacity;
 
     uint32_t m_input_max_valence, m_input_max_edge_incident_faces,
         m_input_max_face_adjacent_faces;
@@ -623,13 +713,15 @@ class RXMesh
     std::unique_ptr<patcher::Patcher> m_patcher;
 
     // the number of owned mesh elements per patch
-    std::vector<uint16_t> m_h_num_owned_f, m_h_num_owned_e, m_h_num_owned_v;
+    std::vector<uint16_t> m_h_num_owned_f, m_h_num_owned_e, m_h_num_owned_v,
+        m_h_num_owned_t;
 
 
-    uint16_t m_max_capacity_lp_v, m_max_capacity_lp_e, m_max_capacity_lp_f;
+    uint16_t m_max_capacity_lp_v, m_max_capacity_lp_e, m_max_capacity_lp_f,
+        m_max_capacity_lp_t;
 
     uint32_t m_max_vertices_per_patch, m_max_edges_per_patch,
-        m_max_faces_per_patch;
+        m_max_faces_per_patch, m_max_tets_per_patch;
 
     // mappings
     // local to global map for (v)ertices (e)dges and (f)aces
@@ -637,41 +729,52 @@ class RXMesh
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_v;
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_e;
     std::vector<std::vector<uint32_t>> m_h_patches_ltog_f;
+    std::vector<std::vector<uint32_t>> m_h_patches_ltog_t;
 
-    // the prefix sum of the owned vertices/edges/faces in patches
-    uint32_t *m_h_vertex_prefix, *m_h_edge_prefix, *m_h_face_prefix;
-    uint32_t *m_d_vertex_prefix, *m_d_edge_prefix, *m_d_face_prefix;
+    // the prefix sum of the owned vertices/edges/faces/tets in patches
+    uint32_t *m_h_vertex_prefix, *m_h_edge_prefix, *m_h_face_prefix,
+        *m_h_tet_prefix;
+    uint32_t *m_d_vertex_prefix, *m_d_edge_prefix, *m_d_face_prefix,
+        *m_d_tet_prefix;
 
-    // Store the mapping from linear_id to Vertex/Edge/FaceHandle
+    // Store the mapping from linear_id to Vertex/Edge/Face/TetHandle
     VertexHandle *m_d_v_handles, *m_h_v_handles;
     EdgeHandle *  m_d_e_handles, *m_h_e_handles;
     FaceHandle *  m_d_f_handles, *m_h_f_handles;
+    TetHandle *   m_d_t_handles, *m_h_t_handles;
 
     PatchInfo *m_d_patches_info, *m_h_patches_info;
 
     // Contiguous topology/mask device buffers for all patch slots.
     LocalVertexT* m_d_evs_all;
     LocalEdgeT*   m_d_fes_all;
+    LocalFaceT*   m_d_tfs_all;
 
     uint32_t* m_d_active_mask_v_all;
     uint32_t* m_d_active_mask_e_all;
     uint32_t* m_d_active_mask_f_all;
+    uint32_t* m_d_active_mask_t_all;
     uint32_t* m_d_owned_mask_v_all;
     uint32_t* m_d_owned_mask_e_all;
     uint32_t* m_d_owned_mask_f_all;
+    uint32_t* m_d_owned_mask_t_all;
     uint16_t* m_d_counts_all;
     int*      m_d_dirty_all;
 
     uint32_t* m_d_patch_stashes_all;
-    LPPair *  m_d_lp_v_tables_all, *m_d_lp_e_tables_all, *m_d_lp_f_tables_all;
-    LPPair *m_d_lp_v_stashes_all, *m_d_lp_e_stashes_all, *m_d_lp_f_stashes_all;
+    LPPair *  m_d_lp_v_tables_all, *m_d_lp_e_tables_all, *m_d_lp_f_tables_all,
+        *m_d_lp_t_tables_all;
+    LPPair *m_d_lp_v_stashes_all, *m_d_lp_e_stashes_all, *m_d_lp_f_stashes_all,
+        *m_d_lp_t_stashes_all;
     uint32_t *m_d_patch_locks_all, *m_d_patch_spins_all;
 
     uint32_t m_ev_stride_elems;
     uint32_t m_fe_stride_elems;
+    uint32_t m_tf_stride_elems;
     uint32_t m_mask_v_stride_words;
     uint32_t m_mask_e_stride_words;
     uint32_t m_mask_f_stride_words;
+    uint32_t m_mask_t_stride_words;
     uint32_t m_counts_stride_elems;
     uint32_t m_dirty_stride_elems;
 
@@ -680,5 +783,7 @@ class RXMesh
     uint32_t m_num_colors;
 
     Timers<CPUTimer> m_timers;
+
+    bool m_is_tet_mesh = false;
 };
 }  // namespace rxmesh

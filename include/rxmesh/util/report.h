@@ -294,6 +294,9 @@ struct Report
         add_member("num_vertices", rx.get_num_vertices(), subdoc);
         add_member("num_edges", rx.get_num_edges(), subdoc);
         add_member("num_faces", rx.get_num_faces(), subdoc);
+        if (rx.get_num_tets() != 0) {
+            add_member("num_tets", rx.get_num_tets(), subdoc);
+        }
         add_member("max_valence", rx.get_input_max_valence(), subdoc);
         add_member("is_edge_manifold", rx.is_edge_manifold(), subdoc);
         add_member("is_closed", rx.is_closed(), subdoc);
@@ -312,6 +315,10 @@ struct Report
             "per_patch_max_vertices", rx.get_per_patch_max_vertices(), subdoc);
         add_member("per_patch_max_edges", rx.get_per_patch_max_edges(), subdoc);
         add_member("per_patch_max_faces", rx.get_per_patch_max_faces(), subdoc);
+        if (rx.get_num_tets() != 0) {
+            add_member(
+                "per_patch_max_tets", rx.get_per_patch_max_tets(), subdoc);
+        }
         add_member("ribbon_overhead (%)", rx.get_ribbon_overhead(), subdoc);
 
         rapidjson::Value key(json_member_name.c_str(), subdoc.GetAllocator());

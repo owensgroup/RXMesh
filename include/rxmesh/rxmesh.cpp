@@ -2,6 +2,7 @@
 #include <omp.h>
 #include <filesystem>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <new>
 #include <numeric>
@@ -19,10 +20,12 @@ namespace rxmesh {
 RXMesh::RXMesh(uint32_t patch_size)
     : m_num_edges(0),
       m_num_faces(0),
+      m_num_tets(0),
       m_num_vertices(0),
       m_max_edge_capacity(0),
       m_max_face_capacity(0),
       m_max_vertex_capacity(0),
+      m_max_tet_capacity(0),
       m_input_max_valence(0),
       m_input_max_edge_incident_faces(0),
       m_input_max_face_adjacent_faces(0),
@@ -34,15 +37,19 @@ RXMesh::RXMesh(uint32_t patch_size)
       m_max_capacity_lp_v(0),
       m_max_capacity_lp_e(0),
       m_max_capacity_lp_f(0),
+      m_max_capacity_lp_t(0),
       m_max_vertices_per_patch(0),
       m_max_edges_per_patch(0),
       m_max_faces_per_patch(0),
+      m_max_tets_per_patch(0),
       m_h_vertex_prefix(nullptr),
       m_h_edge_prefix(nullptr),
       m_h_face_prefix(nullptr),
+      m_h_tet_prefix(nullptr),
       m_d_vertex_prefix(nullptr),
       m_d_edge_prefix(nullptr),
       m_d_face_prefix(nullptr),
+      m_d_tet_prefix(nullptr),
       m_d_patches_info(nullptr),
       m_h_patches_info(nullptr),
       m_capacity_factor(0.f),
@@ -52,33 +59,42 @@ RXMesh::RXMesh(uint32_t patch_size)
       m_h_v_handles(nullptr),
       m_h_e_handles(nullptr),
       m_h_f_handles(nullptr),
+      m_h_t_handles(nullptr),
       m_d_v_handles(nullptr),
       m_d_e_handles(nullptr),
       m_d_f_handles(nullptr),
+      m_d_t_handles(nullptr),
       m_d_evs_all(nullptr),
       m_d_fes_all(nullptr),
+      m_d_tfs_all(nullptr),
       m_d_active_mask_v_all(nullptr),
       m_d_active_mask_e_all(nullptr),
       m_d_active_mask_f_all(nullptr),
+      m_d_active_mask_t_all(nullptr),
       m_d_owned_mask_v_all(nullptr),
       m_d_owned_mask_e_all(nullptr),
       m_d_owned_mask_f_all(nullptr),
+      m_d_owned_mask_t_all(nullptr),
       m_d_counts_all(nullptr),
       m_d_dirty_all(nullptr),
       m_d_patch_stashes_all(nullptr),
       m_d_lp_v_tables_all(nullptr),
       m_d_lp_e_tables_all(nullptr),
       m_d_lp_f_tables_all(nullptr),
+      m_d_lp_t_tables_all(nullptr),
       m_d_lp_v_stashes_all(nullptr),
       m_d_lp_e_stashes_all(nullptr),
       m_d_lp_f_stashes_all(nullptr),
+      m_d_lp_t_stashes_all(nullptr),
       m_d_patch_locks_all(nullptr),
       m_d_patch_spins_all(nullptr),
       m_ev_stride_elems(0),
       m_fe_stride_elems(0),
+      m_tf_stride_elems(0),
       m_mask_v_stride_words(0),
       m_mask_e_stride_words(0),
       m_mask_f_stride_words(0),
+      m_mask_t_stride_words(0),
       m_counts_stride_elems(0),
       m_dirty_stride_elems(0)
 
@@ -86,7 +102,7 @@ RXMesh::RXMesh(uint32_t patch_size)
 {
 }
 
-void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
+void RXMesh::init(const std::vector<std::vector<uint32_t>>& simplices,
                   const std::string                         patcher_file,
                   const float                               capacity_factor,
                   const float                               patch_alloc_factor,
@@ -97,9 +113,10 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
     m_patch_alloc_factor       = patch_alloc_factor;
 
     // Build everything from scratch including patches
-    if (fv.empty()) {
+    if (simplices.empty()) {
         RXMESH_ERROR(
-            "RXMesh::init input fv is empty. Can not build RXMesh properly");
+            "RXMesh::init input simplices is empty. Can not build RXMesh "
+            "properly");
     }
     if (m_capacity_factor < 1.0) {
         RXMESH_ERROR("RXMesh::init capacity factor should be at least one");
@@ -126,12 +143,13 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
     m_timers.start("init.total");
 
     m_timers.start("build");
-    build(fv, patcher_file);
+    build(simplices, patcher_file);
     m_timers.stop("build");
 
     m_timers.start("populate_patch_stash");
     populate_patch_stash();
     m_timers.stop("populate_patch_stash");
+
 
     m_timers.start("coloring");
     patch_graph_coloring();
@@ -164,21 +182,26 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
     m_rxmesh_context.init(m_num_vertices,
                           m_num_edges,
                           m_num_faces,
+                          m_num_tets,
                           m_max_vertices_per_patch,
                           m_max_edges_per_patch,
                           m_max_faces_per_patch,
+                          m_max_tets_per_patch,
                           get_num_patches(),
                           get_max_num_patches(),
                           m_capacity_factor,
                           m_d_vertex_prefix,
                           m_d_edge_prefix,
                           m_d_face_prefix,
+                          m_d_tet_prefix,
                           m_h_vertex_prefix,
                           m_h_edge_prefix,
                           m_h_face_prefix,
+                          m_h_tet_prefix,
                           m_d_v_handles,
                           m_d_e_handles,
                           m_d_f_handles,
+                          m_d_t_handles,
                           m_d_patches_info,
                           sch);
     m_timers.stop("context.init");
@@ -190,6 +213,9 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                 m_num_faces,
                 m_num_edges,
                 m_num_patches);
+    if (m_is_tet_mesh) {
+        RXMESH_INFO("RXMesh: #Tets = {}", m_num_tets);
+    }
     RXMESH_INFO("RXMesh: Input is{} edge manifold",
                 ((m_is_input_edge_manifold) ? "" : " Not"));
     RXMESH_INFO("RXMesh: Input is{} closed",
@@ -205,6 +231,10 @@ void RXMesh::init(const std::vector<std::vector<uint32_t>>& fv,
                 m_max_edges_per_patch);
     RXMESH_INFO("RXMesh: per-patch maximum vertex count = {}",
                 m_max_vertices_per_patch);
+    if (m_is_tet_mesh) {
+        RXMESH_INFO("RXMesh: per-patch maximum tet count = {}",
+                    m_max_tets_per_patch);
+    }
 
     RXMESH_INFO("RXMesh::init timings:");
     RXMESH_INFO("  total = {} (ms)", m_timers.elapsed_millis("init.total"));
@@ -232,37 +262,46 @@ RXMesh::~RXMesh()
         for (uint32_t p = 0; p < get_max_num_patches(); ++p) {
             free(m_h_patches_info[p].ev);
             free(m_h_patches_info[p].fe);
+            free(m_h_patches_info[p].tf);
             free(m_h_patches_info[p].active_mask_v);
             free(m_h_patches_info[p].active_mask_e);
             free(m_h_patches_info[p].active_mask_f);
+            free(m_h_patches_info[p].active_mask_t);
             free(m_h_patches_info[p].owned_mask_v);
             free(m_h_patches_info[p].owned_mask_e);
             free(m_h_patches_info[p].owned_mask_f);
+            free(m_h_patches_info[p].owned_mask_t);
             free(m_h_patches_info[p].num_faces);
             free(m_h_patches_info[p].dirty);
             m_h_patches_info[p].lp_v.free();
             m_h_patches_info[p].lp_e.free();
             m_h_patches_info[p].lp_f.free();
+            m_h_patches_info[p].lp_t.free();
             m_h_patches_info[p].patch_stash.free();
         }
     }
     GPU_FREE(m_d_evs_all);
     GPU_FREE(m_d_fes_all);
+    GPU_FREE(m_d_tfs_all);
     GPU_FREE(m_d_active_mask_v_all);
     GPU_FREE(m_d_active_mask_e_all);
     GPU_FREE(m_d_active_mask_f_all);
+    GPU_FREE(m_d_active_mask_t_all);
     GPU_FREE(m_d_owned_mask_v_all);
     GPU_FREE(m_d_owned_mask_e_all);
     GPU_FREE(m_d_owned_mask_f_all);
+    GPU_FREE(m_d_owned_mask_t_all);
     GPU_FREE(m_d_counts_all);
     GPU_FREE(m_d_dirty_all);
     GPU_FREE(m_d_patch_stashes_all);
     GPU_FREE(m_d_lp_v_tables_all);
     GPU_FREE(m_d_lp_e_tables_all);
     GPU_FREE(m_d_lp_f_tables_all);
+    GPU_FREE(m_d_lp_t_tables_all);
     GPU_FREE(m_d_lp_v_stashes_all);
     GPU_FREE(m_d_lp_e_stashes_all);
     GPU_FREE(m_d_lp_f_stashes_all);
+    GPU_FREE(m_d_lp_t_stashes_all);
     GPU_FREE(m_d_patch_locks_all);
     GPU_FREE(m_d_patch_spins_all);
     GPU_FREE(m_d_patches_info);
@@ -273,32 +312,45 @@ RXMesh::~RXMesh()
     GPU_FREE(m_d_vertex_prefix);
     GPU_FREE(m_d_edge_prefix);
     GPU_FREE(m_d_face_prefix);
+    GPU_FREE(m_d_tet_prefix);
 
     free(m_h_vertex_prefix);
     free(m_h_edge_prefix);
     free(m_h_face_prefix);
+    free(m_h_tet_prefix);
 
     free(m_h_v_handles);
     free(m_h_e_handles);
     free(m_h_f_handles);
+    free(m_h_t_handles);
 
     GPU_FREE(m_d_v_handles);
     GPU_FREE(m_d_e_handles);
     GPU_FREE(m_d_f_handles);
+    GPU_FREE(m_d_t_handles);
 }
 
-void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
+void RXMesh::build(const std::vector<std::vector<uint32_t>>& simplices,
                    const std::string                         patcher_file)
 {
-    std::vector<uint32_t>                ff_values;
-    std::vector<uint32_t>                ff_offset;
+    // this is FF for triangle mesh or TT for tet mesh (used for patching)
+    std::vector<uint32_t> adjacency_values;
+    std::vector<uint32_t> adjacency_offset;
+
     std::vector<std::array<uint32_t, 2>> ev;
+    std::vector<std::array<uint32_t, 3>> fe;
+    std::vector<std::array<uint32_t, 4>> tf;
 
     m_max_capacity_lp_v = 0;
     m_max_capacity_lp_e = 0;
     m_max_capacity_lp_f = 0;
+    m_max_capacity_lp_t = 0;
 
-    build_supporting_structures(fv, ev, ff_offset, ff_values);
+    build_supporting_structures(
+        simplices, ev, fe, tf, adjacency_offset, adjacency_values);
+
+    const MeshKind mesh_kind =
+        m_is_tet_mesh ? MeshKind::Tet : MeshKind::Triangle;
 
     if (!patcher_file.empty()) {
         if (!std::filesystem::exists(patcher_file)) {
@@ -306,29 +358,42 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
                 "RXMesh::build patch file {} does not exit. Building unique "
                 "patches.",
                 patcher_file);
-            m_patcher = std::make_unique<patcher::Patcher>(m_patch_size,
-                                                           ff_offset,
-                                                           ff_values,
-                                                           fv,
+            m_patcher = std::make_unique<patcher::Patcher>(mesh_kind,
+                                                           m_patch_size,
+                                                           adjacency_offset,
+                                                           adjacency_values,
+                                                           simplices,
+                                                           tf,
                                                            m_edges_map,
                                                            m_num_vertices,
                                                            m_num_edges,
+                                                           m_num_faces,
                                                            false);
         } else {
-            m_patcher = std::make_unique<patcher::Patcher>(patcher_file);
+            m_patcher = std::make_unique<patcher::Patcher>(patcher_file,
+                                                           mesh_kind,
+                                                           adjacency_offset,
+                                                           adjacency_values,
+                                                           simplices,
+                                                           tf,
+                                                           m_edges_map,
+                                                           m_num_vertices,
+                                                           m_num_edges,
+                                                           m_num_faces);
         }
     } else {
-        m_patcher = std::make_unique<patcher::Patcher>(m_patch_size,
-                                                       ff_offset,
-                                                       ff_values,
-                                                       fv,
+        m_patcher = std::make_unique<patcher::Patcher>(mesh_kind,
+                                                       m_patch_size,
+                                                       adjacency_offset,
+                                                       adjacency_values,
+                                                       simplices,
+                                                       tf,
                                                        m_edges_map,
                                                        m_num_vertices,
                                                        m_num_edges,
+                                                       m_num_faces,
                                                        false);
     }
-
-
     m_num_patches     = m_patcher->get_num_patches();
     m_max_num_patches = static_cast<uint32_t>(
         std::ceil(m_patch_alloc_factor * static_cast<float>(m_num_patches)));
@@ -345,9 +410,14 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
     m_h_num_owned_v.resize(get_max_num_patches(), 0);
     m_h_num_owned_e.resize(get_max_num_patches(), 0);
 
+    if (m_is_tet_mesh) {
+        m_h_patches_ltog_t.resize(get_num_patches());
+        m_h_num_owned_t.resize(get_max_num_patches(), 0);
+    }
+
 #pragma omp parallel for
     for (int p = 0; p < static_cast<int>(get_num_patches()); ++p) {
-        build_single_patch_ltog(fv, ev, p);
+        build_single_patch_ltog(simplices, ev, tf, p);
     }
 
     // calc max elements for use in build_device (which populates
@@ -355,6 +425,7 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
     m_max_vertices_per_patch = 0;
     m_max_edges_per_patch    = 0;
     m_max_faces_per_patch    = 0;
+    m_max_tets_per_patch     = 0;
     for (uint32_t p = 0; p < get_num_patches(); ++p) {
         m_max_vertices_per_patch =
             std::max(m_max_vertices_per_patch,
@@ -365,20 +436,82 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
         m_max_faces_per_patch =
             std::max(m_max_faces_per_patch,
                      static_cast<uint32_t>(m_h_patches_ltog_f[p].size()));
+        if (m_is_tet_mesh) {
+            m_max_tets_per_patch =
+                std::max(m_max_tets_per_patch,
+                         static_cast<uint32_t>(m_h_patches_ltog_t[p].size()));
+        }
     }
 
-    m_max_vertex_capacity = static_cast<uint16_t>(std::ceil(
-        m_capacity_factor * static_cast<float>(m_max_vertices_per_patch)));
+    if (m_max_vertices_per_patch > INVALID16 ||
+        m_max_tets_per_patch > INVALID16 ||
+        m_max_edges_per_patch >= (1u << 15) ||
+        m_max_faces_per_patch >= (1u << 15)) {
+        RXMESH_ERROR(
+            "RXMesh::build patch-local topology exceeds the 16-bit packed "
+            "index representation");
+        exit(EXIT_FAILURE);
+    }
 
-    m_max_edge_capacity = static_cast<uint16_t>(std::ceil(
-        m_capacity_factor * static_cast<float>(m_max_edges_per_patch)));
+    auto calc_capacity = [&](const uint32_t max_elements) {
+        const uint32_t capacity = static_cast<uint32_t>(
+            std::ceil(m_capacity_factor * static_cast<float>(max_elements)));
+        if (capacity > INVALID16) {
+            RXMESH_ERROR(
+                "RXMesh::build patch capacity {} exceeds the 16-bit "
+                "representation",
+                capacity);
+            exit(EXIT_FAILURE);
+        }
+        return capacity;
+    };
 
-    m_max_face_capacity = static_cast<uint16_t>(std::ceil(
-        m_capacity_factor * static_cast<float>(m_max_faces_per_patch)));
+    m_max_vertex_capacity = calc_capacity(m_max_vertices_per_patch);
+    m_max_edge_capacity   = calc_capacity(m_max_edges_per_patch);
+    m_max_face_capacity   = calc_capacity(m_max_faces_per_patch);
+    m_max_tet_capacity =
+        m_is_tet_mesh ? calc_capacity(m_max_tets_per_patch) : 0;
 
 #pragma omp parallel for
     for (int p = 0; p < static_cast<int>(get_num_patches()); ++p) {
-        build_single_patch_topology(fv, p);
+        build_single_patch_topology(simplices, ev, fe, tf, p);
+    }
+
+    // the hash table capacity should be at least 2* the size of the stash
+    m_max_capacity_lp_v = 2 * LPHashTable::stash_size;
+    m_max_capacity_lp_e = 2 * LPHashTable::stash_size;
+    m_max_capacity_lp_f = 2 * LPHashTable::stash_size;
+    if (m_is_tet_mesh) {
+        m_max_capacity_lp_t = 2 * LPHashTable::stash_size;
+    }
+
+    auto update_lp_capacity = [&](uint16_t&    capacity,
+                                  const size_t num_not_owned) {
+        const uint32_t required = static_cast<uint32_t>(
+            std::ceil(m_capacity_factor * static_cast<float>(num_not_owned) /
+                      m_lp_hashtable_load_factor));
+        if (required > INVALID16) {
+            RXMESH_ERROR(
+                "RXMesh::build LP capacity {} exceeds the 16-bit "
+                "representation",
+                required);
+            exit(EXIT_FAILURE);
+        }
+        capacity = std::max(capacity, static_cast<uint16_t>(required));
+    };
+
+    for (uint32_t p = 0; p < get_num_patches(); ++p) {
+        update_lp_capacity(m_max_capacity_lp_v,
+                           m_h_patches_ltog_v[p].size() - m_h_num_owned_v[p]);
+        update_lp_capacity(m_max_capacity_lp_e,
+                           m_h_patches_ltog_e[p].size() - m_h_num_owned_e[p]);
+        update_lp_capacity(m_max_capacity_lp_f,
+                           m_h_patches_ltog_f[p].size() - m_h_num_owned_f[p]);
+        if (m_is_tet_mesh) {
+            update_lp_capacity(
+                m_max_capacity_lp_t,
+                m_h_patches_ltog_t[p].size() - m_h_num_owned_t[p]);
+        }
     }
 
     const uint32_t patches_1_bytes =
@@ -387,51 +520,32 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
     m_h_vertex_prefix = (uint32_t*)malloc(patches_1_bytes);
     m_h_edge_prefix   = (uint32_t*)malloc(patches_1_bytes);
     m_h_face_prefix   = (uint32_t*)malloc(patches_1_bytes);
+    if (m_is_tet_mesh) {
+        m_h_tet_prefix = (uint32_t*)malloc(patches_1_bytes);
+    }
 
     memset(m_h_vertex_prefix, 0, patches_1_bytes);
     memset(m_h_edge_prefix, 0, patches_1_bytes);
     memset(m_h_face_prefix, 0, patches_1_bytes);
+    if (m_is_tet_mesh) {
+        memset(m_h_tet_prefix, 0, patches_1_bytes);
+    }
 
     for (uint32_t p = 0; p < get_num_patches(); ++p) {
         m_h_vertex_prefix[p + 1] = m_h_vertex_prefix[p] + m_h_num_owned_v[p];
         m_h_edge_prefix[p + 1]   = m_h_edge_prefix[p] + m_h_num_owned_e[p];
         m_h_face_prefix[p + 1]   = m_h_face_prefix[p] + m_h_num_owned_f[p];
-    }
-
-
-    // the hash table capacity should be at least 2* the size of the stash
-    m_max_capacity_lp_v = 2 * LPHashTable::stash_size;
-    m_max_capacity_lp_e = 2 * LPHashTable::stash_size;
-    m_max_capacity_lp_f = 2 * LPHashTable::stash_size;
-    for (uint32_t p = 0; p < get_num_patches(); ++p) {
-        m_max_capacity_lp_v = std::max(
-            m_max_capacity_lp_v,
-            static_cast<uint16_t>(
-                std::ceil(m_capacity_factor *
-                          static_cast<float>(m_h_patches_ltog_v[p].size() -
-                                             m_h_num_owned_v[p]) /
-                          m_lp_hashtable_load_factor)));
-
-        m_max_capacity_lp_e = std::max(
-            m_max_capacity_lp_e,
-            static_cast<uint16_t>(
-                std::ceil(m_capacity_factor *
-                          static_cast<float>(m_h_patches_ltog_e[p].size() -
-                                             m_h_num_owned_e[p]) /
-                          m_lp_hashtable_load_factor)));
-
-        m_max_capacity_lp_f = std::max(
-            m_max_capacity_lp_f,
-            static_cast<uint16_t>(
-                std::ceil(m_capacity_factor *
-                          static_cast<float>(m_h_patches_ltog_f[p].size() -
-                                             m_h_num_owned_f[p]) /
-                          m_lp_hashtable_load_factor)));
+        if (m_is_tet_mesh) {
+            m_h_tet_prefix[p + 1] = m_h_tet_prefix[p] + m_h_num_owned_t[p];
+        }
     }
 
     CUDA_ERROR(cudaMalloc((void**)&m_d_vertex_prefix, patches_1_bytes));
     CUDA_ERROR(cudaMalloc((void**)&m_d_edge_prefix, patches_1_bytes));
     CUDA_ERROR(cudaMalloc((void**)&m_d_face_prefix, patches_1_bytes));
+    if (m_is_tet_mesh) {
+        CUDA_ERROR(cudaMalloc((void**)&m_d_tet_prefix, patches_1_bytes));
+    }
 
     CUDA_ERROR(cudaMemcpy(m_d_vertex_prefix,
                           m_h_vertex_prefix,
@@ -445,6 +559,12 @@ void RXMesh::build(const std::vector<std::vector<uint32_t>>& fv,
                           m_h_face_prefix,
                           patches_1_bytes,
                           cudaMemcpyHostToDevice));
+    if (m_is_tet_mesh) {
+        CUDA_ERROR(cudaMemcpy(m_d_tet_prefix,
+                              m_h_tet_prefix,
+                              patches_1_bytes,
+                              cudaMemcpyHostToDevice));
+    }
 }
 
 void RXMesh::create_handles()
@@ -454,6 +574,9 @@ void RXMesh::create_handles()
         (VertexHandle*)malloc(sizeof(VertexHandle) * m_num_vertices);
     m_h_e_handles = (EdgeHandle*)malloc(sizeof(EdgeHandle) * m_num_edges);
     m_h_f_handles = (FaceHandle*)malloc(sizeof(FaceHandle) * m_num_faces);
+    if (m_is_tet_mesh) {
+        m_h_t_handles = (TetHandle*)malloc(sizeof(TetHandle) * m_num_tets);
+    }
 
     CUDA_ERROR(cudaMalloc((void**)&m_d_v_handles,
                           sizeof(VertexHandle) * m_num_vertices));
@@ -461,14 +584,19 @@ void RXMesh::create_handles()
         cudaMalloc((void**)&m_d_e_handles, sizeof(EdgeHandle) * m_num_edges));
     CUDA_ERROR(
         cudaMalloc((void**)&m_d_f_handles, sizeof(FaceHandle) * m_num_faces));
+    if (m_is_tet_mesh) {
+        CUDA_ERROR(
+            cudaMalloc((void**)&m_d_t_handles, sizeof(TetHandle) * m_num_tets));
+    }
 
     // populate m_h_v_handles, m_h_e_handles, m_h_f_handles
 
-    int v_id(0), e_id(0), f_id(0);
+    int v_id(0), e_id(0), f_id(0), t_id(0);
     for (int p = 0; p < get_num_patches(); ++p) {
         int num_vertices = *(m_h_patches_info[p].num_vertices);
         int num_edges    = *(m_h_patches_info[p].num_edges);
         int num_faces    = *(m_h_patches_info[p].num_faces);
+        int num_tets     = m_is_tet_mesh ? *(m_h_patches_info[p].num_tets) : 0;
 
 
         for (int v = 0; v < num_vertices; ++v) {
@@ -497,6 +625,15 @@ void RXMesh::create_handles()
                 ++f_id;
             }
         }
+
+        for (int t = 0; t < num_tets; ++t) {
+            LocalTetT tl(t);
+            if (m_h_patches_info[p].is_owned(tl) &&
+                !m_h_patches_info[p].is_deleted(tl)) {
+                m_h_t_handles[t_id] = TetHandle(p, tl);
+                ++t_id;
+            }
+        }
     }
 
     // move handles to device
@@ -514,13 +651,214 @@ void RXMesh::create_handles()
                           m_h_f_handles,
                           sizeof(FaceHandle) * m_num_faces,
                           cudaMemcpyHostToDevice));
+    if (m_is_tet_mesh) {
+        CUDA_ERROR(cudaMemcpy(m_d_t_handles,
+                              m_h_t_handles,
+                              sizeof(TetHandle) * m_num_tets,
+                              cudaMemcpyHostToDevice));
+    }
 }
+
 void RXMesh::build_supporting_structures(
-    const std::vector<std::vector<uint32_t>>& fv,
+    const std::vector<std::vector<uint32_t>>& simplices,
     std::vector<std::array<uint32_t, 2>>&     ev,
-    std::vector<uint32_t>&                    ff_offset,
-    std::vector<uint32_t>&                    ff_values)
+    std::vector<std::array<uint32_t, 3>>&     fe,
+    std::vector<std::array<uint32_t, 4>>&     tf,
+    std::vector<uint32_t>&                    adjacency_offset,
+    std::vector<uint32_t>&                    adjacency_values)
 {
+    fe.clear();
+    tf.clear();
+
+    if (m_is_tet_mesh) {
+        m_num_tets     = static_cast<uint32_t>(simplices.size());
+        m_num_faces    = 0;
+        m_num_edges    = 0;
+        m_num_vertices = 0;
+
+        m_edges_map.clear();
+        m_edges_map.max_load_factor(0.7f);
+        m_edges_map.reserve(static_cast<size_t>(m_num_tets) * 6);
+
+        ev.clear();
+        ev.reserve(static_cast<size_t>(m_num_tets) * 6);
+        fe.reserve(static_cast<size_t>(m_num_tets) * 4);
+        tf.resize(m_num_tets);
+
+        adjacency_offset.clear();
+        adjacency_values.clear();
+
+        m_input_max_edge_incident_faces = 0;
+        m_input_max_face_adjacent_faces = 0;
+        m_input_max_valence             = 0;
+        m_is_input_closed               = true;
+        m_is_input_edge_manifold        = true;
+
+        std::vector<uint32_t> vertex_valence;
+        std::vector<uint32_t> edge_face_count;
+
+        auto add_vertex_valence = [&](uint32_t v) {
+            if (v >= vertex_valence.size()) {
+                vertex_valence.resize(static_cast<size_t>(v) + 1, 0);
+            }
+            m_input_max_valence =
+                std::max(m_input_max_valence, ++vertex_valence[v]);
+        };
+
+        auto add_edge = [&](uint32_t v0, uint32_t v1) {
+            const auto edge       = detail::edge_key(v0, v1);
+            auto [iter, inserted] = m_edges_map.emplace(edge, m_num_edges);
+            if (inserted) {
+                ev.push_back({edge.first, edge.second});
+                edge_face_count.push_back(0);
+                add_vertex_valence(edge.first);
+                add_vertex_valence(edge.second);
+                ++m_num_edges;
+            }
+            return iter->second;
+        };
+
+        auto pack_edge = [&](uint32_t v0, uint32_t v1) {
+            const uint32_t edge_id = add_edge(v0, v1);
+            const uint32_t dir     = v0 < v1;
+            return (edge_id << 1) | dir;
+        };
+
+        // Face ID, first incident tet, its local face slot, and its parity.
+        std::map<std::array<uint32_t, 3>, std::array<uint32_t, 4>> face_map;
+
+        std::vector<std::array<uint32_t, 4>> tet_neighbors(m_num_tets);
+        for (auto& neighbors : tet_neighbors) {
+            neighbors.fill(INVALID32);
+        }
+
+        uint32_t num_boundary_faces = 0;
+
+        for (uint32_t t = 0; t < m_num_tets; ++t) {
+            if (simplices[t].size() != 4) {
+                RXMESH_ERROR(
+                    "rxmesh::build_supporting_structures() Tet {} does not "
+                    "have four vertices",
+                    t);
+                exit(EXIT_FAILURE);
+            }
+
+            std::array<uint32_t, 4> tet = {simplices[t][0],
+                                           simplices[t][1],
+                                           simplices[t][2],
+                                           simplices[t][3]};
+
+            auto sorted_tet = tet;
+
+            std::sort(sorted_tet.begin(), sorted_tet.end());
+            if (std::adjacent_find(sorted_tet.begin(), sorted_tet.end()) !=
+                sorted_tet.end()) {
+                RXMESH_ERROR(
+                    "rxmesh::build_supporting_structures() Tet {} has "
+                    "repeated vertices",
+                    t);
+                exit(EXIT_FAILURE);
+            }
+
+            for (uint32_t v : tet) {
+                m_num_vertices = std::max(m_num_vertices, v);
+            }
+
+            for (const auto& edge : tet_edges()) {
+                add_edge(tet[edge[0]], tet[edge[1]]);
+            }
+
+            const auto faces = tet_faces();
+            for (uint32_t f = 0; f < 4; ++f) {
+                std::array<uint32_t, 3> oriented_face = {
+                    tet[faces[f][0]], tet[faces[f][1]], tet[faces[f][2]]};
+
+                auto face_key = oriented_face;
+                std::sort(face_key.begin(), face_key.end());
+
+                // parity records the orientation of a tet's face relative to
+                // its canonical sorted vertex order
+                // 0 means even permutation, i.e., same cyclic orientation
+                // 1 means odd permutation, i.e., reversed orientation
+                uint32_t parity = 0;
+                for (uint32_t i = 0; i < 3; ++i) {
+                    for (uint32_t j = i + 1; j < 3; ++j) {
+                        parity ^= oriented_face[i] > oriented_face[j];
+                    }
+                }
+
+                auto [face_iter, inserted] = face_map.emplace(
+                    face_key,
+                    std::array<uint32_t, 4>{m_num_faces, t, f, parity});
+                const uint32_t face_id = face_iter->second[0];
+
+                if (inserted) {
+                    ++m_num_faces;
+                    ++num_boundary_faces;
+
+                    fe.push_back({pack_edge(face_key[0], face_key[1]),
+                                  pack_edge(face_key[1], face_key[2]),
+                                  pack_edge(face_key[2], face_key[0])});
+
+                    for (uint32_t packed_edge : fe.back()) {
+                        const uint32_t edge_id = packed_edge >> 1;
+                        m_input_max_edge_incident_faces =
+                            std::max(m_input_max_edge_incident_faces,
+                                     ++edge_face_count[edge_id]);
+                    }
+
+                } else {
+                    const uint32_t other_tet  = face_iter->second[1];
+                    const uint32_t other_slot = face_iter->second[2];
+
+                    if (tet_neighbors[other_tet][other_slot] != INVALID32) {
+                        RXMESH_ERROR(
+                            "rxmesh::build_supporting_structures() Face {} "
+                            "has more than two incident tets",
+                            face_id);
+                        exit(EXIT_FAILURE);
+                    }
+
+                    if (face_iter->second[3] == parity) {
+                        RXMESH_WARN(
+                            "rxmesh::build_supporting_structures() Tets {} "
+                            "and {} have the same orientation on face {}",
+                            other_tet,
+                            t,
+                            face_id);
+                    }
+
+                    tet_neighbors[t][f]                  = other_tet;
+                    tet_neighbors[other_tet][other_slot] = t;
+
+                    --num_boundary_faces;
+                }
+
+                // save the orientation bit in tf
+                tf[t][f] = (face_id << 1) | parity;
+            }
+        }
+
+        ++m_num_vertices;
+        m_is_input_closed = num_boundary_faces == 0;
+
+        adjacency_offset.resize(static_cast<size_t>(m_num_tets) + 1);
+        for (uint32_t t = 0; t < m_num_tets; ++t) {
+            adjacency_offset[t] =
+                static_cast<uint32_t>(adjacency_values.size());
+            for (uint32_t neighbor : tet_neighbors[t]) {
+                if (neighbor != INVALID32) {
+                    adjacency_values.push_back(neighbor);
+                }
+            }
+        }
+        adjacency_offset[m_num_tets] =
+            static_cast<uint32_t>(adjacency_values.size());
+        return;
+    }
+
+    m_num_tets = 0;
+
     struct EdgeFaces
     {
         uint32_t              faces[2] = {0, 0};
@@ -553,7 +891,7 @@ void RXMesh::build_supporting_structures(
         }
     };
 
-    m_num_faces    = static_cast<uint32_t>(fv.size());
+    m_num_faces    = static_cast<uint32_t>(simplices.size());
     m_num_vertices = 0;
     m_num_edges    = 0;
     m_edges_map.clear();
@@ -586,8 +924,8 @@ void RXMesh::build_supporting_structures(
         m_input_max_valence = std::max(m_input_max_valence, ++vv_count[v]);
     };
 
-    for (uint32_t f = 0; f < fv.size(); ++f) {
-        if (fv[f].size() != 3) {
+    for (uint32_t f = 0; f < simplices.size(); ++f) {
+        if (simplices[f].size() != 3) {
             RXMESH_ERROR(
                 "rxmesh::build_supporting_structures() Face {} is not "
                 "triangle. Non-triangular faces are not supported",
@@ -595,9 +933,9 @@ void RXMesh::build_supporting_structures(
             exit(EXIT_FAILURE);
         }
 
-        for (uint32_t v = 0; v < fv[f].size(); ++v) {
-            uint32_t v0 = fv[f][v];
-            uint32_t v1 = fv[f][(v + 1) % 3];
+        for (uint32_t v = 0; v < simplices[f].size(); ++v) {
+            uint32_t v0 = simplices[f][v];
+            uint32_t v1 = simplices[f][(v + 1) % 3];
 
             m_num_vertices = std::max(m_num_vertices, v0);
             m_num_vertices = std::max(m_num_vertices, v1);
@@ -648,17 +986,17 @@ void RXMesh::build_supporting_structures(
         exit(EXIT_FAILURE);
     }
 
-    ff_offset.resize(m_num_faces + 1);
+    adjacency_offset.resize(m_num_faces + 1);
     uint32_t ff_count = 0;
     for (uint32_t f = 0; f < m_num_faces; ++f) {
-        ff_offset[f] = ff_count;
+        adjacency_offset[f] = ff_count;
         ff_count += ff_size[f];
         m_input_max_face_adjacent_faces =
             std::max(m_input_max_face_adjacent_faces, ff_size[f]);
     }
-    ff_offset[m_num_faces] = ff_count;
-    ff_values.clear();
-    ff_values.resize(ff_offset.back());
+    adjacency_offset[m_num_faces] = ff_count;
+    adjacency_values.clear();
+    adjacency_values.resize(adjacency_offset.back());
     std::fill(ff_size.begin(), ff_size.end(), 0);
 
     for (uint32_t e = 0; e < m_num_edges; ++e) {
@@ -670,11 +1008,11 @@ void RXMesh::build_supporting_structures(
 
                 uint32_t f0_offset = ff_size[f0]++;
                 uint32_t f1_offset = ff_size[f1]++;
-                f0_offset += ff_offset[f0];
-                f1_offset += ff_offset[f1];
+                f0_offset += adjacency_offset[f0];
+                f1_offset += adjacency_offset[f1];
 
-                ff_values[f0_offset] = f1;
-                ff_values[f1_offset] = f0;
+                adjacency_values[f0_offset] = f1;
+                adjacency_values[f1_offset] = f0;
             }
         }
     }
@@ -752,10 +1090,36 @@ void RXMesh::calc_max_elements()
 }
 
 void RXMesh::build_single_patch_ltog(
-    const std::vector<std::vector<uint32_t>>&   fv,
+    const std::vector<std::vector<uint32_t>>&   simplices,
     const std::vector<std::array<uint32_t, 2>>& ev,
+    const std::vector<std::array<uint32_t, 4>>& tf,
     const uint32_t                              patch_id)
 {
+    auto create_unique_mapping = [&](std::vector<uint32_t>&       ltog_map,
+                                     const std::vector<uint32_t>& patch) {
+        std::sort(ltog_map.begin(), ltog_map.end());
+#ifndef NDEBUG
+        auto unique_end = std::unique(ltog_map.begin(), ltog_map.end());
+        assert(unique_end == ltog_map.end());
+#endif
+
+        // we use stable partition since we want ltog to be sorted so we can
+        // use binary search on it when we populate the topology
+        auto part_end = std::stable_partition(
+            ltog_map.begin(), ltog_map.end(), [&patch, patch_id](uint32_t i) {
+                return patch[i] == patch_id;
+            });
+
+        if (ltog_map.size() > INVALID16) {
+            RXMESH_ERROR(
+                "RXMesh::build_single_patch_ltog patch {} exceeds the "
+                "16-bit local index representation",
+                patch_id);
+            exit(EXIT_FAILURE);
+        }
+        return static_cast<uint16_t>(part_end - ltog_map.begin());
+    };
+
     // patch start and end
     const uint32_t p_start =
         (patch_id == 0) ? 0 : m_patcher->get_patches_offset()[patch_id - 1];
@@ -767,6 +1131,68 @@ void RXMesh::build_single_patch_ltog(
                           m_patcher->get_external_ribbon_offset()[patch_id - 1];
     const uint32_t r_end = m_patcher->get_external_ribbon_offset()[patch_id];
 
+    if (m_is_tet_mesh) {
+        const uint32_t total_patch_num_tets =
+            (p_end - p_start) + (r_end - r_start);
+
+        m_h_patches_ltog_t[patch_id].resize(total_patch_num_tets);
+        m_h_patches_ltog_v[patch_id].reserve(4 * total_patch_num_tets);
+        m_h_patches_ltog_e[patch_id].reserve(6 * total_patch_num_tets);
+        m_h_patches_ltog_f[patch_id].reserve(4 * total_patch_num_tets);
+
+        std::vector<bool> is_vertex_added(m_num_vertices, false);
+        std::vector<bool> is_edge_added(m_num_edges, false);
+        std::vector<bool> is_face_added(m_num_faces, false);
+
+        auto add_new_tet = [&](const uint32_t global_tet_id,
+                               const uint32_t local_tet_id) {
+            m_h_patches_ltog_t[patch_id][local_tet_id] = global_tet_id;
+
+            for (uint32_t v : simplices[global_tet_id]) {
+                if (!is_vertex_added[v]) {
+                    is_vertex_added[v] = true;
+                    m_h_patches_ltog_v[patch_id].push_back(v);
+                }
+            }
+
+            for (const auto& edge : tet_edges()) {
+                const uint32_t edge_id =
+                    get_edge_id(simplices[global_tet_id][edge[0]],
+                                simplices[global_tet_id][edge[1]]);
+                if (!is_edge_added[edge_id]) {
+                    is_edge_added[edge_id] = true;
+                    m_h_patches_ltog_e[patch_id].push_back(edge_id);
+                }
+            }
+
+            for (uint32_t packed_face : tf[global_tet_id]) {
+                const uint32_t face_id = packed_face >> 1;
+                if (!is_face_added[face_id]) {
+                    is_face_added[face_id] = true;
+                    m_h_patches_ltog_f[patch_id].push_back(face_id);
+                }
+            }
+        };
+
+        uint32_t local_tet_id = 0;
+        for (uint32_t t = p_start; t < p_end; ++t) {
+            add_new_tet(m_patcher->get_patches_val()[t], local_tet_id++);
+        }
+        for (uint32_t t = r_start; t < r_end; ++t) {
+            add_new_tet(m_patcher->get_external_ribbon_val()[t],
+                        local_tet_id++);
+        }
+
+        m_h_num_owned_t[patch_id] = create_unique_mapping(
+            m_h_patches_ltog_t[patch_id], m_patcher->get_tet_patch());
+        m_h_num_owned_f[patch_id] = create_unique_mapping(
+            m_h_patches_ltog_f[patch_id], m_patcher->get_face_patch());
+        m_h_num_owned_e[patch_id] = create_unique_mapping(
+            m_h_patches_ltog_e[patch_id], m_patcher->get_edge_patch());
+        m_h_num_owned_v[patch_id] = create_unique_mapping(
+            m_h_patches_ltog_v[patch_id], m_patcher->get_vertex_patch());
+        return;
+    }
 
     const uint32_t total_patch_num_faces =
         (p_end - p_start) + (r_end - r_start);
@@ -782,8 +1208,8 @@ void RXMesh::build_single_patch_ltog(
         m_h_patches_ltog_f[patch_id][local_face_id] = global_face_id;
 
         for (uint32_t v = 0; v < 3; ++v) {
-            uint32_t v0 = fv[global_face_id][v];
-            uint32_t v1 = fv[global_face_id][(v + 1) % 3];
+            uint32_t v0 = simplices[global_face_id][v];
+            uint32_t v1 = simplices[global_face_id][(v + 1) % 3];
 
             uint32_t edge_id = get_edge_id(v0, v1);
 
@@ -842,23 +1268,6 @@ void RXMesh::build_single_patch_ltog(
         }
     }
 
-    auto create_unique_mapping = [&](std::vector<uint32_t>&       ltog_map,
-                                     const std::vector<uint32_t>& patch) {
-        std::sort(ltog_map.begin(), ltog_map.end());
-#ifndef NDEBUG
-        auto unique_end = std::unique(ltog_map.begin(), ltog_map.end());
-        assert(unique_end == ltog_map.end());
-#endif
-
-        // we use stable partition since we want ltog to be sorted so we can
-        // use binary search on it when we populate the topology
-        auto part_end = std::stable_partition(
-            ltog_map.begin(), ltog_map.end(), [&patch, patch_id](uint32_t i) {
-                return patch[i] == patch_id;
-            });
-        return static_cast<uint16_t>(part_end - ltog_map.begin());
-    };
-
     m_h_num_owned_f[patch_id] = create_unique_mapping(
         m_h_patches_ltog_f[patch_id], m_patcher->get_face_patch());
 
@@ -870,9 +1279,98 @@ void RXMesh::build_single_patch_ltog(
 }
 
 void RXMesh::build_single_patch_topology(
-    const std::vector<std::vector<uint32_t>>& fv,
-    const uint32_t                            patch_id)
+    const std::vector<std::vector<uint32_t>>&   simplices,
+    const std::vector<std::array<uint32_t, 2>>& ev,
+    const std::vector<std::array<uint32_t, 3>>& fe,
+    const std::vector<std::array<uint32_t, 4>>& tf,
+    const uint32_t                              patch_id)
 {
+    auto find_local_index = [&patch_id](
+                                const uint32_t               global_id,
+                                const uint32_t               element_patch,
+                                const uint16_t               num_owned_elements,
+                                const std::vector<uint32_t>& ltog) -> uint16_t {
+        uint32_t start = 0;
+        uint32_t end   = num_owned_elements;
+        if (element_patch != patch_id) {
+            start = num_owned_elements;
+            end   = static_cast<uint32_t>(ltog.size());
+        }
+
+        auto it = std::lower_bound(
+            ltog.begin() + start, ltog.begin() + end, global_id);
+        if (it == ltog.begin() + end || *it != global_id) {
+            RXMESH_ERROR(
+                "RXMesh::build_single_patch_topology can not find global "
+                "element {} in patch {}",
+                global_id,
+                patch_id);
+            exit(EXIT_FAILURE);
+        }
+        return static_cast<uint16_t>(it - ltog.begin());
+    };
+
+    if (m_is_tet_mesh) {
+        PatchInfo& patch = m_h_patches_info[patch_id];
+
+        patch.ev = (LocalVertexT*)malloc(m_max_edge_capacity * 2 *
+                                         sizeof(LocalVertexT));
+        patch.fe =
+            (LocalEdgeT*)malloc(m_max_face_capacity * 3 * sizeof(LocalEdgeT));
+        patch.tf =
+            (LocalFaceT*)malloc(m_max_tet_capacity * 4 * sizeof(LocalFaceT));
+
+        for (uint16_t e = 0; e < m_h_patches_ltog_e[patch_id].size(); ++e) {
+            const uint32_t global_edge = m_h_patches_ltog_e[patch_id][e];
+
+            patch.ev[2 * e].id = find_local_index(
+                ev[global_edge][0],
+                m_patcher->get_vertex_patch_id(ev[global_edge][0]),
+                m_h_num_owned_v[patch_id],
+                m_h_patches_ltog_v[patch_id]);
+            patch.ev[2 * e + 1].id = find_local_index(
+                ev[global_edge][1],
+                m_patcher->get_vertex_patch_id(ev[global_edge][1]),
+                m_h_num_owned_v[patch_id],
+                m_h_patches_ltog_v[patch_id]);
+        }
+
+        for (uint16_t f = 0; f < m_h_patches_ltog_f[patch_id].size(); ++f) {
+            const uint32_t global_face = m_h_patches_ltog_f[patch_id][f];
+
+            for (uint32_t e = 0; e < 3; ++e) {
+                const uint32_t packed_global_edge = fe[global_face][e];
+                const uint32_t global_edge        = packed_global_edge >> 1;
+                const uint16_t local_edge =
+                    find_local_index(global_edge,
+                                     m_patcher->get_edge_patch_id(global_edge),
+                                     m_h_num_owned_e[patch_id],
+                                     m_h_patches_ltog_e[patch_id]);
+
+                patch.fe[3 * f + e].id = static_cast<uint16_t>(
+                    (local_edge << 1) | (packed_global_edge & 1));
+            }
+        }
+
+        for (uint16_t t = 0; t < m_h_patches_ltog_t[patch_id].size(); ++t) {
+            const uint32_t global_tet = m_h_patches_ltog_t[patch_id][t];
+
+            for (uint32_t f = 0; f < 4; ++f) {
+                const uint32_t packed_global_face = tf[global_tet][f];
+                const uint32_t global_face        = packed_global_face >> 1;
+                const uint16_t local_face =
+                    find_local_index(global_face,
+                                     m_patcher->get_face_patch_id(global_face),
+                                     m_h_num_owned_f[patch_id],
+                                     m_h_patches_ltog_f[patch_id]);
+
+                patch.tf[4 * t + f].id = static_cast<uint16_t>(
+                    (local_face << 1) | (packed_global_face & 1));
+            }
+        }
+        return;
+    }
+
     // patch start and end
     const uint32_t p_start =
         (patch_id == 0) ? 0 : m_patcher->get_patches_offset()[patch_id - 1];
@@ -897,27 +1395,6 @@ void RXMesh::build_single_patch_topology(
 
     std::vector<bool> is_added_edge(patch_num_edges, false);
 
-    auto find_local_index = [&patch_id](
-                                const uint32_t               global_id,
-                                const uint32_t               element_patch,
-                                const uint16_t               num_owned_elements,
-                                const std::vector<uint32_t>& ltog) -> uint16_t {
-        uint32_t start = 0;
-        uint32_t end   = num_owned_elements;
-        if (element_patch != patch_id) {
-            start = num_owned_elements;
-            end   = ltog.size();
-        }
-        auto it = std::lower_bound(
-            ltog.begin() + start, ltog.begin() + end, global_id);
-        if (it == ltog.begin() + end) {
-            return INVALID16;
-        } else {
-            return static_cast<uint16_t>(it - ltog.begin());
-        }
-    };
-
-
     auto add_new_face = [&](const uint32_t global_face_id) {
         const uint16_t local_face_id =
             find_local_index(global_face_id,
@@ -926,10 +1403,8 @@ void RXMesh::build_single_patch_topology(
                              m_h_patches_ltog_f[patch_id]);
 
         for (uint32_t v = 0; v < 3; ++v) {
-
-
-            const uint32_t global_v0 = fv[global_face_id][v];
-            const uint32_t global_v1 = fv[global_face_id][(v + 1) % 3];
+            const uint32_t global_v0 = simplices[global_face_id][v];
+            const uint32_t global_v1 = simplices[global_face_id][(v + 1) % 3];
 
             std::pair<uint32_t, uint32_t> edge_key =
                 detail::edge_key(global_v0, global_v1);
@@ -951,7 +1426,6 @@ void RXMesh::build_single_patch_topology(
                                  m_h_num_owned_e[patch_id],
                                  m_h_patches_ltog_e[patch_id]);
 
-            assert(local_edge_id != INVALID16);
             if (!is_added_edge[local_edge_id]) {
 
                 is_added_edge[local_edge_id] = true;
@@ -967,8 +1441,6 @@ void RXMesh::build_single_patch_topology(
                     m_patcher->get_vertex_patch_id(edge_key.second),
                     m_h_num_owned_v[patch_id],
                     m_h_patches_ltog_v[patch_id]);
-
-                assert(local_v0 != INVALID16 && local_v1 != INVALID16);
 
                 m_h_patches_info[patch_id].ev[local_edge_id * 2].id = local_v0;
                 m_h_patches_info[patch_id].ev[local_edge_id * 2 + 1].id =
@@ -1013,6 +1485,11 @@ const FaceHandle RXMesh::map_to_local_face(uint32_t i) const
     return {pl.first, pl.second};
 }
 
+const TetHandle RXMesh::map_to_local_tet(uint32_t i) const
+{
+    auto pl = map_to_local<TetHandle>(i, m_h_tet_prefix);
+    return {pl.first, pl.second};
+}
 
 template <typename HandleT>
 const std::pair<uint32_t, uint16_t> RXMesh::map_to_local(
@@ -1047,7 +1524,6 @@ const std::pair<uint32_t, uint16_t> RXMesh::map_to_local(
     }
     return {patch_id, local_id};
 }
-
 
 uint32_t RXMesh::get_edge_id(const uint32_t v0, const uint32_t v1) const
 {
@@ -1084,10 +1560,12 @@ uint16_t RXMesh::get_per_patch_max_vertex_capacity() const
 {
     return m_max_vertex_capacity;
 }
+
 uint16_t RXMesh::get_per_patch_max_edge_capacity() const
 {
     return m_max_edge_capacity;
 }
+
 uint16_t RXMesh::get_per_patch_max_face_capacity() const
 {
     return m_max_face_capacity;
@@ -1107,7 +1585,15 @@ void RXMesh::populate_patch_stash()
             uint32_t global_id   = ltog[local_id];
             uint32_t owner_patch = element_patch[global_id];
 
-            m_h_patches_info[p].patch_stash.insert_patch(owner_patch);
+            if (m_h_patches_info[p].patch_stash.insert_patch(owner_patch) ==
+                INVALID8) {
+                RXMESH_ERROR(
+                    "RXMesh::populate_patch_stash patch {} has more than {} "
+                    "neighbor patches",
+                    p,
+                    PatchStash::stash_size);
+                exit(EXIT_FAILURE);
+            }
         }
     };
 
@@ -1127,6 +1613,12 @@ void RXMesh::populate_patch_stash()
                              m_h_patches_ltog_f[p],
                              m_patcher->get_face_patch(),
                              m_h_num_owned_f[p]);
+        if (m_is_tet_mesh) {
+            populate_patch_stash(p,
+                                 m_h_patches_ltog_t[p],
+                                 m_patcher->get_tet_patch(),
+                                 m_h_num_owned_t[p]);
+        }
     }
 
     // #pragma omp parallel for
@@ -1142,6 +1634,8 @@ void RXMesh::build_device()
     const uint16_t p_vertices_capacity = get_per_patch_max_vertex_capacity();
     const uint16_t p_edges_capacity    = get_per_patch_max_edge_capacity();
     const uint16_t p_faces_capacity    = get_per_patch_max_face_capacity();
+    const uint16_t p_tets_capacity =
+        m_is_tet_mesh ? static_cast<uint16_t>(m_max_tet_capacity) : 0;
 
     LPHashTable lp_v_capacity_probe(max_lp_hashtable_capacity<LocalVertexT>(),
                                     false);
@@ -1152,6 +1646,13 @@ void RXMesh::build_device()
     const uint16_t lp_v_capacity = lp_v_capacity_probe.get_capacity();
     const uint16_t lp_e_capacity = lp_e_capacity_probe.get_capacity();
     const uint16_t lp_f_capacity = lp_f_capacity_probe.get_capacity();
+    uint16_t       lp_t_capacity = 0;
+    if (m_is_tet_mesh) {
+        LPHashTable lp_t_capacity_probe(max_lp_hashtable_capacity<LocalTetT>(),
+                                        false);
+        lp_t_capacity = lp_t_capacity_probe.get_capacity();
+        lp_t_capacity_probe.free();
+    }
     lp_v_capacity_probe.free();
     lp_e_capacity_probe.free();
     lp_f_capacity_probe.free();
@@ -1159,7 +1660,8 @@ void RXMesh::build_device()
     m_ev_stride_elems = static_cast<uint32_t>(p_edges_capacity) * 2u;
     m_fe_stride_elems =
         (static_cast<uint32_t>(p_faces_capacity) * 3u + 1u) & ~1u;
-    m_counts_stride_elems = 4u;
+    m_tf_stride_elems     = static_cast<uint32_t>(p_tets_capacity) * 4u;
+    m_counts_stride_elems = m_is_tet_mesh ? 4u : 3u;
     m_dirty_stride_elems  = 1u;
 
     m_mask_v_stride_words = static_cast<uint32_t>(
@@ -1168,6 +1670,10 @@ void RXMesh::build_device()
         detail::mask_num_bytes(p_edges_capacity) / sizeof(uint32_t));
     m_mask_f_stride_words = static_cast<uint32_t>(
         detail::mask_num_bytes(p_faces_capacity) / sizeof(uint32_t));
+    if (m_is_tet_mesh) {
+        m_mask_t_stride_words = static_cast<uint32_t>(
+            detail::mask_num_bytes(p_tets_capacity) / sizeof(uint32_t));
+    }
 
     CUDA_ERROR(cudaMalloc((void**)&m_d_patches_info,
                           max_num_patches * sizeof(PatchInfo)));
@@ -1177,6 +1683,11 @@ void RXMesh::build_device()
     CUDA_ERROR(
         cudaMalloc((void**)&m_d_fes_all,
                    max_num_patches * m_fe_stride_elems * sizeof(LocalEdgeT)));
+    if (m_is_tet_mesh) {
+        CUDA_ERROR(cudaMalloc(
+            (void**)&m_d_tfs_all,
+            max_num_patches * m_tf_stride_elems * sizeof(LocalFaceT)));
+    }
     CUDA_ERROR(
         cudaMalloc((void**)&m_d_active_mask_v_all,
                    max_num_patches * m_mask_v_stride_words * sizeof(uint32_t)));
@@ -1186,6 +1697,11 @@ void RXMesh::build_device()
     CUDA_ERROR(
         cudaMalloc((void**)&m_d_active_mask_f_all,
                    max_num_patches * m_mask_f_stride_words * sizeof(uint32_t)));
+    if (m_is_tet_mesh) {
+        CUDA_ERROR(cudaMalloc(
+            (void**)&m_d_active_mask_t_all,
+            max_num_patches * m_mask_t_stride_words * sizeof(uint32_t)));
+    }
     CUDA_ERROR(
         cudaMalloc((void**)&m_d_owned_mask_v_all,
                    max_num_patches * m_mask_v_stride_words * sizeof(uint32_t)));
@@ -1195,6 +1711,11 @@ void RXMesh::build_device()
     CUDA_ERROR(
         cudaMalloc((void**)&m_d_owned_mask_f_all,
                    max_num_patches * m_mask_f_stride_words * sizeof(uint32_t)));
+    if (m_is_tet_mesh) {
+        CUDA_ERROR(cudaMalloc(
+            (void**)&m_d_owned_mask_t_all,
+            max_num_patches * m_mask_t_stride_words * sizeof(uint32_t)));
+    }
     CUDA_ERROR(
         cudaMalloc((void**)&m_d_counts_all,
                    max_num_patches * m_counts_stride_elems * sizeof(uint16_t)));
@@ -1210,6 +1731,11 @@ void RXMesh::build_device()
                           max_num_patches * lp_e_capacity * sizeof(LPPair)));
     CUDA_ERROR(cudaMalloc((void**)&m_d_lp_f_tables_all,
                           max_num_patches * lp_f_capacity * sizeof(LPPair)));
+    if (m_is_tet_mesh) {
+        CUDA_ERROR(
+            cudaMalloc((void**)&m_d_lp_t_tables_all,
+                       max_num_patches * lp_t_capacity * sizeof(LPPair)));
+    }
     CUDA_ERROR(
         cudaMalloc((void**)&m_d_lp_v_stashes_all,
                    max_num_patches * LPHashTable::stash_size * sizeof(LPPair)));
@@ -1219,6 +1745,11 @@ void RXMesh::build_device()
     CUDA_ERROR(
         cudaMalloc((void**)&m_d_lp_f_stashes_all,
                    max_num_patches * LPHashTable::stash_size * sizeof(LPPair)));
+    if (m_is_tet_mesh) {
+        CUDA_ERROR(cudaMalloc(
+            (void**)&m_d_lp_t_stashes_all,
+            max_num_patches * LPHashTable::stash_size * sizeof(LPPair)));
+    }
     CUDA_ERROR(cudaMalloc((void**)&m_d_patch_locks_all,
                           max_num_patches * sizeof(uint32_t)));
     CUDA_ERROR(cudaMalloc((void**)&m_d_patch_spins_all,
@@ -1250,29 +1781,49 @@ void RXMesh::build_device()
     std::vector<int> h_dirty_all(max_num_patches * m_dirty_stride_elems, 0);
     std::vector<LocalVertexT> h_evs_all(max_num_patches * m_ev_stride_elems);
     std::vector<LocalEdgeT>   h_fes_all(max_num_patches * m_fe_stride_elems);
-    std::vector<uint32_t>     h_active_v_all(
+    std::vector<LocalFaceT>   h_tfs_all;
+    if (m_is_tet_mesh) {
+        h_tfs_all.resize(max_num_patches * m_tf_stride_elems);
+    }
+    std::vector<uint32_t> h_active_v_all(
         max_num_patches * m_mask_v_stride_words, 0);
     std::vector<uint32_t> h_active_e_all(
         max_num_patches * m_mask_e_stride_words, 0);
     std::vector<uint32_t> h_active_f_all(
         max_num_patches * m_mask_f_stride_words, 0);
+    std::vector<uint32_t> h_active_t_all;
+    if (m_is_tet_mesh) {
+        h_active_t_all.resize(max_num_patches * m_mask_t_stride_words, 0);
+    }
     std::vector<uint32_t> h_owned_v_all(max_num_patches * m_mask_v_stride_words,
                                         0);
     std::vector<uint32_t> h_owned_e_all(max_num_patches * m_mask_e_stride_words,
                                         0);
     std::vector<uint32_t> h_owned_f_all(max_num_patches * m_mask_f_stride_words,
                                         0);
+    std::vector<uint32_t> h_owned_t_all;
+    if (m_is_tet_mesh) {
+        h_owned_t_all.resize(max_num_patches * m_mask_t_stride_words, 0);
+    }
     std::vector<uint32_t> h_patch_stashes_all(
         max_num_patches * PatchStash::stash_size, INVALID32);
     std::vector<LPPair> h_lp_v_tables_all(max_num_patches * lp_v_capacity);
     std::vector<LPPair> h_lp_e_tables_all(max_num_patches * lp_e_capacity);
     std::vector<LPPair> h_lp_f_tables_all(max_num_patches * lp_f_capacity);
+    std::vector<LPPair> h_lp_t_tables_all;
+    if (m_is_tet_mesh) {
+        h_lp_t_tables_all.resize(max_num_patches * lp_t_capacity);
+    }
     std::vector<LPPair> h_lp_v_stashes_all(max_num_patches *
                                            LPHashTable::stash_size);
     std::vector<LPPair> h_lp_e_stashes_all(max_num_patches *
                                            LPHashTable::stash_size);
     std::vector<LPPair> h_lp_f_stashes_all(max_num_patches *
                                            LPHashTable::stash_size);
+    std::vector<LPPair> h_lp_t_stashes_all;
+    if (m_is_tet_mesh) {
+        h_lp_t_stashes_all.resize(max_num_patches * LPHashTable::stash_size);
+    }
 
     auto fill_mask = [&](uint32_t*&             h_mask,
                          std::vector<uint32_t>& slab,
@@ -1298,7 +1849,8 @@ void RXMesh::build_device()
         d_hashtable.m_is_on_device = true;
     };
 
-    auto build_ht = [&](const std::vector<std::vector<uint32_t>>& ltog,
+    auto build_ht = [&](const uint32_t                            patch_id,
+                        const std::vector<std::vector<uint32_t>>& ltog,
                         const std::vector<uint32_t>&              p_ltog,
                         const std::vector<uint32_t>&              element_patch,
                         const std::vector<uint16_t>&              num_owned,
@@ -1321,18 +1873,32 @@ void RXMesh::build_device()
                 ltog[owner_patch].begin() + num_owned[owner_patch],
                 global_id);
 
-            if (it == ltog[owner_patch].begin() + num_owned[owner_patch]) {
+            if (it == ltog[owner_patch].begin() + num_owned[owner_patch] ||
+                *it != global_id) {
                 RXMESH_ERROR(
-                    "rxmesh::build_device can not find the local id of "
-                    "{} in patch {}. Maybe this patch does not own "
-                    "this mesh element.",
+                    "RXMesh::build_device can not find global element {} "
+                    "owned by patch {} while building patch {}",
                     global_id,
-                    owner_patch);
+                    owner_patch,
+                    patch_id);
+                exit(EXIT_FAILURE);
             } else {
                 uint16_t local_id_in_owner_patch =
                     static_cast<uint16_t>(it - ltog[owner_patch].begin());
 
                 uint8_t owner_st = stash.find_patch_index(owner_patch);
+
+                if (local_id >= (1u << LPPair::LIDNumBits) ||
+                    local_id_in_owner_patch >=
+                        (1u << LPPair::LIDOwnerNumBits) ||
+                    owner_st == INVALID8) {
+                    RXMESH_ERROR(
+                        "RXMesh::build_device can not represent the owner "
+                        "mapping for local element {} in patch {}",
+                        local_id,
+                        patch_id);
+                    exit(EXIT_FAILURE);
+                }
 
                 LPPair pair(local_id, local_id_in_owner_patch, owner_st);
                 if (!h_hashtable.insert(pair, nullptr, nullptr)) {
@@ -1341,6 +1907,7 @@ void RXMesh::build_device()
                         "hashtable. Retry with smaller load factor. Load "
                         "factor used = {}",
                         m_lp_hashtable_load_factor);
+                    exit(EXIT_FAILURE);
                 }
             }
         }
@@ -1357,22 +1924,34 @@ void RXMesh::build_device()
         const uint16_t p_num_faces =
             valid_patch ? static_cast<uint16_t>(m_h_patches_ltog_f[p].size()) :
                           0;
+        const uint16_t p_num_tets =
+            valid_patch && m_is_tet_mesh ?
+                static_cast<uint16_t>(m_h_patches_ltog_t[p].size()) :
+                0;
         const uint16_t p_num_owned_vertices =
             valid_patch ? m_h_num_owned_v[p] : 0;
         const uint16_t p_num_owned_edges = valid_patch ? m_h_num_owned_e[p] : 0;
         const uint16_t p_num_owned_faces = valid_patch ? m_h_num_owned_f[p] : 0;
+        const uint16_t p_num_owned_tets =
+            valid_patch && m_is_tet_mesh ? m_h_num_owned_t[p] : 0;
 
         PatchInfo& h_patch_info = m_h_patches_info[p];
-        h_patch_info.num_faces =
-            static_cast<uint16_t*>(malloc(3 * sizeof(uint16_t)));
-        h_patch_info.num_edges         = h_patch_info.num_faces + 1;
-        h_patch_info.num_vertices      = h_patch_info.num_faces + 2;
-        h_patch_info.num_faces[0]      = p_num_faces;
-        h_patch_info.num_edges[0]      = p_num_edges;
-        h_patch_info.num_vertices[0]   = p_num_vertices;
+        h_patch_info.num_faces  = static_cast<uint16_t*>(
+            malloc((m_is_tet_mesh ? 4 : 3) * sizeof(uint16_t)));
+        h_patch_info.num_edges    = h_patch_info.num_faces + 1;
+        h_patch_info.num_vertices = h_patch_info.num_faces + 2;
+        h_patch_info.num_tets =
+            m_is_tet_mesh ? h_patch_info.num_faces + 3 : nullptr;
+        h_patch_info.num_faces[0]    = p_num_faces;
+        h_patch_info.num_edges[0]    = p_num_edges;
+        h_patch_info.num_vertices[0] = p_num_vertices;
+        if (m_is_tet_mesh) {
+            h_patch_info.num_tets[0] = p_num_tets;
+        }
         h_patch_info.vertices_capacity = p_vertices_capacity;
         h_patch_info.edges_capacity    = p_edges_capacity;
         h_patch_info.faces_capacity    = p_faces_capacity;
+        h_patch_info.tets_capacity     = p_tets_capacity;
         h_patch_info.patch_id          = valid_patch ? p : INVALID32;
         h_patch_info.child_id          = INVALID32;
         h_patch_info.should_slice      = false;
@@ -1383,11 +1962,18 @@ void RXMesh::build_device()
             h_patch_info.ev, p_edges_capacity * 2 * sizeof(LocalVertexT)));
         h_patch_info.fe = static_cast<LocalEdgeT*>(realloc(
             h_patch_info.fe, p_faces_capacity * 3 * sizeof(LocalEdgeT)));
+        if (m_is_tet_mesh) {
+            h_patch_info.tf = static_cast<LocalFaceT*>(realloc(
+                h_patch_info.tf, p_tets_capacity * 4 * sizeof(LocalFaceT)));
+        }
 
         const uint32_t counts_offset    = p * m_counts_stride_elems;
         h_counts_all[counts_offset + 0] = p_num_faces;
         h_counts_all[counts_offset + 1] = p_num_edges;
         h_counts_all[counts_offset + 2] = p_num_vertices;
+        if (m_is_tet_mesh) {
+            h_counts_all[counts_offset + 3] = p_num_tets;
+        }
 
         if (p_num_edges > 0) {
             memcpy(h_evs_all.data() + p * m_ev_stride_elems,
@@ -1398,6 +1984,11 @@ void RXMesh::build_device()
             memcpy(h_fes_all.data() + p * m_fe_stride_elems,
                    h_patch_info.fe,
                    p_num_faces * 3 * sizeof(LocalEdgeT));
+        }
+        if (p_num_tets > 0) {
+            memcpy(h_tfs_all.data() + p * m_tf_stride_elems,
+                   h_patch_info.tf,
+                   p_num_tets * 4 * sizeof(LocalFaceT));
         }
 
         fill_mask(h_patch_info.active_mask_v,
@@ -1415,6 +2006,13 @@ void RXMesh::build_device()
                   p * m_mask_f_stride_words,
                   p_faces_capacity,
                   p_num_faces);
+        if (m_is_tet_mesh) {
+            fill_mask(h_patch_info.active_mask_t,
+                      h_active_t_all,
+                      p * m_mask_t_stride_words,
+                      p_tets_capacity,
+                      p_num_tets);
+        }
         fill_mask(h_patch_info.owned_mask_v,
                   h_owned_v_all,
                   p * m_mask_v_stride_words,
@@ -1430,13 +2028,21 @@ void RXMesh::build_device()
                   p * m_mask_f_stride_words,
                   p_faces_capacity,
                   p_num_owned_faces);
+        if (m_is_tet_mesh) {
+            fill_mask(h_patch_info.owned_mask_t,
+                      h_owned_t_all,
+                      p * m_mask_t_stride_words,
+                      p_tets_capacity,
+                      p_num_owned_tets);
+        }
 
         memcpy(h_patch_stashes_all.data() + p * PatchStash::stash_size,
                h_patch_info.patch_stash.m_stash,
                PatchStash::stash_size * sizeof(uint32_t));
 
         if (valid_patch) {
-            build_ht(m_h_patches_ltog_v,
+            build_ht(p,
+                     m_h_patches_ltog_v,
                      m_h_patches_ltog_v[p],
                      m_patcher->get_vertex_patch(),
                      m_h_num_owned_v,
@@ -1446,7 +2052,8 @@ void RXMesh::build_device()
                      h_patch_info.patch_stash,
                      h_patch_info.lp_v);
 
-            build_ht(m_h_patches_ltog_e,
+            build_ht(p,
+                     m_h_patches_ltog_e,
                      m_h_patches_ltog_e[p],
                      m_patcher->get_edge_patch(),
                      m_h_num_owned_e,
@@ -1456,7 +2063,8 @@ void RXMesh::build_device()
                      h_patch_info.patch_stash,
                      h_patch_info.lp_e);
 
-            build_ht(m_h_patches_ltog_f,
+            build_ht(p,
+                     m_h_patches_ltog_f,
                      m_h_patches_ltog_f[p],
                      m_patcher->get_face_patch(),
                      m_h_num_owned_f,
@@ -1465,6 +2073,18 @@ void RXMesh::build_device()
                      max_lp_hashtable_capacity<LocalFaceT>(),
                      h_patch_info.patch_stash,
                      h_patch_info.lp_f);
+            if (m_is_tet_mesh) {
+                build_ht(p,
+                         m_h_patches_ltog_t,
+                         m_h_patches_ltog_t[p],
+                         m_patcher->get_tet_patch(),
+                         m_h_num_owned_t,
+                         p_num_tets,
+                         p_num_owned_tets,
+                         max_lp_hashtable_capacity<LocalTetT>(),
+                         h_patch_info.patch_stash,
+                         h_patch_info.lp_t);
+            }
         } else {
             h_patch_info.color = INVALID32;
             h_patch_info.lp_v =
@@ -1473,6 +2093,10 @@ void RXMesh::build_device()
                 LPHashTable(max_lp_hashtable_capacity<LocalEdgeT>(), false);
             h_patch_info.lp_f =
                 LPHashTable(max_lp_hashtable_capacity<LocalFaceT>(), false);
+            if (m_is_tet_mesh) {
+                h_patch_info.lp_t =
+                    LPHashTable(max_lp_hashtable_capacity<LocalTetT>(), false);
+            }
         }
 
         memcpy(h_lp_v_tables_all.data() + p * lp_v_capacity,
@@ -1493,25 +2117,48 @@ void RXMesh::build_device()
         memcpy(h_lp_f_stashes_all.data() + p * LPHashTable::stash_size,
                h_patch_info.lp_f.m_stash,
                LPHashTable::stash_size * sizeof(LPPair));
+        if (m_is_tet_mesh) {
+            memcpy(h_lp_t_tables_all.data() + p * lp_t_capacity,
+                   h_patch_info.lp_t.m_table,
+                   h_patch_info.lp_t.get_capacity() * sizeof(LPPair));
+            memcpy(h_lp_t_stashes_all.data() + p * LPHashTable::stash_size,
+                   h_patch_info.lp_t.m_stash,
+                   LPHashTable::stash_size * sizeof(LPPair));
+        }
 
         PatchInfo& d_patch = h_d_patches[p];
         d_patch.ev         = m_d_evs_all + p * m_ev_stride_elems;
         d_patch.fe         = m_d_fes_all + p * m_fe_stride_elems;
+        if (m_is_tet_mesh) {
+            d_patch.tf = m_d_tfs_all + p * m_tf_stride_elems;
+        }
         d_patch.active_mask_v =
             m_d_active_mask_v_all + p * m_mask_v_stride_words;
         d_patch.active_mask_e =
             m_d_active_mask_e_all + p * m_mask_e_stride_words;
         d_patch.active_mask_f =
             m_d_active_mask_f_all + p * m_mask_f_stride_words;
+        if (m_is_tet_mesh) {
+            d_patch.active_mask_t =
+                m_d_active_mask_t_all + p * m_mask_t_stride_words;
+        }
         d_patch.owned_mask_v = m_d_owned_mask_v_all + p * m_mask_v_stride_words;
         d_patch.owned_mask_e = m_d_owned_mask_e_all + p * m_mask_e_stride_words;
         d_patch.owned_mask_f = m_d_owned_mask_f_all + p * m_mask_f_stride_words;
+        if (m_is_tet_mesh) {
+            d_patch.owned_mask_t =
+                m_d_owned_mask_t_all + p * m_mask_t_stride_words;
+        }
         d_patch.num_faces    = m_d_counts_all + counts_offset;
         d_patch.num_edges    = d_patch.num_faces + 1;
         d_patch.num_vertices = d_patch.num_faces + 2;
+        if (m_is_tet_mesh) {
+            d_patch.num_tets = d_patch.num_faces + 3;
+        }
         d_patch.vertices_capacity = p_vertices_capacity;
         d_patch.edges_capacity    = p_edges_capacity;
         d_patch.faces_capacity    = p_faces_capacity;
+        d_patch.tets_capacity     = p_tets_capacity;
         d_patch.patch_id          = valid_patch ? p : INVALID32;
         d_patch.color             = h_patch_info.color;
         d_patch.patch_stash.m_stash =
@@ -1529,6 +2176,12 @@ void RXMesh::build_device()
                        h_patch_info.lp_f,
                        m_d_lp_f_tables_all + p * lp_f_capacity,
                        m_d_lp_f_stashes_all + p * LPHashTable::stash_size);
+        if (m_is_tet_mesh) {
+            bind_device_lp(d_patch.lp_t,
+                           h_patch_info.lp_t,
+                           m_d_lp_t_tables_all + p * lp_t_capacity,
+                           m_d_lp_t_stashes_all + p * LPHashTable::stash_size);
+        }
         d_patch.lock.bind(m_d_patch_locks_all + p, m_d_patch_spins_all + p);
         d_patch.dirty        = m_d_dirty_all + p * m_dirty_stride_elems;
         d_patch.child_id     = INVALID32;
@@ -1551,6 +2204,12 @@ void RXMesh::build_device()
                           h_fes_all.data(),
                           h_fes_all.size() * sizeof(LocalEdgeT),
                           cudaMemcpyHostToDevice));
+    if (m_is_tet_mesh) {
+        CUDA_ERROR(cudaMemcpy(m_d_tfs_all,
+                              h_tfs_all.data(),
+                              h_tfs_all.size() * sizeof(LocalFaceT),
+                              cudaMemcpyHostToDevice));
+    }
     CUDA_ERROR(cudaMemcpy(m_d_active_mask_v_all,
                           h_active_v_all.data(),
                           h_active_v_all.size() * sizeof(uint32_t),
@@ -1563,6 +2222,12 @@ void RXMesh::build_device()
                           h_active_f_all.data(),
                           h_active_f_all.size() * sizeof(uint32_t),
                           cudaMemcpyHostToDevice));
+    if (m_is_tet_mesh) {
+        CUDA_ERROR(cudaMemcpy(m_d_active_mask_t_all,
+                              h_active_t_all.data(),
+                              h_active_t_all.size() * sizeof(uint32_t),
+                              cudaMemcpyHostToDevice));
+    }
     CUDA_ERROR(cudaMemcpy(m_d_owned_mask_v_all,
                           h_owned_v_all.data(),
                           h_owned_v_all.size() * sizeof(uint32_t),
@@ -1575,6 +2240,12 @@ void RXMesh::build_device()
                           h_owned_f_all.data(),
                           h_owned_f_all.size() * sizeof(uint32_t),
                           cudaMemcpyHostToDevice));
+    if (m_is_tet_mesh) {
+        CUDA_ERROR(cudaMemcpy(m_d_owned_mask_t_all,
+                              h_owned_t_all.data(),
+                              h_owned_t_all.size() * sizeof(uint32_t),
+                              cudaMemcpyHostToDevice));
+    }
     CUDA_ERROR(cudaMemcpy(m_d_patch_stashes_all,
                           h_patch_stashes_all.data(),
                           h_patch_stashes_all.size() * sizeof(uint32_t),
@@ -1603,6 +2274,16 @@ void RXMesh::build_device()
                           h_lp_f_stashes_all.data(),
                           h_lp_f_stashes_all.size() * sizeof(LPPair),
                           cudaMemcpyHostToDevice));
+    if (m_is_tet_mesh) {
+        CUDA_ERROR(cudaMemcpy(m_d_lp_t_tables_all,
+                              h_lp_t_tables_all.data(),
+                              h_lp_t_tables_all.size() * sizeof(LPPair),
+                              cudaMemcpyHostToDevice));
+        CUDA_ERROR(cudaMemcpy(m_d_lp_t_stashes_all,
+                              h_lp_t_stashes_all.data(),
+                              h_lp_t_stashes_all.size() * sizeof(LPPair),
+                              cudaMemcpyHostToDevice));
+    }
     CUDA_ERROR(cudaMemcpy(m_d_patches_info,
                           h_d_patches.data(),
                           h_d_patches.size() * sizeof(PatchInfo),
@@ -1625,6 +2306,11 @@ void RXMesh::compute_max_lp_capacity()
 
         m_max_capacity_lp_f = std::max(m_max_capacity_lp_f,
                                        m_h_patches_info[p].lp_f.get_capacity());
+
+        if (m_is_tet_mesh) {
+            m_max_capacity_lp_t = std::max(
+                m_max_capacity_lp_t, m_h_patches_info[p].lp_t.get_capacity());
+        }
     }
 }
 

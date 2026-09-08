@@ -265,4 +265,7 @@ using EdgeReduceHandle = ReduceHandle<T, EdgeHandle>;
 template <class T>
 using FaceReduceHandle = ReduceHandle<T, FaceHandle>;
 
+template <class T>
+using TetReduceHandle = ReduceHandle<T, TetHandle>;
+
 }  // namespace rxmesh

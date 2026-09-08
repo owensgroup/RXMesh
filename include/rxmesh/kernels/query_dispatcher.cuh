@@ -44,21 +44,28 @@ __device__ __inline__ void query_block_dispatcher(
     uint16_t    num_output_in_patch = 0;
     uint32_t *  input_active_mask, *input_owned_mask;
     LPHashTable hashtable;
-    if constexpr (op == Op::VV || op == Op::VE || op == Op::VF) {
+    if constexpr (op == Op::VV || op == Op::VE || op == Op::VF ||
+                  op == Op::VT) {
         num_src_in_patch  = patch_info.num_vertices[0];
         input_active_mask = patch_info.active_mask_v;
         input_owned_mask  = patch_info.owned_mask_v;
     }
     if constexpr (op == Op::EV || op == Op::EE || op == Op::EF ||
-                  op == Op::EVDiamond) {
+                  op == Op::EVDiamond || op == Op::ET) {
         num_src_in_patch  = patch_info.num_edges[0];
         input_active_mask = patch_info.active_mask_e;
         input_owned_mask  = patch_info.owned_mask_e;
     }
-    if constexpr (op == Op::FV || op == Op::FE || op == Op::FF) {
+    if constexpr (op == Op::FV || op == Op::FE || op == Op::FF ||
+                  op == Op::FT) {
         num_src_in_patch  = patch_info.num_faces[0];
         input_active_mask = patch_info.active_mask_f;
         input_owned_mask  = patch_info.owned_mask_f;
+    }
+    if constexpr (op == Op::TV || op == Op::TE || op == Op::TF) {
+        num_src_in_patch  = patch_info.num_tets[0];
+        input_active_mask = patch_info.active_mask_t;
+        input_owned_mask  = patch_info.owned_mask_t;
     }
 
     // alloc participant bitmask
@@ -74,7 +81,7 @@ __device__ __inline__ void query_block_dispatcher(
     // alloc and load owned mask async
     // select lp hashtable
     if constexpr (op == Op::VV || op == Op::EV || op == Op::FV ||
-                  op == Op::EVDiamond) {
+                  op == Op::EVDiamond || op == Op::TV) {
         const uint32_t mask_size = mask_num_bytes(patch_info.num_vertices[0]);
         s_output_owned_bitmask =
             reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
@@ -84,7 +91,8 @@ __device__ __inline__ void query_block_dispatcher(
                    false);
         output_lp_hashtable = patch_info.lp_v;
     }
-    if constexpr (op == Op::VE || op == Op::EE || op == Op::FE) {
+    if constexpr (op == Op::VE || op == Op::EE || op == Op::FE ||
+                  op == Op::TE) {
         const uint32_t mask_size = mask_num_bytes(patch_info.num_edges[0]);
         s_output_owned_bitmask =
             reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
@@ -94,7 +102,8 @@ __device__ __inline__ void query_block_dispatcher(
                    false);
         output_lp_hashtable = patch_info.lp_e;
     }
-    if constexpr (op == Op::VF || op == Op::EF || op == Op::FF) {
+    if constexpr (op == Op::VF || op == Op::EF || op == Op::FF ||
+                  op == Op::TF) {
         const uint32_t mask_size = mask_num_bytes(patch_info.num_faces[0]);
         s_output_owned_bitmask =
             reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
@@ -103,6 +112,16 @@ __device__ __inline__ void query_block_dispatcher(
                    reinterpret_cast<char*>(s_output_owned_bitmask),
                    false);
         output_lp_hashtable = patch_info.lp_f;
+    }
+    if constexpr (op == Op::VT || op == Op::ET || op == Op::FT) {
+        const uint32_t mask_size = mask_num_bytes(patch_info.num_tets[0]);
+        s_output_owned_bitmask =
+            reinterpret_cast<uint32_t*>(shrd_alloc.alloc(mask_size));
+        load_async(reinterpret_cast<char*>(patch_info.owned_mask_t),
+                   mask_size,
+                   reinterpret_cast<char*>(s_output_owned_bitmask),
+                   false);
+        output_lp_hashtable = patch_info.lp_t;
     }
 
     // load table async
@@ -235,11 +254,7 @@ __device__ __inline__ void query_block_dispatcher(
 
     // Call compute on the output in shared memory by looping over all
     // source elements in this patch.
-    constexpr uint32_t fixed_offset =
-        ((op == Op::EV) ? 2 :
-                          ((op == Op::FV || op == Op::FE) ?
-                               3 :
-                               ((op == Op::EVDiamond) ? 4 : 0)));
+    constexpr uint32_t fixed_offset = query_fixed_size(op);
 
     for (uint16_t local_id = threadIdx.x; local_id < num_src_in_patch;
          local_id += blockThreads) {
@@ -258,7 +273,7 @@ __device__ __inline__ void query_block_dispatcher(
                                   output_lp_hashtable,
                                   s_table,
                                   context.m_patches_info[patch_id].patch_stash,
-                                  int(op == Op::FE));
+                                  query_output_shift(op));
 
             compute_op(handle, iter);
         }
@@ -539,13 +554,9 @@ __device__ __inline__ void higher_query_block_dispatcher(
 
         if (pl.first == patch_id) {
 
-            constexpr uint32_t fixed_offset =
-                ((op == Op::EV) ? 2 :
-                                  ((op == Op::FV || op == Op::FE) ?
-                                       3 :
-                                       ((op == Op::EVDiamond) ? 4 : 0)));
+            constexpr uint32_t fixed_offset = query_fixed_size(op);
 
-            ComputeIteratorT iter(                
+            ComputeIteratorT iter(
                 pl.second,
                 reinterpret_cast<typename ComputeIteratorT::LocalT*>(
                     s_output_value),
@@ -556,7 +567,7 @@ __device__ __inline__ void higher_query_block_dispatcher(
                 output_lp_hashtable,
                 s_table,
                 context.m_patches_info[patch_id].patch_stash,
-                int(op == Op::FE));
+                query_output_shift(op));
 
             compute_op(src_id, iter);
         }

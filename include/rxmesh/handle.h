@@ -498,6 +498,72 @@ struct FaceHandle
     uint64_t m_handle;
 };
 
+/**
+ * @brief tet identifier. It is a unique handle for each tet equipped with
+ * operator==. It can be used to access mesh (tet) attributes
+ */
+struct TetHandle
+{
+    using LocalT = LocalTetT;
+    using Handle = TetHandle;
+
+    constexpr __device__ __host__ TetHandle() : m_handle(INVALID64)
+    {
+    }
+
+    explicit constexpr __device__ __host__ TetHandle(uint64_t handle)
+        : m_handle(handle)
+    {
+    }
+
+    constexpr __device__ __host__ TetHandle(uint32_t  patch_id,
+                                            LocalTetT tet_local_id)
+        : m_handle(detail::unique_id(tet_local_id.id, patch_id))
+    {
+    }
+
+    constexpr __device__ __host__ __inline__ bool operator==(
+        const TetHandle& rhs) const
+    {
+        return m_handle == rhs.m_handle;
+    }
+
+    constexpr __device__ __host__ __inline__ bool operator!=(
+        const TetHandle& rhs) const
+    {
+        return !(*this == rhs);
+    }
+
+    constexpr __device__ __host__ __inline__ bool is_valid() const
+    {
+        return m_handle != INVALID64;
+    }
+
+    constexpr __device__ __host__ __inline__ uint64_t unique_id() const
+    {
+        return m_handle;
+    }
+
+    constexpr __device__ __host__ __inline__ std::pair<uint32_t, uint16_t>
+                         unpack() const
+    {
+        return detail::unpack(m_handle);
+    }
+
+    constexpr __device__ __host__ __inline__ uint32_t patch_id() const
+    {
+        return unpack().first;
+    }
+
+    constexpr __device__ __host__ __inline__ uint16_t local_id() const
+    {
+        return unpack().second;
+    }
+
+   protected:
+    uint64_t m_handle;
+};
+
 
 /**
  * @brief Helper struct to get the input handle type based on a query operation
@@ -583,6 +649,54 @@ struct InputHandle<Op::FF>
     using type = FaceHandle;
 };
 
+template <>
+struct InputHandle<Op::T>
+{
+    using type = TetHandle;
+};
+
+template <>
+struct InputHandle<Op::VT>
+{
+    using type = VertexHandle;
+};
+
+template <>
+struct InputHandle<Op::ET>
+{
+    using type = EdgeHandle;
+};
+
+template <>
+struct InputHandle<Op::FT>
+{
+    using type = FaceHandle;
+};
+
+template <>
+struct InputHandle<Op::TV>
+{
+    using type = TetHandle;
+};
+
+template <>
+struct InputHandle<Op::TE>
+{
+    using type = TetHandle;
+};
+
+template <>
+struct InputHandle<Op::TF>
+{
+    using type = TetHandle;
+};
+
+template <>
+struct InputHandle<Op::TT>
+{
+    using type = TetHandle;
+};
+
 
 /**
  * @brief Helper struct to get the output handle type based on a query operation
@@ -666,5 +780,53 @@ template <>
 struct OutputHandle<Op::FF>
 {
     using type = FaceHandle;
+};
+
+template <>
+struct OutputHandle<Op::T>
+{
+    using type = TetHandle;
+};
+
+template <>
+struct OutputHandle<Op::VT>
+{
+    using type = TetHandle;
+};
+
+template <>
+struct OutputHandle<Op::ET>
+{
+    using type = TetHandle;
+};
+
+template <>
+struct OutputHandle<Op::FT>
+{
+    using type = TetHandle;
+};
+
+template <>
+struct OutputHandle<Op::TV>
+{
+    using type = VertexHandle;
+};
+
+template <>
+struct OutputHandle<Op::TE>
+{
+    using type = EdgeHandle;
+};
+
+template <>
+struct OutputHandle<Op::TF>
+{
+    using type = FaceHandle;
+};
+
+template <>
+struct OutputHandle<Op::TT>
+{
+    using type = TetHandle;
 };
 }  // namespace rxmesh

@@ -1,6 +1,9 @@
 #pragma once
 #include <cuda_runtime.h>
 #include <algorithm>
+#include <cctype>
+#include <cuda/std/array>
+#include <filesystem>
 #include <fstream>
 #include <numeric>
 #include <random>
@@ -10,6 +13,18 @@
 #include <Eigen/Dense>
 
 namespace rxmesh {
+
+__host__ __device__ constexpr cuda::std::array<cuda::std::array<uint32_t, 2>, 6>
+         tet_edges()
+{
+    return {{{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}}};
+}
+
+__host__ __device__ constexpr cuda::std::array<cuda::std::array<uint32_t, 3>, 4>
+         tet_faces()
+{
+    return {{{1, 2, 3}, {0, 3, 2}, {0, 1, 3}, {0, 2, 1}}};
+}
 
 /**
  * @brief Set the maximum dynamic shared memory for a kernel to the device's
@@ -326,6 +341,20 @@ inline std::string remove_extension(const std::string& filename)
     if (lastdot == std::string::npos)
         return filename;
     return filename.substr(0, lastdot);
+}
+
+/**
+ * @brief get file extension in lowercase
+ */
+inline const std::string get_file_extension(const std::string& file_path)
+{
+    std::string ext = std::filesystem::path(file_path).extension().string();
+
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
+        return std::tolower(c);
+    });
+
+    return ext;
 }
 
 /**

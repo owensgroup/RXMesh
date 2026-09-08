@@ -1,8 +1,7 @@
-#include <algorithm>
-
 #include "rxmesh/rxmesh_static.h"
-
 #include "rxmesh/rxmesh_static.inl"
+#include "rxmesh/util/MshLoader.h"
+#include "rxmesh/util/import_obj.h"
 
 namespace rxmesh {
 RXMeshStatic::RXMeshStatic(const std::string file_path,
@@ -32,22 +31,39 @@ RXMeshStatic::RXMeshStatic(const std::string file_path,
 {
     m_num_regions = 1;
 
-    std::vector<std::vector<uint32_t>>   fv;
+    std::vector<std::vector<uint32_t>>   simplices;
     std::vector<std::vector<rx_coord_t>> vertices;
-    CPUTimer                             load_obj_timer;
-    load_obj_timer.start();
-    const bool loaded = import_obj(file_path, vertices, fv);
-    load_obj_timer.stop();
-    RXMESH_INFO("RXMeshStatic: load_obj took= {} (ms)",
-                load_obj_timer.elapsed_millis());
-    if (!loaded) {
+
+    CPUTimer load_mesh_timer;
+    load_mesh_timer.start();
+
+    MeshKind          kind;
+    const std::string extension = get_file_extension(file_path);
+    if (extension == ".obj") {
+        kind = MeshKind::Triangle;
+        if (!import_obj(file_path, vertices, simplices)) {
+            RXMESH_ERROR(
+                "RXMeshStatic::RXMeshStatic could not read the input file {}",
+                file_path);
+            exit(EXIT_FAILURE);
+        }
+    } else if (extension == ".msh") {
+        kind = load_msh(file_path, vertices, simplices);
+    } else {
         RXMESH_ERROR(
-            "RXMeshStatic::RXMeshStatic could not read the input file {}",
+            "RXMeshStatic::RXMeshStatic supports only .obj and .msh. Input: "
+            "{}",
             file_path);
         exit(EXIT_FAILURE);
     }
 
-    this->init(fv,
+    load_mesh_timer.stop();
+    RXMESH_INFO("RXMeshStatic: mesh loading took= {} (ms)",
+                load_mesh_timer.elapsed_millis());
+
+    m_is_tet_mesh = kind == MeshKind::Tet;
+
+    this->init(simplices,
                patcher_file,
                capacity_factor,
                patch_alloc_factor,
@@ -57,13 +73,15 @@ RXMeshStatic::RXMeshStatic(const std::string file_path,
 
     std::string name = extract_file_name(file_path);
 #if USE_POLYSCOPE
-    m_polyscope_edge_permute.reserve(this->get_num_edges());
+    if (!m_is_tet_mesh) {
+        m_polyscope_edge_permute.reserve(this->get_num_edges());
+    }
     name = polyscope::guessNiceNameFromPath(file_path);
 #endif
     add_vertex_coordinates(vertices, name, input_vertex_layout);
 }
 
-RXMeshStatic::RXMeshStatic(std::vector<std::vector<uint32_t>>& fv,
+RXMeshStatic::RXMeshStatic(std::vector<std::vector<uint32_t>>& simplices,
                            const std::string                   patcher_file,
                            const uint32_t                      patch_size,
                            const float                         capacity_factor,
@@ -72,12 +90,30 @@ RXMeshStatic::RXMeshStatic(std::vector<std::vector<uint32_t>>& fv,
     : RXMesh(patch_size), m_input_vertex_coordinates(nullptr)
 {
     m_num_regions = 1;
-    this->init(fv,
+    m_is_tet_mesh = !simplices.empty() && simplices.front().size() == 4;
+    this->init(simplices,
                patcher_file,
                capacity_factor,
                patch_alloc_factor,
                lp_hashtable_load_factor);
     m_attr_container = std::make_shared<AttributeContainer>();
+}
+
+RXMeshStatic::RXMeshStatic(std::vector<std::vector<rx_coord_t>>& vertices,
+                           std::vector<std::vector<uint32_t>>&   simplices,
+                           const std::string                     patcher_file,
+                           const uint32_t                        patch_size,
+                           const float capacity_factor,
+                           const float patch_alloc_factor,
+                           const float lp_hashtable_load_factor)
+    : RXMeshStatic(simplices,
+                   patcher_file,
+                   patch_size,
+                   capacity_factor,
+                   patch_alloc_factor,
+                   lp_hashtable_load_factor)
+{
+    add_vertex_coordinates(vertices);
 }
 
 RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
@@ -93,33 +129,57 @@ RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
 {
     m_num_regions = static_cast<int>(files_path.size());
 
-    std::vector<std::vector<uint32_t>>   fv;
+    std::vector<std::vector<uint32_t>>   simplices;
     std::vector<std::vector<rx_coord_t>> vertices;
 
-    std::vector<int> region_num_faces;
+    std::vector<int> region_num_simplices;
     std::vector<int> region_num_vertices;
 
-    CPUTimer load_obj_timer;
-    load_obj_timer.start();
-    for (auto path : files_path) {
-        if (!import_obj(path, vertices, fv, true)) {
-            load_obj_timer.stop();
-            RXMESH_INFO("RXMeshStatic: load_obj took= {} (ms)",
-                        load_obj_timer.elapsed_millis());
+    CPUTimer load_mesh_timer;
+    load_mesh_timer.start();
+    bool first_mesh = true;
+    for (const auto& path : files_path) {
+
+        std::string extension = get_file_extension(path);
+
+        MeshKind kind;
+        if (extension == ".obj") {
+            kind = MeshKind::Triangle;
+            if (!import_obj(path, vertices, simplices, true)) {
+                RXMESH_ERROR(
+                    "RXMeshStatic::RXMeshStatic could not read the input file "
+                    "{}",
+                    path);
+                exit(EXIT_FAILURE);
+            }
+        } else if (extension == ".msh") {
+            kind = load_msh(path, vertices, simplices, true);
+        } else {
             RXMESH_ERROR(
-                "RXMeshStatic::RXMeshStatic could not read the input file "
-                "{}",
+                "RXMeshStatic::RXMeshStatic only support .obj or .msh files. "
+                "Input file: {}",
                 path);
             exit(EXIT_FAILURE);
         }
-        region_num_faces.push_back(static_cast<int>(fv.size()));
+
+        if (first_mesh) {
+            m_is_tet_mesh = kind == MeshKind::Tet;
+            first_mesh    = false;
+        } else if ((m_is_tet_mesh && kind != MeshKind::Tet) ||
+                   (!m_is_tet_mesh && kind != MeshKind::Triangle)) {
+            RXMESH_ERROR(
+                "RXMeshStatic::RXMeshStatic can only accept all-triangle or "
+                "all-tet list of meshes");
+            exit(EXIT_FAILURE);
+        }
+        region_num_simplices.push_back(static_cast<int>(simplices.size()));
         region_num_vertices.push_back(static_cast<int>(vertices.size()));
     }
-    load_obj_timer.stop();
-    RXMESH_INFO("RXMeshStatic: load_obj took= {} (ms)",
-                load_obj_timer.elapsed_millis());
+    load_mesh_timer.stop();
+    RXMESH_INFO("RXMeshStatic: load_mesh took= {} (ms)",
+                load_mesh_timer.elapsed_millis());
 
-    this->init(fv, "", 1.0, 1.0, 0.8);
+    this->init(simplices, "", 1.0, 1.0, 0.8);
 
     m_attr_container = std::make_shared<AttributeContainer>();
 
@@ -133,27 +193,71 @@ RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
 #endif
     add_vertex_coordinates(vertices, name, input_vertex_layout);
 
-    // add region labels for faces, vertices, and edges
-    m_face_label = add_face_attribute<int>("rx:face_label", 1, LOCATION_ALL);
-    m_edge_label = add_edge_attribute<int>("rx:edge_label", 1, LOCATION_ALL);
+    // add region labels
     m_vertex_label =
         add_vertex_attribute<int>("rx:vertex_label", 1, LOCATION_ALL);
 
-    for_each_face(
-        HOST,
-        [=](const FaceHandle fh) {
-            int id = map_to_global(fh);
+    if (m_is_tet_mesh) {
+        m_tet_label = add_tet_attribute<int>("rx:tet_label", 1, LOCATION_ALL);
 
-            auto upper = std::upper_bound(
-                region_num_faces.begin(), region_num_faces.end(), id);
+        for_each_tet(
+            HOST,
+            [=](const TetHandle th) {
+                int id = map_to_global(th);
 
-            int label = static_cast<int>(
-                std::distance(region_num_faces.begin(), upper));
+                auto upper = std::upper_bound(region_num_simplices.begin(),
+                                              region_num_simplices.end(),
+                                              id);
 
-            (*m_face_label)(fh) = label;
-        },
-        NULL,
-        false);
+                int label = static_cast<int>(
+                    std::distance(region_num_simplices.begin(), upper));
+
+                (*m_tet_label)(th) = label;
+            },
+            NULL,
+            false);
+
+        m_tet_label->move(HOST, DEVICE);
+
+        m_face_label =
+            add_face_attribute<int>("rx:face_label", 1, LOCATION_ALL);
+        m_edge_label =
+            add_edge_attribute<int>("rx:edge_label", 1, LOCATION_ALL);
+
+        m_face_label->reset(0, DEVICE);
+        m_edge_label->reset(0, DEVICE);
+
+        add_face_labels(*m_tet_label, *m_face_label);
+        add_edge_labels(*m_face_label, *m_edge_label);
+        m_face_label->move(DEVICE, HOST);
+        m_edge_label->move(DEVICE, HOST);
+    } else {
+        m_face_label =
+            add_face_attribute<int>("rx:face_label", 1, LOCATION_ALL);
+        m_edge_label =
+            add_edge_attribute<int>("rx:edge_label", 1, LOCATION_ALL);
+
+        for_each_face(
+            HOST,
+            [=](const FaceHandle fh) {
+                int id = map_to_global(fh);
+
+                auto upper = std::upper_bound(region_num_simplices.begin(),
+                                              region_num_simplices.end(),
+                                              id);
+
+                int label = static_cast<int>(
+                    std::distance(region_num_simplices.begin(), upper));
+
+                (*m_face_label)(fh) = label;
+            },
+            NULL,
+            false);
+
+        m_face_label->move(HOST, DEVICE);
+        add_edge_labels(*m_face_label, *m_edge_label);
+        m_edge_label->move(DEVICE, HOST);
+    }
 
     for_each_vertex(
         HOST,
@@ -170,17 +274,19 @@ RXMeshStatic::RXMeshStatic(const std::vector<std::string> files_path,
         },
         NULL,
         false);
-    m_face_label->move(HOST, DEVICE);
     m_vertex_label->move(HOST, DEVICE);
 
-    add_edge_labels(*m_face_label, *m_edge_label);
-
-    m_edge_label->move(DEVICE, HOST);
-
 #if USE_POLYSCOPE
-    m_polyscope_mesh->addFaceScalarQuantity("rx:FLabel", *m_face_label);
-    m_polyscope_mesh->addEdgeScalarQuantity("rx:ELabel", *m_edge_label);
-    m_polyscope_mesh->addVertexScalarQuantity("rx:VLabel", *m_vertex_label);
+    if (!m_is_tet_mesh) {
+        m_polyscope_mesh->addFaceScalarQuantity("rx:FLabel", *m_face_label);
+        m_polyscope_mesh->addEdgeScalarQuantity("rx:ELabel", *m_edge_label);
+        m_polyscope_mesh->addVertexScalarQuantity("rx:VLabel", *m_vertex_label);
+    } else {
+        m_polyscope_volume_mesh->addCellScalarQuantity("rx:TLabel",
+                                                       *m_tet_label);
+        m_polyscope_volume_mesh->addVertexScalarQuantity("rx:VLabel",
+                                                         *m_vertex_label);
+    }
 #endif
 }
 void RXMeshStatic::add_vertex_coordinates(
@@ -203,13 +309,20 @@ void RXMeshStatic::add_vertex_coordinates(
 #if USE_POLYSCOPE
         CPUTimer polyscope_timer;
         polyscope_timer.start();
-        polyscope::init();
+        if (!polyscope::isInitialized()) {
+            polyscope::init();
+        }
         m_polyscope_mesh_name = mesh_name.empty() ? "RXMesh" : mesh_name;
         m_polyscope_mesh_name += std::to_string(rand());
         this->register_polyscope();
-        render_vertex_patch();
-        render_edge_patch();
-        render_face_patch();
+        if (m_is_tet_mesh) {
+            render_tet_vertex_patch();
+            render_tet_patch();
+        } else {
+            render_vertex_patch();
+            render_edge_patch();
+            render_face_patch();
+        }
         polyscope_timer.stop();
         RXMESH_INFO("RXMeshStatic: Register Polyscope took= {} (ms)",
                     polyscope_timer.elapsed_millis());
@@ -222,6 +335,11 @@ void RXMeshStatic::add_vertex_coordinates(
 polyscope::SurfaceMesh* RXMeshStatic::get_polyscope_mesh()
 {
     return m_polyscope_mesh;
+}
+
+polyscope::VolumeMesh* RXMeshStatic::get_polyscope_volume_mesh()
+{
+    return m_polyscope_volume_mesh;
 }
 
 polyscope::SurfaceMesh* RXMeshStatic::render_patch(const uint32_t p,
@@ -247,6 +365,64 @@ polyscope::SurfaceMesh* RXMeshStatic::render_patch(const uint32_t p,
     }
     if (with_face_patch) {
         render_face_patch_and_local_id(p, ps);
+    }
+
+    return ps;
+}
+
+polyscope::VolumeMesh* RXMeshStatic::render_patch_volume(const uint32_t p,
+                                                         bool with_vertex_patch,
+                                                         bool with_tet_patch)
+{
+    std::vector<glm::uvec4> all_tets;
+    create_tet_list(all_tets);
+
+    std::vector<glm::uvec4> tets;
+    std::vector<int>        tet_patch;
+    std::vector<int>        tet_local;
+    const uint16_t          num_tets = m_h_patches_info[p].num_tets[0];
+    tets.reserve(num_tets);
+    tet_patch.reserve(num_tets);
+    tet_local.reserve(num_tets);
+
+    for (uint16_t t = 0; t < num_tets; ++t) {
+        const LocalTetT lt(t);
+        if (!m_h_patches_info[p].is_deleted(lt)) {
+            const TetHandle th = get_owner_handle<TetHandle>({p, lt});
+            tets.push_back(all_tets[linear_id(th)]);
+            tet_patch.push_back(th.patch_id());
+            tet_local.push_back(th.local_id());
+        }
+    }
+
+    auto ps = polyscope::registerTetMesh(
+        m_polyscope_mesh_name + "_patch_" + std::to_string(p),
+        *m_input_vertex_coordinates,
+        tets);
+
+    if (with_vertex_patch) {
+        std::vector<int> vertex_patch(get_num_vertices());
+        std::vector<int> vertex_local(get_num_vertices());
+        for_each_vertex(
+            HOST,
+            [&](VertexHandle vh) {
+                vertex_patch[linear_id(vh)] = vh.patch_id();
+                vertex_local[linear_id(vh)] = vh.local_id();
+            },
+            NULL,
+            false);
+
+        ps->addVertexScalarQuantity("rx:VPatch" + std::to_string(p),
+                                    vertex_patch)
+            ->setMapRange({0.0, double(get_num_patches() - 1)});
+        ps->addVertexScalarQuantity("rx:VLocal" + std::to_string(p),
+                                    vertex_local);
+    }
+
+    if (with_tet_patch) {
+        ps->addCellScalarQuantity("rx:TPatch" + std::to_string(p), tet_patch)
+            ->setMapRange({0.0, double(get_num_patches() - 1)});
+        ps->addCellScalarQuantity("rx:TLocal" + std::to_string(p), tet_local);
     }
 
     return ps;
@@ -359,6 +535,33 @@ polyscope::SurfaceFaceScalarQuantity* RXMeshStatic::render_face_patch()
     std::pair<double, double> range(0.0, double(get_num_patches() - 1));
     ret->setMapRange(range);
 
+    return ret;
+}
+
+polyscope::VolumeMeshCellScalarQuantity* RXMeshStatic::render_tet_patch()
+{
+    std::string name      = "rx:TPatch";
+    auto        tet_patch = this->add_tet_attribute<uint32_t>(name, 1, HOST);
+    for_each_tet(HOST, [&](TetHandle th) { (*tet_patch)(th) = th.patch_id(); });
+    auto ret = m_polyscope_volume_mesh->addCellScalarQuantity(name, *tet_patch);
+    remove_attribute(name);
+
+    std::pair<double, double> range(0.0, double(get_num_patches() - 1));
+    ret->setMapRange(range);
+
+    return ret;
+}
+
+polyscope::VolumeMeshVertexScalarQuantity*
+RXMeshStatic::render_tet_vertex_patch()
+{
+    std::string name  = "rx:VPatch";
+    auto vertex_patch = this->add_vertex_attribute<uint32_t>(name, 1, HOST);
+    for_each_vertex(
+        HOST, [&](VertexHandle vh) { (*vertex_patch)(vh) = vh.patch_id(); });
+    auto ret =
+        m_polyscope_volume_mesh->addVertexScalarQuantity(name, *vertex_patch);
+    remove_attribute(name);
     return ret;
 }
 
@@ -544,6 +747,14 @@ void RXMeshStatic::update_polyscope_edge_permutation(
 
 void RXMeshStatic::register_polyscope()
 {
+    if (m_is_tet_mesh) {
+        std::vector<glm::uvec4> tets;
+        create_tet_list(tets);
+        m_polyscope_volume_mesh = polyscope::registerTetMesh(
+            m_polyscope_mesh_name, *m_input_vertex_coordinates, tets);
+        return;
+    }
+
     // populate m_polyscope_edges_map
     update_polyscope_edge_map();
 
@@ -707,6 +918,15 @@ std::shared_ptr<FaceAttribute<int>> RXMeshStatic::get_face_region_label()
     return m_face_label;
 }
 
+std::shared_ptr<TetAttribute<int>> RXMeshStatic::get_tet_region_label()
+{
+    if (!m_tet_label) {
+        RXMESH_ERROR(
+            "RXMeshStatic::get_tet_region_label() there is no region label.");
+    }
+    return m_tet_label;
+}
+
 std::shared_ptr<EdgeAttribute<int>> RXMeshStatic::get_edge_region_label()
 {
     if (!m_edge_label) {
@@ -767,7 +987,11 @@ void RXMeshStatic::scale(glm::fvec3 lower, glm::fvec3 upper)
     coord.move(HOST, DEVICE);
 
 #if USE_POLYSCOPE
-    get_polyscope_mesh()->updateVertexPositions(coord);
+    if (m_is_tet_mesh) {
+        get_polyscope_volume_mesh()->updateVertexPositions(coord);
+    } else {
+        get_polyscope_mesh()->updateVertexPositions(coord);
+    }
 #endif
 }
 
@@ -812,6 +1036,12 @@ uint32_t RXMeshStatic::map_to_global(const FaceHandle fh) const
 {
     auto pl = fh.unpack();
     return m_h_patches_ltog_f[pl.first][pl.second];
+}
+
+uint32_t RXMeshStatic::map_to_global(const TetHandle th) const
+{
+    auto pl = th.unpack();
+    return m_h_patches_ltog_t[pl.first][pl.second];
 }
 
 void RXMeshStatic::create_face_list(std::vector<glm::uvec3>& f_list) const
@@ -879,6 +1109,89 @@ void RXMeshStatic::create_face_list(uint32_t* f_list,
     }
 }
 
+
+void RXMeshStatic::create_tet_list(std::vector<glm::uvec4>& t_list) const
+{
+    std::vector<uint32_t> raw_tets(4 * get_num_tets());
+    create_tet_list(raw_tets.data());
+
+    t_list.reserve(t_list.size() + get_num_tets());
+    for (uint32_t t = 0; t < get_num_tets(); ++t) {
+        t_list.emplace_back(raw_tets[4 * t],
+                            raw_tets[4 * t + 1],
+                            raw_tets[4 * t + 2],
+                            raw_tets[4 * t + 3]);
+    }
+}
+
+void RXMeshStatic::create_tet_list(uint32_t* t_list,
+                                   bool      use_global_order) const
+{
+    if (t_list == nullptr && get_num_tets() != 0) {
+        RXMESH_ERROR("RXMeshStatic::create_tet_list output buffer is null");
+        return;
+    }
+
+    for_each_tet(
+        HOST,
+        [&](const TetHandle th) {
+            const uint32_t p     = th.patch_id();
+            const uint16_t t     = th.local_id();
+            const auto&    patch = m_h_patches_info[p];
+
+            uint16_t face_vertices[4][3];
+            for (uint32_t f = 0; f < 4; ++f) {
+                const uint16_t local_f = patch.tf[4 * t + f].id >> 1;
+                for (uint32_t e = 0; e < 3; ++e) {
+                    const uint16_t packed_e = patch.fe[3 * local_f + e].id;
+                    const uint16_t local_e  = packed_e >> 1;
+                    const uint16_t dir      = packed_e & 1;
+                    face_vertices[f][e]     = patch.ev[2 * local_e + dir].id;
+                }
+            }
+
+            const uint32_t row =
+                use_global_order ? map_to_global(th) : linear_id(th);
+
+            for (uint32_t f = 0; f < 4; ++f) {
+                uint16_t missing = INVALID16;
+                for (uint32_t other_f = 0; other_f < 4; ++other_f) {
+                    if (other_f == f) {
+                        continue;
+                    }
+                    for (uint32_t v = 0; v < 3; ++v) {
+                        const uint16_t candidate = face_vertices[other_f][v];
+                        bool           found     = false;
+                        for (uint32_t fv = 0; fv < 3; ++fv) {
+                            found |= candidate == face_vertices[f][fv];
+                        }
+                        if (!found) {
+                            missing = candidate;
+                            break;
+                        }
+                    }
+                    if (missing != INVALID16) {
+                        break;
+                    }
+                }
+
+                if (missing == INVALID16) {
+                    RXMESH_ERROR(
+                        "RXMeshStatic::create_tet_list could not reconstruct "
+                        "tet {} in patch {}",
+                        t,
+                        p);
+                    exit(EXIT_FAILURE);
+                }
+
+                const VertexHandle vh(p, LocalVertexT(missing));
+                t_list[4 * row + f] =
+                    use_global_order ? map_to_global(vh) : linear_id(vh);
+            }
+        },
+        NULL,
+        false);
+}
 void RXMeshStatic::create_edge_list(uint32_t* e_list,
                                     bool      use_global_order) const
 {
@@ -905,6 +1218,20 @@ void RXMeshStatic::create_edge_list(uint32_t* e_list,
             }
         }
     }
+}
+
+void RXMeshStatic::add_face_labels(TetAttribute<int>&  tet_label,
+                                   FaceAttribute<int>& face_label)
+{
+    for_each<Op::TF, 256>([tet_label, face_label] __device__(
+                              const TetHandle th, const FaceIterator iter) {
+        int label = tet_label(th);
+
+        face_label(iter[0]) = label;
+        face_label(iter[1]) = label;
+        face_label(iter[2]) = label;
+        face_label(iter[3]) = label;
+    });
 }
 
 void RXMeshStatic::add_edge_labels(FaceAttribute<int>& face_label,
@@ -936,6 +1263,18 @@ void RXMeshStatic::add_edge_labels(FaceAttribute<int>& face_label,
     template std::shared_ptr<FaceAttribute<T>>                             \
     RXMeshStatic::add_face_attribute_like<T>(const std::string&,           \
                                              const FaceAttribute<T>&);     \
+    template std::shared_ptr<TetAttribute<T>>                              \
+    RXMeshStatic::add_tet_attribute<T>(                                    \
+        const std::string&, uint32_t, locationT, layoutT);                 \
+    template std::shared_ptr<TetAttribute<T>>                              \
+    RXMeshStatic::add_tet_attribute<T>(                                    \
+        const std::vector<std::vector<T>>&, const std::string&, layoutT);  \
+    template std::shared_ptr<TetAttribute<T>>                              \
+    RXMeshStatic::add_tet_attribute<T>(                                    \
+        const std::vector<T>&, const std::string&, layoutT);               \
+    template std::shared_ptr<TetAttribute<T>>                              \
+    RXMeshStatic::add_tet_attribute_like<T>(const std::string&,            \
+                                            const TetAttribute<T>&);       \
     template std::shared_ptr<EdgeAttribute<T>>                             \
     RXMeshStatic::add_edge_attribute<T>(                                   \
         const std::string&, uint32_t, locationT, layoutT);                 \
@@ -1019,10 +1358,29 @@ RXMeshStatic::add_face_attribute<FaceHandle>(const std::vector<FaceHandle>&,
                                              const std::string&,
                                              layoutT);
 
-// linear_id / get_owner_handle for the three handle types
+template std::shared_ptr<TetAttribute<TetHandle>>
+RXMeshStatic::add_tet_attribute<TetHandle>(const std::string&,
+                                           uint32_t,
+                                           locationT,
+                                           layoutT);
+template std::shared_ptr<TetAttribute<TetHandle>>
+RXMeshStatic::add_tet_attribute<TetHandle>(
+    const std::vector<std::vector<TetHandle>>&,
+    const std::string&,
+    layoutT);
+template std::shared_ptr<TetAttribute<TetHandle>>
+RXMeshStatic::add_tet_attribute<TetHandle>(const std::vector<TetHandle>&,
+                                           const std::string&,
+                                           layoutT);
+template std::shared_ptr<TetAttribute<TetHandle>>
+RXMeshStatic::add_tet_attribute_like<TetHandle>(const std::string&,
+                                                const TetAttribute<TetHandle>&);
+
+// linear_id / get_owner_handle for all handle types
 template uint32_t RXMeshStatic::linear_id<VertexHandle>(VertexHandle) const;
 template uint32_t RXMeshStatic::linear_id<EdgeHandle>(EdgeHandle) const;
 template uint32_t RXMeshStatic::linear_id<FaceHandle>(FaceHandle) const;
+template uint32_t RXMeshStatic::linear_id<TetHandle>(TetHandle) const;
 
 template VertexHandle RXMeshStatic::get_owner_handle<VertexHandle>(
     VertexHandle) const;
@@ -1030,6 +1388,7 @@ template EdgeHandle RXMeshStatic::get_owner_handle<EdgeHandle>(
     EdgeHandle) const;
 template FaceHandle RXMeshStatic::get_owner_handle<FaceHandle>(
     FaceHandle) const;
+template TetHandle RXMeshStatic::get_owner_handle<TetHandle>(TetHandle) const;
 
 template void RXMeshStatic::prepare_launch_box<128>(
     const std::vector<Op>,
@@ -1103,5 +1462,7 @@ template std::shared_ptr<Attribute<int, EdgeHandle>>
 RXMeshStatic::get_region_label<EdgeHandle>();
 template std::shared_ptr<Attribute<int, FaceHandle>>
 RXMeshStatic::get_region_label<FaceHandle>();
+template std::shared_ptr<Attribute<int, TetHandle>>
+RXMeshStatic::get_region_label<TetHandle>();
 
 }  // namespace rxmesh

@@ -19,6 +19,17 @@
 
 namespace rxmesh {
 
+namespace {
+const std::string& check_obj_file(const std::string& file_path)
+{
+    if (get_file_extension(file_path) != ".obj") {
+        RXMESH_ERROR("RXMeshDynamic only accepts .obj triangle meshes");
+        exit(EXIT_FAILURE);
+    }
+    return file_path;
+}
+}  // namespace
+
 namespace detail {
 template <uint32_t blockThreads, typename HandleT>
 __device__ __inline__ void hashtable_calibration(const Context context,
@@ -2187,7 +2198,7 @@ RXMeshDynamic::RXMeshDynamic(const std::string file_path,
                              const float       capacity_factor,
                              const float       patch_alloc_factor,
                              const float       lp_hashtable_load_factor)
-    : RXMeshStatic(file_path,
+    : RXMeshStatic(check_obj_file(file_path),
                    patcher_file,
                    patch_size,
                    capacity_factor,

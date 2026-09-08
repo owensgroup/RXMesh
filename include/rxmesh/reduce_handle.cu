@@ -8,7 +8,7 @@ ReduceHandle<T, HandleT>::ReduceHandle(const uint32_t num_patches)
 {
     size_t type_size = std::max(sizeof(T), sizeof(KeyValue));
 
-    //just in case we have no patches 
+    // just in case we have no patches
     const uint32_t p_count = std::max(1u, m_max_num_patches);
 
     CUDA_ERROR(cudaMalloc(&m_d_reduce_1st_stage, size_t(p_count) * type_size));
@@ -161,7 +161,8 @@ typename ReduceHandle<T, HandleT>::KeyValue ReduceHandle<T, HandleT>::arg_min(
 #define RXMESH_REDUCE_HANDLE_INSTANTIATE(T)       \
     template class ReduceHandle<T, VertexHandle>; \
     template class ReduceHandle<T, EdgeHandle>;   \
-    template class ReduceHandle<T, FaceHandle>;
+    template class ReduceHandle<T, FaceHandle>;   \
+    template class ReduceHandle<T, TetHandle>;
 
 RXMESH_REDUCE_HANDLE_INSTANTIATE(bool)
 RXMESH_REDUCE_HANDLE_INSTANTIATE(float)

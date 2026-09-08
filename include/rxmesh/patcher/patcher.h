@@ -1,11 +1,13 @@
 #pragma once
 
 #include <stdint.h>
+#include <array>
 #include <fstream>
 #include <functional>
 #include <string>
 #include <unordered_map>
 
+#include "rxmesh/types.h"
 #include "rxmesh/util/util.h"
 
 #define CEREAL_RAPIDJSON_NAMESPACE CerealRapidjson
@@ -32,18 +34,32 @@ class Patcher
    public:
     Patcher() = default;
 
-    Patcher(uint32_t                                         patch_size,
+    Patcher(MeshKind                                         mesh_kind,
+            uint32_t                                         patch_size,
             const std::vector<uint32_t>&                     ff_offset,
             const std::vector<uint32_t>&                     ff_values,
             const std::vector<std::vector<uint32_t>>&        fv,
+            const std::vector<std::array<uint32_t, 4>>&      tf,
             const std::unordered_map<std::pair<uint32_t, uint32_t>,
                                      uint32_t,
                                      detail::edge_key_hash>& edges_map,
             const uint32_t                                   num_vertices,
             const uint32_t                                   num_edges,
+            const uint32_t                                   num_faces,
             bool                                             use_metis);
 
-    Patcher(std::string filename);
+    Patcher(std::string                                      filename,
+            MeshKind                                         mesh_kind,
+            const std::vector<uint32_t>&                     ff_offset,
+            const std::vector<uint32_t>&                     ff_values,
+            const std::vector<std::vector<uint32_t>>&        fv,
+            const std::vector<std::array<uint32_t, 4>>&      tf,
+            const std::unordered_map<std::pair<uint32_t, uint32_t>,
+                                     uint32_t,
+                                     detail::edge_key_hash>& edges_map,
+            const uint32_t                                   num_vertices,
+            const uint32_t                                   num_edges,
+            const uint32_t                                   num_faces);
 
     ~Patcher();
 
@@ -59,9 +75,25 @@ class Patcher
         return m_patch_size;
     }
 
+    MeshKind get_mesh_kind() const
+    {
+        return m_mesh_kind;
+    }
+
     std::vector<uint32_t>& get_face_patch()
     {
-        return m_face_patch;
+        return m_mesh_kind == MeshKind::Triangle ? m_top_simplex_patch :
+                                                   m_face_patch;
+    }
+
+    std::vector<uint32_t>& get_tet_patch()
+    {
+        return m_top_simplex_patch;
+    }
+
+    std::vector<uint32_t>& get_top_simplex_patch()
+    {
+        return m_top_simplex_patch;
     }
 
     std::vector<uint32_t>& get_vertex_patch()
@@ -96,7 +128,18 @@ class Patcher
 
     uint32_t get_face_patch_id(const uint32_t fid) const
     {
-        return m_face_patch[fid];
+        return m_mesh_kind == MeshKind::Triangle ? m_top_simplex_patch[fid] :
+                                                   m_face_patch[fid];
+    }
+
+    uint32_t get_tet_patch_id(const uint32_t tid) const
+    {
+        return m_top_simplex_patch[tid];
+    }
+
+    uint32_t get_top_simplex_patch_id(const uint32_t id) const
+    {
+        return m_top_simplex_patch[id];
     }
 
     uint32_t get_vertex_patch_id(const uint32_t vid) const
@@ -117,7 +160,7 @@ class Patcher
                                     uint32_t& avg_p) const
     {
         max_p = 0;
-        min_p = m_num_faces;
+        min_p = m_num_top_simplices;
         avg_p = 0;
         for (uint32_t p = 0; p < m_num_patches; p++) {
             uint32_t p_size =
@@ -138,7 +181,8 @@ class Patcher
 
     double get_ribbon_overhead() const
     {
-        return 100.0 * double(get_num_ext_ribbon_faces()) / double(m_num_faces);
+        return 100.0 * double(get_num_ext_ribbon_faces()) /
+               double(m_num_top_simplices);
     }
 
     float get_patching_time() const
@@ -151,35 +195,7 @@ class Patcher
         return m_num_lloyd_run;
     }
 
-    void save(std::string filename)
-    {
-        std::ofstream                       ss(filename, std::ios::binary);
-        cereal::PortableBinaryOutputArchive archive(ss);
-        archive(*this);
-    }
-
-
-    template <class Archive>
-    void serialize(Archive& archive)
-    {
-        archive(CEREAL_NVP(m_patch_size),
-                CEREAL_NVP(m_num_patches),
-                CEREAL_NVP(m_num_vertices),
-                CEREAL_NVP(m_num_edges),
-                CEREAL_NVP(m_num_faces),
-                CEREAL_NVP(m_num_seeds),
-                CEREAL_NVP(m_max_num_patches),
-                CEREAL_NVP(m_num_components),
-                CEREAL_NVP(m_num_lloyd_run),
-                CEREAL_NVP(m_face_patch),
-                CEREAL_NVP(m_vertex_patch),
-                CEREAL_NVP(m_edge_patch),
-                CEREAL_NVP(m_patches_val),
-                CEREAL_NVP(m_patches_offset),
-                CEREAL_NVP(m_ribbon_ext_val),
-                CEREAL_NVP(m_ribbon_ext_offset),
-                CEREAL_NVP(m_patching_time_ms));
-    }
+    void save(std::string filename);
 
    private:
     /**
@@ -214,9 +230,6 @@ class Patcher
                                 uint32_t*& d_patches_size,
                                 uint32_t*& d_patches_val);
 
-    void grid(const std::vector<std::vector<uint32_t>>& fv);
-
-
     /**
      * @brief form initial face assigement, compute the compressed storage of
      * the patches (i.e., populate m_patches_val and m_patches_offset)
@@ -224,7 +237,8 @@ class Patcher
     void compute_inital_compressed_patches();
 
     void assign_patch(
-        const std::vector<std::vector<uint32_t>>&        fv,
+        const std::vector<std::vector<uint32_t>>&        simplices,
+        const std::vector<std::array<uint32_t, 4>>&      tf,
         const std::unordered_map<std::pair<uint32_t, uint32_t>,
                                  uint32_t,
                                  detail::edge_key_hash>& edges_map);
@@ -280,12 +294,17 @@ class Patcher
                        const std::vector<uint32_t>&              ff_offset,
                        const std::vector<uint32_t>&              ff_values);
 
-    uint32_t m_patch_size, m_num_patches, m_num_vertices, m_num_edges,
-        m_num_faces, m_num_seeds, m_max_num_patches, m_num_components,
-        m_num_lloyd_run;
+    static constexpr uint32_t archive_magic = 0x52585001;
 
-    // store the face, vertex, edge patch
-    std::vector<uint32_t> m_face_patch, m_vertex_patch, m_edge_patch;
+    MeshKind m_mesh_kind;
+
+    uint32_t m_patch_size, m_num_patches, m_num_vertices, m_num_edges,
+        m_num_faces, m_num_top_simplices, m_num_seeds, m_max_num_patches,
+        m_num_components, m_num_lloyd_run;
+
+    // store the top simplex, face, vertex, and edge patch
+    std::vector<uint32_t> m_top_simplex_patch, m_face_patch, m_vertex_patch,
+        m_edge_patch;
 
 
     // Stores the patches in compressed format

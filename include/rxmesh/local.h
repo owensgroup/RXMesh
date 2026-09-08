@@ -98,4 +98,34 @@ struct LocalFaceT
     uint16_t id;
 };
 
+/**
+ * @brief Local tet type (wrapped around uint16_t)
+ */
+struct LocalTetT
+{
+    /**
+     * @brief Default constructor
+     */
+    constexpr __device__ __host__ LocalTetT() : id(INVALID16)
+    {
+    }
+
+    /**
+     * @brief Constructor using local index
+     * @param id tet local index in the owner patch
+     */
+    constexpr __device__ __host__ LocalTetT(uint16_t id) : id(id)
+    {
+    }
+
+    /**
+     * @brief return the name of the mesh element i.e., tet
+     */
+    constexpr static __device__ __host__ __inline__ const char* name()
+    {
+        return "Tet";
+    }
+    uint16_t id;
+};
+
 }  // namespace rxmesh

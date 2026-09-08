@@ -15,6 +15,12 @@ using rx_coord_t = float;
 
 namespace rxmesh {
 
+enum class MeshKind : uint8_t
+{
+    Triangle,
+    Tet
+};
+
 template <typename T, int N>
 using vec = glm::vec<N, T, glm::defaultp>;
 
@@ -126,7 +132,37 @@ enum class Op
     EE        = 10,
     EF        = 11,
     EVDiamond = 12,
+    T         = 13,
+    VT        = 14,
+    ET        = 15,
+    FT        = 16,
+    TV        = 17,
+    TE        = 18,
+    TF        = 19,
+    TT        = 20,
 };
+
+__host__ __device__ constexpr uint32_t query_fixed_size(const Op op)
+{
+    if (op == Op::EV) {
+        return 2;
+    }
+    if (op == Op::FV || op == Op::FE) {
+        return 3;
+    }
+    if (op == Op::EVDiamond || op == Op::TV || op == Op::TF) {
+        return 4;
+    }
+    if (op == Op::TE) {
+        return 6;
+    }
+    return 0;
+}
+
+__host__ __device__ constexpr uint32_t query_output_shift(const Op op)
+{
+    return uint32_t(op == Op::FE || op == Op::TF);
+}
 
 /**
  * @brief define the transpose of a give query operation
@@ -183,6 +219,38 @@ static Op transpose_op(Op op)
 
     if (op == Op::EVDiamond) {
         return Op::INVALID;
+    }
+
+    if (op == Op::T) {
+        return Op::T;
+    }
+
+    if (op == Op::VT) {
+        return Op::TV;
+    }
+
+    if (op == Op::ET) {
+        return Op::TE;
+    }
+
+    if (op == Op::FT) {
+        return Op::TF;
+    }
+
+    if (op == Op::TV) {
+        return Op::VT;
+    }
+
+    if (op == Op::TE) {
+        return Op::ET;
+    }
+
+    if (op == Op::TF) {
+        return Op::FT;
+    }
+
+    if (op == Op::TT) {
+        return Op::TT;
     }
 
     return Op::INVALID;
@@ -245,6 +313,22 @@ static std::string op_to_string(const Op& op)
             return "EE";
         case Op::EVDiamond:
             return "EVDiamond";
+        case Op::T:
+            return "T";
+        case Op::VT:
+            return "VT";
+        case Op::ET:
+            return "ET";
+        case Op::FT:
+            return "FT";
+        case Op::TV:
+            return "TV";
+        case Op::TE:
+            return "TE";
+        case Op::TF:
+            return "TF";
+        case Op::TT:
+            return "TT";
         default: {
             RXMESH_ERROR("to_string() unknown input operation");
             return "";

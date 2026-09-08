@@ -45,16 +45,16 @@ class AttributeBase
 
 /**
  * @brief  Here we manage the attributes on top of the mesh. An attributes is
- * attached to mesh element (e.g., vertices, edges, or faces).
- * largely inspired by
+ * attached to mesh element (e.g., vertices, edges, faces, or tets). largely
+ * inspired by
  * https://github.com/gunrock/gunrock/blob/master/gunrock/util/array_utils.cuh
  * It is discouraged to use Attribute directly in favor of using
- * add_X_attributes() from RXMeshStatic where X is vertex, edge, or face. This
- * way, the user does not have to specify the number of mesh elements or
+ * add_X_attributes() from RXMeshStatic where X is vertex, edge, face, or tet.
+ * This way, the user does not have to specify the number of mesh elements or
  * deallocate/release the Attribute (attribute garbage collection is managed by
  * RXMeshStatic)
  * @tparam T type of the attribute
- * @tparam HandleT One of VertexHandle, EdgeHandle, or FaceHandle
+ * @tparam HandleT One of VertexHandle, EdgeHandle, FaceHandle, or TetHandle
  */
 template <class T, typename HandleT>
 class Attribute : public AttributeBase
@@ -836,6 +836,9 @@ using EdgeAttribute = Attribute<T, EdgeHandle>;
 
 template <class T>
 using FaceAttribute = Attribute<T, FaceHandle>;
+
+template <class T>
+using TetAttribute = Attribute<T, TetHandle>;
 
 /**
  * @brief Attribute container used to manage a collection of attributes by

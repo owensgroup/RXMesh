@@ -26,19 +26,29 @@ struct ALIGN(16) PatchInfo
     __device__ __host__ __forceinline__ PatchInfo()
         : ev(nullptr),
           fe(nullptr),
+          tf(nullptr),
           active_mask_v(nullptr),
           active_mask_e(nullptr),
           active_mask_f(nullptr),
+          active_mask_t(nullptr),
           owned_mask_v(nullptr),
           owned_mask_e(nullptr),
           owned_mask_f(nullptr),
+          owned_mask_t(nullptr),
           num_vertices(nullptr),
           num_edges(nullptr),
           num_faces(nullptr),
+          num_tets(nullptr),
           vertices_capacity(0),
           edges_capacity(0),
           faces_capacity(0),
-          patch_id(INVALID32) {};
+          tets_capacity(0),
+          patch_id(INVALID32),
+          color(INVALID32),
+          lp_t(),
+          dirty(nullptr),
+          child_id(INVALID32),
+          should_slice(false) {};
 
     __device__ __host__            PatchInfo(const PatchInfo& other) = default;
     __device__ __host__            PatchInfo(PatchInfo&&)            = default;
@@ -46,25 +56,26 @@ struct ALIGN(16) PatchInfo
     __device__ __host__ PatchInfo& operator=(PatchInfo&&)            = default;
     __device__                     __host__ ~PatchInfo()             = default;
 
-    // The topology information: edge incident vertices and face incident edges
+    // The topology information: edge incident vertices, face incident edges,
+    // and tet incident faces
     LocalVertexT* ev;
     LocalEdgeT*   fe;
-
+    LocalFaceT*   tf;
 
     // Active bitmask where 1 indicates active/existing mesh element and 0
     // if the mesh element is deleted
-    uint32_t *active_mask_v, *active_mask_e, *active_mask_f;
+    uint32_t *active_mask_v, *active_mask_e, *active_mask_f, *active_mask_t;
 
     // Owned bitmask where 1 indicates that the mesh element is owned by this
     // patch
-    uint32_t *owned_mask_v, *owned_mask_e, *owned_mask_f;
+    uint32_t *owned_mask_v, *owned_mask_e, *owned_mask_f, *owned_mask_t;
 
     // Number of mesh elements in the patch
-    uint16_t *num_vertices, *num_edges, *num_faces;
+    uint16_t *num_vertices, *num_edges, *num_faces, *num_tets;
 
-    // Capacity of v/e/f. This controls the allocations of ev, fe,
-    // active_mask_v/e/f, owned_mask_v/e/f
-    uint16_t vertices_capacity, edges_capacity, faces_capacity;
+    // Capacity of v/e/f/t. This controls the allocations of ev, fe, and tf
+    // active_mask_v/e/f/t, owned_mask_v/e/f/t
+    uint16_t vertices_capacity, edges_capacity, faces_capacity, tets_capacity;
 
     // The index of this patch
     uint32_t patch_id;
@@ -77,7 +88,7 @@ struct ALIGN(16) PatchInfo
     // Hash table storing the mapping from local indices of ribbon (not-owned)
     // mesh elements to their owner patch and their local indices in their owner
     // patch
-    LPHashTable lp_v, lp_e, lp_f;
+    LPHashTable lp_v, lp_e, lp_f, lp_t;
 
     // a lock for the patch that should be acquired before modifying the patch
     // specially if more than one thread is updating the patch
@@ -92,8 +103,8 @@ struct ALIGN(16) PatchInfo
     bool should_slice;
 
     /**
-     * @brief update the dirty flag associated with this patch. The calling
-     * thread should have locked the patch before updating
+     * @brief update the dirty flag associated with this patch. The
+     * calling thread should have locked the patch before updating
      * @return
      */
     __device__ __forceinline__ void set_dirty()
@@ -205,6 +216,9 @@ struct ALIGN(16) PatchInfo
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return num_faces;
         }
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return num_tets;
+        }
         return nullptr;
     }
 
@@ -223,6 +237,9 @@ struct ALIGN(16) PatchInfo
         }
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return faces_capacity;
+        }
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return tets_capacity;
         }
         return 0;
     }
@@ -243,6 +260,9 @@ struct ALIGN(16) PatchInfo
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return active_mask_f;
         }
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return active_mask_t;
+        }
         return nullptr;
     }
 
@@ -261,6 +281,9 @@ struct ALIGN(16) PatchInfo
         }
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return active_mask_f;
+        }
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return active_mask_t;
         }
         return nullptr;
     }
@@ -281,6 +304,9 @@ struct ALIGN(16) PatchInfo
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return owned_mask_f;
         }
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return owned_mask_t;
+        }
         return nullptr;
     }
 
@@ -299,6 +325,9 @@ struct ALIGN(16) PatchInfo
         }
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return owned_mask_f;
+        }
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return owned_mask_t;
         }
         return nullptr;
     }
@@ -319,6 +348,9 @@ struct ALIGN(16) PatchInfo
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return lp_f;
         }
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return lp_t;
+        }
         return lp_v;
     }
 
@@ -337,6 +369,9 @@ struct ALIGN(16) PatchInfo
         }
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return lp_f;
+        }
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return lp_t;
         }
         return lp_v;
     }
@@ -369,6 +404,15 @@ struct ALIGN(16) PatchInfo
     }
 
     /**
+     * @brief check if a tet within this patch is owned by it
+     */
+    __device__ __host__ __forceinline__ bool is_owned(LocalTetT th) const
+    {
+        assert(th.id != INVALID16);
+        return detail::is_owned(th.id, get_owned_mask<TetHandle>());
+    }
+
+    /**
      * @brief check if a vertex within this patch is deleted
      */
     __device__ __host__ __forceinline__ bool is_deleted(LocalVertexT vh) const
@@ -380,8 +424,7 @@ struct ALIGN(16) PatchInfo
     /**
      * @brief check if an edge within this patch is deleted
      */
-    __device__ __host__ __forceinline__ bool is_deleted(
-        LocalEdgeT eh) const
+    __device__ __host__ __forceinline__ bool is_deleted(LocalEdgeT eh) const
     {
         assert(eh.id != INVALID16);
         return detail::is_deleted(eh.id, get_active_mask<EdgeHandle>());
@@ -394,6 +437,15 @@ struct ALIGN(16) PatchInfo
     {
         assert(fh.id != INVALID16);
         return detail::is_deleted(fh.id, get_active_mask<FaceHandle>());
+    }
+
+    /**
+     * @brief check if a tet within this patch is deleted
+     */
+    __device__ __host__ __forceinline__ bool is_deleted(LocalTetT th) const
+    {
+        assert(th.id != INVALID16);
+        return detail::is_deleted(th.id, get_active_mask<TetHandle>());
     }
 
     /**
@@ -411,6 +463,9 @@ struct ALIGN(16) PatchInfo
         }
         if constexpr (std::is_same_v<HandleT, FaceHandle>) {
             return count_num_owned(owned_mask_f, active_mask_f, num_faces[0]);
+        }
+        if constexpr (std::is_same_v<HandleT, TetHandle>) {
+            return count_num_owned(owned_mask_t, active_mask_t, num_tets[0]);
         }
         return 0;
     }
