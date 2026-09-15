@@ -148,13 +148,14 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
         }
 
         // scan m_h_terms_rows_prefix
-        int prv = 0;
-        for (int i = 0; i <= m_num_terms; ++i) {
+        IndexT prv = 0;
+        for (int i = 0; i < m_num_terms; ++i) {
             IndexT temp = m_h_terms_rows_prefix[i];
 
             m_h_terms_rows_prefix[i] = prv;
             prv += temp;
         }
+        m_h_terms_rows_prefix[m_num_terms] = prv;
 
         //????
         /*if (add_diagonal && (block_shape.x != block_shape.y)) {
@@ -275,6 +276,7 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
         free(m_ops);
         free(m_h_block_shapes);
         free(m_h_terms_rows_prefix);
+        GPU_FREE(m_d_block_shapes);
         GPU_FREE(m_d_terms_rows_prefix);
         SparseMatrix<T>::release();
     }
