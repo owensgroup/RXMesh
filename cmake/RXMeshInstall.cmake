@@ -40,6 +40,7 @@ function(rxmesh_install_target_if_exists target_name)
 endfunction()
 
 rxmesh_install_target_if_exists(RXMesh)
+rxmesh_install_target_if_exists(mshio)
 rxmesh_install_target_if_exists(GKlib)
 rxmesh_install_target_if_exists(metis)
 rxmesh_install_target_if_exists(polyscope)

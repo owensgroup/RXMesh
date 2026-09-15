@@ -1,6 +1,6 @@
 #include "rxmesh/rxmesh_static.h"
 #include "rxmesh/rxmesh_static.inl"
-#include "rxmesh/util/MshLoader.h"
+#include "rxmesh/util/msh_io.h"
 #include "rxmesh/util/import_obj.h"
 
 namespace rxmesh {
@@ -1297,6 +1297,8 @@ void RXMeshStatic::add_edge_labels(FaceAttribute<int>& face_label,
         VertexAttribute<T>&, bool, cudaStream_t) const;                    \
     template void RXMeshStatic::export_obj<T>(                             \
         const std::string&, const VertexAttribute<T>&) const;              \
+    template void RXMeshStatic::export_msh<T>(                             \
+        const std::string&, const VertexAttribute<T>&, bool) const;        \
     template void RXMeshStatic::create_vertex_list<T>(                     \
         std::vector<glm::vec3>&, const VertexAttribute<T>&) const;
 

@@ -22,8 +22,7 @@ set(RXMESH_LIBRARY_SOURCES
     "${RXMESH_SOURCE_DIR}/include/rxmesh/reduce_handle.cu"
     "${RXMESH_SOURCE_DIR}/include/rxmesh/patcher/patcher.cu"
     "${RXMESH_SOURCE_DIR}/include/rxmesh/util/git_sha1.cpp"
-    "${RXMESH_SOURCE_DIR}/include/rxmesh/util/MshLoader.cpp"
-    "${RXMESH_SOURCE_DIR}/include/rxmesh/util/MshSaver.cpp"
+    "${RXMESH_SOURCE_DIR}/include/rxmesh/util/msh_io.cpp"
 )
 
 file(GLOB_RECURSE RXMESH_LIBRARY_HEADERS CONFIGURE_DEPENDS
@@ -70,6 +69,7 @@ target_include_directories(RXMesh
 
 target_link_libraries(RXMesh PUBLIC cuBQL cuBQL_queries)
 target_link_libraries(RXMesh PUBLIC rapidobj::rapidobj)
+target_link_libraries(RXMesh PRIVATE mshio::mshio)
 
 # CUDA and C++ compiler flags
 set(cxx_flags

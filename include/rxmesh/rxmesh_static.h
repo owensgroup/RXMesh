@@ -16,6 +16,7 @@
 #include "rxmesh/util/bitmask_util.h"
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh/util/log.h"
+#include "rxmesh/util/msh_io.h"
 #include "rxmesh/util/timer.h"
 
 #include "rxmesh/kernels/boundary.cuh"
@@ -1166,6 +1167,19 @@ class RXMeshStatic : public RXMesh
     template <typename T>
     void export_obj(const std::string&        filename,
                     const VertexAttribute<T>& coords) const;
+
+    /**
+     * @brief Export a triangle or tetrahedral mesh to a Gmsh MSH 2.2
+     * file 
+     * @tparam T type of vertices coordinates
+     * @param filename the output file
+     * @param coords vertices coordinates
+     * @param binary whether to write binary or ASCII
+     */
+    template <typename T>
+    void export_msh(const std::string&        filename,
+                    const VertexAttribute<T>& coords,
+                    bool                      binary = true) const;
 
     /**
      * @brief export the mesh to a VTK file which can be visualized using

@@ -10,6 +10,9 @@ include(CMakeFindDependencyMacro)
 include("${CMAKE_CURRENT_LIST_DIR}/RXMeshApp.cmake")
 
 find_dependency(CUDAToolkit REQUIRED)
+if(@RX_USE_CUDSS@)
+    find_dependency(cudss REQUIRED)
+endif()
 find_package(OpenMP QUIET)
 
 set(_RXMESH_INCLUDE_DIR "${PACKAGE_PREFIX_DIR}/@RXMESH_INSTALL_INCLUDEDIR@")
@@ -32,6 +35,7 @@ endfunction()
 
 _rxmesh_import_static_target(RXMesh::GKlib GKlib)
 _rxmesh_import_static_target(RXMesh::metis metis)
+_rxmesh_import_static_target(RXMesh::mshio mshio)
 _rxmesh_import_static_target(RXMesh::polyscope polyscope)
 _rxmesh_import_static_target(RXMesh::imgui imgui)
 _rxmesh_import_static_target(RXMesh::glad glad)
@@ -98,8 +102,20 @@ set(_rxmesh_link_libraries
     CUDA::cusparse
     CUDA::cusolver)
 
+if(@RX_USE_CUDSS@)
+    if(WIN32)
+        list(APPEND _rxmesh_link_libraries cudss)
+    else()
+        list(APPEND _rxmesh_link_libraries cudss_static)
+    endif()
+endif()
+
 if(TARGET RXMesh::metis)
     list(APPEND _rxmesh_link_libraries RXMesh::metis)
+endif()
+
+if(TARGET RXMesh::mshio)
+    list(APPEND _rxmesh_link_libraries RXMesh::mshio)
 endif()
 
 if(@RX_USE_POLYSCOPE@ AND TARGET RXMesh::polyscope)
