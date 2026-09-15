@@ -175,6 +175,10 @@ struct SparseMatrix
         std::tie(m_num_rows, m_num_cols) =
             get_num_rows_and_cols(rx, m_op, m_block_shape);
 
+        if (m_num_rows != m_num_cols) {
+            add_diagonal = false;
+        }
+
         // row pointer allocation and init with prefix sum for CSR
         CUDA_ERROR(cudaMalloc((void**)&m_d_row_ptr,
                               (m_num_rows + 1) * sizeof(IndexT)));
@@ -613,7 +617,10 @@ struct SparseMatrix
 #ifdef USE_CUDSS
         if (std::is_floating_point_v<T> || std::is_same_v<T, cuComplex> ||
             std::is_same_v<T, cuDoubleComplex>) {
-            CUDSS_ERROR(cudssMatrixDestroy(m_cudss_matrix));
+            if (m_cudss_matrix != nullptr) {
+                CUDSS_ERROR(cudssMatrixDestroy(m_cudss_matrix));
+                m_cudss_matrix = nullptr;
+            }
         }
 #endif
     }
@@ -1528,8 +1535,9 @@ struct SparseMatrix
     __host__ void init_cudss(SparseMatrix<T>& mat) const
     {
 #ifdef USE_CUDSS
-        if (std::is_floating_point_v<T> || std::is_same_v<T, cuComplex> ||
-            std::is_same_v<T, cuDoubleComplex>) {
+        if ((std::is_floating_point_v<T> || std::is_same_v<T, cuComplex> ||
+             std::is_same_v<T, cuDoubleComplex>) &&
+            mat.m_num_rows == mat.m_num_cols) {
             CUDSS_ERROR(
                 cudssMatrixCreateCsr(&mat.m_cudss_matrix,
                                      mat.m_num_rows,
@@ -1634,6 +1642,55 @@ struct SparseMatrix
             rx.run_kernel<blockThreads>(
                 {op},
                 detail::sparse_mat_prescan<Op::FF, blockThreads>,
+                d_row_ptr,
+                block_shape,
+                add_diagonal);
+        } else if (op == Op::T) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_prescan<Op::T, blockThreads>,
+                d_row_ptr,
+                block_shape,
+                add_diagonal);
+        } else if (op == Op::VT) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_prescan<Op::VT, blockThreads>,
+                d_row_ptr,
+                block_shape,
+                add_diagonal);
+        } else if (op == Op::ET) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_prescan<Op::ET, blockThreads>,
+                d_row_ptr,
+                block_shape,
+                add_diagonal);
+        } else if (op == Op::FT) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_prescan<Op::FT, blockThreads>,
+                d_row_ptr,
+                block_shape,
+                add_diagonal);
+        } else if (op == Op::TV) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_prescan<Op::TV, blockThreads>,
+                d_row_ptr,
+                block_shape,
+                add_diagonal);
+        } else if (op == Op::TE) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_prescan<Op::TE, blockThreads>,
+                d_row_ptr,
+                block_shape,
+                add_diagonal);
+        } else if (op == Op::TF) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_prescan<Op::TF, blockThreads>,
                 d_row_ptr,
                 block_shape,
                 add_diagonal);
@@ -1745,6 +1802,62 @@ struct SparseMatrix
                 d_col_idx,
                 block_shape,
                 add_diagonal);
+        } else if (op == Op::T) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_col_fill<Op::T, blockThreads>,
+                d_row_ptr,
+                d_col_idx,
+                block_shape,
+                add_diagonal);
+        } else if (op == Op::VT) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_col_fill<Op::VT, blockThreads>,
+                d_row_ptr,
+                d_col_idx,
+                block_shape,
+                add_diagonal);
+        } else if (op == Op::ET) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_col_fill<Op::ET, blockThreads>,
+                d_row_ptr,
+                d_col_idx,
+                block_shape,
+                add_diagonal);
+        } else if (op == Op::FT) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_col_fill<Op::FT, blockThreads>,
+                d_row_ptr,
+                d_col_idx,
+                block_shape,
+                add_diagonal);
+        } else if (op == Op::TV) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_col_fill<Op::TV, blockThreads>,
+                d_row_ptr,
+                d_col_idx,
+                block_shape,
+                add_diagonal);
+        } else if (op == Op::TE) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_col_fill<Op::TE, blockThreads>,
+                d_row_ptr,
+                d_col_idx,
+                block_shape,
+                add_diagonal);
+        } else if (op == Op::TF) {
+            rx.run_kernel<blockThreads>(
+                {op},
+                detail::sparse_mat_col_fill<Op::TF, blockThreads>,
+                d_row_ptr,
+                d_col_idx,
+                block_shape,
+                add_diagonal);
         } else {
             RXMESH_ERROR(
                 "SparseMatrix::mat_col_fill() Unsupported query operation for "
@@ -1763,14 +1876,18 @@ struct SparseMatrix
         int num_rows(0), num_cols(0);
 
         // num rows
-        if (op == Op::VV || op == Op::VE || op == Op::VF || op == Op::V) {
+        if (op == Op::VV || op == Op::VE || op == Op::VF || op == Op::VT ||
+            op == Op::V) {
             num_rows = rx.get_num_vertices();
         } else if (op == Op::EV || op == Op::EE || op == Op::EF ||
-                   op == Op::E) {
+                   op == Op::ET || op == Op::E) {
             num_rows = rx.get_num_edges();
         } else if (op == Op::FV || op == Op::FE || op == Op::FF ||
-                   op == Op::F) {
+                   op == Op::FT || op == Op::F) {
             num_rows = rx.get_num_faces();
+        } else if (op == Op::TV || op == Op::TE || op == Op::TF ||
+                   op == Op::T) {
+            num_rows = rx.get_num_tets();
         } else {
             RXMESH_ERROR(
                 "SparseMatrix::get_num_rows_and_cols() Unsupported query "
@@ -1780,14 +1897,18 @@ struct SparseMatrix
         }
 
         // num cols
-        if (op == Op::VV || op == Op::EV || op == Op::FV || op == Op::V) {
+        if (op == Op::VV || op == Op::EV || op == Op::FV || op == Op::TV ||
+            op == Op::V) {
             num_cols = rx.get_num_vertices();
         } else if (op == Op::VE || op == Op::EE || op == Op::FE ||
-                   op == Op::E) {
+                   op == Op::TE || op == Op::E) {
             num_cols = rx.get_num_edges();
         } else if (op == Op::VF || op == Op::EF || op == Op::FF ||
-                   op == Op::F) {
+                   op == Op::TF || op == Op::F) {
             num_cols = rx.get_num_faces();
+        } else if (op == Op::VT || op == Op::ET || op == Op::FT ||
+                   op == Op::T) {
+            num_cols = rx.get_num_tets();
         } else {
             RXMESH_ERROR(
                 "SparseMatrix::get_num_rows_and_cols() Unsupported query "
@@ -1896,7 +2017,7 @@ struct SparseMatrix
     Op m_op;
 
 #ifdef USE_CUDSS
-    cudssMatrix_t m_cudss_matrix;
+    cudssMatrix_t m_cudss_matrix = nullptr;
 #endif
 };
 
