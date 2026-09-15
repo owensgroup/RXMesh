@@ -106,6 +106,22 @@ struct DiffVectorProblem
                     new_term));
         }
 
+        if constexpr (op == Op::T || op == Op::TV || op == Op::TE ||
+                      op == Op::TF) {
+            auto new_term =
+                std::make_shared<TemplatedVectorTerm<TetHandle,
+                                                     OptVarHandleT,
+                                                     blockThreads,
+                                                     op,
+                                                     ScalarT,
+                                                     InputDim,
+                                                     VariableDim,
+                                                     LambdaT>>(rx, t, oreinted);
+            terms.push_back(
+                std::dynamic_pointer_cast<VectorTerm<T, OptVarHandleT>>(
+                    new_term));
+        }
+
         ops.push_back(op);
         block_shapes.push_back({InputDim, VariableDim});
     }

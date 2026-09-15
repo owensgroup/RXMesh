@@ -217,7 +217,7 @@ TEST(Diff, UserGradientAndDeviceLoss)
     options.gradient_location     = LOCATION_NONE;
     options.unique_internal_names = true;
     ProblemT problem(rx, false, options);
-        
+
     const int rows = static_cast<int>(rx.get_num_vertices());
     EXPECT_EQ(problem.grad.rows(), rows);
     EXPECT_EQ(problem.grad.cols(), VariableDim);
@@ -386,4 +386,75 @@ TEST(Diff, ConfigurableStorage)
     EXPECT_EQ(rx.get_attribute_names(), names_with_user);
     rx.remove_attribute(user_attr.get());
     EXPECT_EQ(rx.get_attribute_names(), baseline_names);
+}
+
+template <typename ProblemT>
+void add_tet_scalar_unary_term(ProblemT& problem)
+{
+    problem.template add_term<Op::T>(
+        [] __device__(const auto& th, auto& opt_var) {
+            return opt_var.template active<1>(th)[0];
+        });
+}
+
+template <Op op, typename ProblemT>
+void add_tet_scalar_query_term(ProblemT& problem)
+{
+    problem.template add_term<op>(
+        [] __device__(const auto& th, const auto& iter, auto& opt_var) {
+            using ActiveT = ACTIVE_TYPE(th);
+
+            ActiveT energy = 0;
+            for (int i = 0; i < iter.size(); ++i) {
+                energy += opt_var.template active<1>(th, iter, i)[0];
+            }
+            return energy;
+        });
+}
+
+template <Op op, typename HandleT, int Valence>
+void test_tet_scalar_term(RXMeshStatic& rx)
+{
+    using T        = float;
+    using ProblemT = DiffScalarProblem<T, 1, HandleT, false>;
+
+    ProblemT problem(rx, false);
+    problem.opt_var->reset(1, LOCATION_ALL);
+
+    if constexpr (op == Op::T) {
+        add_tet_scalar_unary_term(problem);
+    } else {
+        add_tet_scalar_query_term<op>(problem);
+    }
+
+    ASSERT_EQ(problem.get_num_terms(), 1);
+
+    problem.eval_terms();
+    ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    const int num_tets = rx.get_num_tets();
+    const int num_vars = rx.get_num_elements<HandleT>();
+
+    EXPECT_EQ(problem.get_current_loss(), T(Valence * num_tets));
+
+    problem.grad.move(DEVICE, HOST);
+    ASSERT_EQ(cudaDeviceSynchronize(), cudaSuccess);
+
+    T grad_sum = 0;
+    for (int i = 0; i < num_vars; ++i) {
+        EXPECT_GT(problem.grad(i, 0), 0);
+        grad_sum += problem.grad(i, 0);
+    }
+    EXPECT_EQ(grad_sum, T(Valence * num_tets));
+}
+
+TEST(Diff, TetSourceGradient)
+{
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "car.msh");
+    ASSERT_GT(rx.get_num_patches(), 1);
+
+    test_tet_scalar_term<Op::T, TetHandle, 1>(rx);
+    test_tet_scalar_term<Op::TV, VertexHandle, 4>(rx);
+    test_tet_scalar_term<Op::TE, EdgeHandle, 6>(rx);
+    test_tet_scalar_term<Op::TF, FaceHandle, 4>(rx);
 }

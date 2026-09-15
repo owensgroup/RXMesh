@@ -287,7 +287,8 @@ struct DiffScalarProblem
                     new_term));
         }
 
-        if constexpr (op == Op::TV) {
+        if constexpr (op == Op::T || op == Op::TV || op == Op::TE ||
+                      op == Op::TF) {
             auto new_term = std::make_shared<TemplatedScalarTerm<TetHandle,
                                                                  OptVarHandleT,
                                                                  blockThreads,

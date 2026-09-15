@@ -73,9 +73,11 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
         for (int i = 1; i < ops.size(); ++i) {
             // vertex column
             if (ops[0] == Op::V || ops[0] == Op::VV || ops[0] == Op::EV ||
-                ops[0] == Op::FV || ops[0] == Op::EVDiamond) {
+                ops[0] == Op::FV || ops[0] == Op::EVDiamond ||
+                ops[0] == Op::TV) {
                 if (!(ops[i] == Op::V || ops[i] == Op::VV || ops[i] == Op::EV ||
-                      ops[i] == Op::FV || ops[i] == Op::EVDiamond)) {
+                      ops[i] == Op::FV || ops[i] == Op::EVDiamond ||
+                      ops[i] == Op::TV)) {
                     RXMESH_ERROR(
                         "JacobianSparseMatrix::JacobianSparseMatrix() mismatch "
                         "between op output in the input ops");
@@ -84,9 +86,9 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
 
             // edge column
             if (ops[0] == Op::E || ops[0] == Op::VE || ops[0] == Op::EE ||
-                ops[0] == Op::FE) {
+                ops[0] == Op::FE || ops[0] == Op::TE) {
                 if (!(ops[i] == Op::E || ops[i] == Op::VE || ops[i] == Op::EE ||
-                      ops[i] == Op::FE)) {
+                      ops[i] == Op::FE || ops[i] == Op::TE)) {
                     RXMESH_ERROR(
                         "JacobianSparseMatrix::JacobianSparseMatrix() mismatch "
                         "between op output in the input ops");
@@ -95,9 +97,20 @@ struct JacobianSparseMatrix : public SparseMatrix<T>
 
             // face column
             if (ops[0] == Op::F || ops[0] == Op::VF || ops[0] == Op::EF ||
-                ops[0] == Op::FF) {
+                ops[0] == Op::FF || ops[0] == Op::TF) {
                 if (!(ops[i] == Op::F || ops[i] == Op::VF || ops[i] == Op::EF ||
-                      ops[i] == Op::FF)) {
+                      ops[i] == Op::FF || ops[i] == Op::TF)) {
+                    RXMESH_ERROR(
+                        "JacobianSparseMatrix::JacobianSparseMatrix() mismatch "
+                        "between op output in the input ops");
+                }
+            }
+
+            // tet column
+            if (ops[0] == Op::T || ops[0] == Op::VT || ops[0] == Op::ET ||
+                ops[0] == Op::FT) {
+                if (!(ops[i] == Op::T || ops[i] == Op::VT || ops[i] == Op::ET ||
+                      ops[i] == Op::FT)) {
                     RXMESH_ERROR(
                         "JacobianSparseMatrix::JacobianSparseMatrix() mismatch "
                         "between op output in the input ops");
