@@ -29,6 +29,10 @@ constexpr int element_valence()
         return 3;
     }
 
+    if constexpr (op == Op::TV) {
+        return 4;
+    }
+
     if constexpr (op == Op::EVDiamond) {
         return 4;
     }

@@ -286,6 +286,26 @@ struct DiffScalarProblem
                 std::dynamic_pointer_cast<ScalarTerm<T, OptVarHandleT>>(
                     new_term));
         }
+
+        if constexpr (op == Op::TV) {
+            auto new_term = std::make_shared<TemplatedScalarTerm<TetHandle,
+                                                                 OptVarHandleT,
+                                                                 blockThreads,
+                                                                 op,
+                                                                 ScalarT,
+                                                                 ProjectHess,
+                                                                 VariableDim,
+                                                                 LambdaT>>(
+                rx,
+                t,
+                oreinted,
+                &grad,
+                hess.get(),
+                memory_options.term_loss_location);
+            terms.push_back(
+                std::dynamic_pointer_cast<ScalarTerm<T, OptVarHandleT>>(
+                    new_term));
+        }
     }
 
 
