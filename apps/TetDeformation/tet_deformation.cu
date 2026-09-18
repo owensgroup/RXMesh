@@ -1,22 +1,25 @@
 #include <CLI/CLI.hpp>
 
 #include <Eigen/Core>
-#include <glm/vec3.hpp>
 
 #include <cmath>
 #include <cstdlib>
 #include <limits>
-#include <string>
+#include <vector>
 
 #include "rxmesh/diff/diff_scalar_problem.h"
 #include "rxmesh/diff/newton_solver.h"
+#include "rxmesh/geometry_factory.h"
 #include "rxmesh/matrix/pcg_solver.h"
 #include "rxmesh/rxmesh_static.h"
 
 using namespace rxmesh;
 
 template <typename T>
-void deform(RXMeshStatic& rx, const T penalty, const T displacement)
+void deform(RXMeshStatic&  rx,
+            const uint32_t nx,
+            const T        penalty,
+            const T        displacement)
 {
     constexpr int VariableDim     = 3;
     constexpr int newton_max_iter = 100;
@@ -26,6 +29,7 @@ void deform(RXMeshStatic& rx, const T penalty, const T displacement)
 
     ProblemT problem(rx, true);
 
+    // alloc
     auto coordinates = *rx.get_input_vertex_coordinates();
     problem.opt_var->copy_from(coordinates, DEVICE, DEVICE);
 
@@ -34,7 +38,10 @@ void deform(RXMeshStatic& rx, const T penalty, const T displacement)
     auto rest_volume = *rx.add_tet_attribute<T>("rest_volume", 1);
     auto constraints = *rx.add_vertex_attribute<int>("constraints", 1);
     auto targets     = *rx.add_vertex_attribute<T>("constraint_targets", 3);
+    constraints.reset(0, HOST);
+    targets.reset(T(0), HOST);
 
+    // prep
     rx.for_each<Op::TV, 256>([=] __device__(const TetHandle&      th,
                                             const VertexIterator& tv) mutable {
         const Eigen::Vector3<T> x0 = coordinates.template to_eigen<3>(tv[0]);
@@ -48,46 +55,23 @@ void deform(RXMeshStatic& rx, const T penalty, const T displacement)
         rest_volume(th)  = std::abs(Dm.determinant()) / T(6);
     });
 
-    glm::vec3 lower;
-    glm::vec3 upper;
-    rx.bounding_box(lower, upper);
-
-    const glm::vec3 extent = upper - lower;
-
-    int axis = 0;
-
-    if (extent[1] > extent[axis]) {
-        axis = 1;
-    }
-    if (extent[2] > extent[axis]) {
-        axis = 2;
-    }
-
-    const int move_axis = (axis + 1) % 3;
-    const T   axis_min  = T(lower[axis]);
-    const T   axis_max  = T(upper[axis]);
-    const T   length    = T(extent[axis]);
-    const T   slab      = T(0.05) * length;
-    const T   shift     = displacement * length;
-
-    constraints.reset(0, HOST);
-    targets.reset(T(0), HOST);
     rx.for_each_vertex(HOST, [&](const VertexHandle vh) {
         for (int i = 0; i < 3; ++i) {
             targets(vh, i) = coordinates(vh, i);
         }
 
-        const T coordinate = coordinates(vh, axis);
-        if (coordinate <= axis_min + slab) {
+        const uint32_t x = rx.map_to_global(vh) % nx;
+        if (x == 0) {
             constraints(vh) = 1;
-        } else if (coordinate >= axis_max - slab) {
+        } else if (x == nx - 1) {
             constraints(vh) = 2;
-            targets(vh, move_axis) += shift;
+            targets(vh, 1) += displacement;
         }
     });
     constraints.move(HOST, DEVICE);
     targets.move(HOST, DEVICE);
 
+    // add term
     problem.template add_term<Op::TV, true>(
         [=] __device__(const auto& th, const auto& tv, auto& opt_var) {
             using ActiveT = ACTIVE_TYPE(th);
@@ -115,6 +99,7 @@ void deform(RXMeshStatic& rx, const T penalty, const T displacement)
                    (J.squaredNorm() + J.inverse().squaredNorm());
         });
 
+    // constraints penalty
     problem.template add_term<Op::V>(
         [=] __device__(const auto& vh, auto& opt_var) {
             using ActiveT = ACTIVE_TYPE(vh);
@@ -172,13 +157,16 @@ int main(int argc, char** argv)
 
     CLI::App app{"Constrained volumetric tet-mesh deformation"};
 
-    std::string mesh_path    = STRINGIFY(INPUT_DIR) "car.msh";
-    uint32_t    device_id    = 0;
-    T           penalty      = T(1e5);
-    T           displacement = T(0.05);
+    uint32_t nx           = 10;
+    uint32_t ny           = 10;
+    uint32_t nz           = 10;
+    uint32_t device_id    = 0;
+    T        penalty      = T(1e5);
+    T        displacement = T(0.05);
 
-    app.add_option("-i,--input", mesh_path, "Input tetrahedral MSH file")
-        ->default_val(mesh_path);
+    app.add_option("--nx", nx, "Number of points along x")->default_val(nx);
+    app.add_option("--ny", ny, "Number of points along y")->default_val(ny);
+    app.add_option("--nz", nz, "Number of points along z")->default_val(nz);
     app.add_option("-d,--device_id", device_id, "GPU device ID")
         ->default_val(device_id);
     app.add_option("-p,--penalty", penalty, "Soft-constraint penalty")
@@ -194,16 +182,29 @@ int main(int argc, char** argv)
         return app.exit(e);
     }
 
+    if (nx < 2 || ny < 2 || nz < 2) {
+        RXMESH_ERROR("The number of points along each axis must be at least 2");
+        return EXIT_FAILURE;
+    }
+
     rx_init(device_id);
 
-    RXMESH_INFO("input = {}", mesh_path);
+    RXMESH_INFO("nx = {}", nx);
+    RXMESH_INFO("ny = {}", ny);
+    RXMESH_INFO("nz = {}", nz);
     RXMESH_INFO("device_id = {}", device_id);
     RXMESH_INFO("penalty = {}", penalty);
     RXMESH_INFO("displacement = {}", displacement);
 
-    RXMeshStatic rx(mesh_path);
+    std::vector<std::vector<T>>        vertices;
+    std::vector<std::vector<uint32_t>> tets;
+    const T                            dx = T(1) / T(nx - 1);
 
-    deform(rx, penalty, displacement);
+    create_tet_box(vertices, tets, nx, ny, nz, dx);
+
+    RXMeshStatic rx(vertices, tets);
+
+    deform(rx, nx, penalty, displacement);
 
     return EXIT_SUCCESS;
 }
