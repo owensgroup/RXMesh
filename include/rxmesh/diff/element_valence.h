@@ -17,7 +17,7 @@ constexpr int element_valence()
     }
 
     // compile-time constant
-    if constexpr (op == Op::V || op == Op::E || op == Op::F) {
+    if constexpr (op == Op::V || op == Op::E || op == Op::F || op == Op::T) {
         return 1;
     }
 
@@ -27,6 +27,14 @@ constexpr int element_valence()
 
     if constexpr (op == Op::FV || op == Op::FE || op == Op::FF) {
         return 3;
+    }
+
+    if constexpr (op == Op::TV || op == Op::TF) {
+        return 4;
+    }
+
+    if constexpr (op == Op::TE) {
+        return 6;
     }
 
     if constexpr (op == Op::EVDiamond) {

@@ -530,6 +530,47 @@ void RXMeshStatic::export_obj(const std::string&        filename,
 }
 
 template <typename T>
+void RXMeshStatic::export_msh(const std::string&        filename,
+                              const VertexAttribute<T>& coords,
+                              bool                      binary) const
+{
+    std::vector<std::vector<rx_coord_t>> vertices(get_num_vertices(),
+                                                  std::vector<rx_coord_t>(3));
+
+    for_each_vertex(HOST, [&](const VertexHandle vh) {
+        const uint32_t v_id = linear_id(vh);
+        vertices[v_id][0]   = static_cast<rx_coord_t>(coords(vh, 0));
+        vertices[v_id][1]   = static_cast<rx_coord_t>(coords(vh, 1));
+        vertices[v_id][2]   = static_cast<rx_coord_t>(coords(vh, 2));
+    });
+
+    const uint32_t vertices_per_simplex = m_is_tet_mesh ? 4 : 3;
+    const uint32_t num_simplices =
+        m_is_tet_mesh ? get_num_tets() : get_num_faces();
+
+    std::vector<uint32_t> connectivity(vertices_per_simplex * num_simplices);
+    if (m_is_tet_mesh) {
+        create_tet_list(connectivity.data());
+    } else {
+        create_face_list(connectivity.data());
+    }
+
+    std::vector<std::vector<uint32_t>> simplices(
+        num_simplices, std::vector<uint32_t>(vertices_per_simplex));
+    for (uint32_t s = 0; s < num_simplices; ++s) {
+        for (uint32_t v = 0; v < vertices_per_simplex; ++v) {
+            simplices[s][v] = connectivity[vertices_per_simplex * s + v];
+        }
+    }
+
+    save_msh(filename,
+             vertices,
+             simplices,
+             m_is_tet_mesh ? MeshKind::Tet : MeshKind::Triangle,
+             binary);
+}
+
+template <typename T>
 void RXMeshStatic::create_vertex_list(std::vector<glm::vec3>&   v_list,
                                       const VertexAttribute<T>& coords) const
 {

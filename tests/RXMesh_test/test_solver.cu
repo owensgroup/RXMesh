@@ -341,7 +341,11 @@ void test_iterative_solver(RXMeshStatic&    rx,
                            SolverT&         solver,
                            SparseMatrix<T>& A,
                            DenseMatrix<T>&  B,
-                           DenseMatrix<T>&  X)
+                           DenseMatrix<T>&  X,
+                           T                factor1 = 7.4f,
+                           T                factor2 = 2.6f,
+                           T                factor3 = 10.3f,
+                           T                factor4 = 100.f)
 {
     rx.run_kernel<256>({Op::VV},
                        setup<T, 256>,
@@ -349,10 +353,10 @@ void test_iterative_solver(RXMeshStatic&    rx,
                        A,
                        X,
                        B,
-                       7.4f,
-                       2.6f,
-                       10.3f,
-                       100.f);
+                       factor1,
+                       factor2,
+                       factor3,
+                       factor4);
 
     solver.pre_solve(B, X);
 
@@ -422,7 +426,68 @@ TEST(Solver, PCG)
     X.release();
     B.release();
 }
+TEST(Solver, Tet)
+{
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "car.msh");
 
+    uint32_t num_vertices = rx.get_num_vertices();
+
+    using T = float;
+
+    SparseMatrix<T> A(rx, Op::VV);
+    DenseMatrix<T>  X(rx, num_vertices, 3, LOCATION_ALL);
+    DenseMatrix<T>  B(rx, num_vertices, 3, LOCATION_ALL);
+
+    constexpr T factor1 = 3.f;
+    constexpr T factor2 = 6.f;
+    constexpr T factor3 = 9.f;
+    constexpr T factor4 = 0.f;
+
+    auto check_solution = [&]() {
+        for (int i = 0; i < X.rows(); ++i) {
+            EXPECT_NEAR(X(i, 0), 1.f, 1e-3);
+            EXPECT_NEAR(X(i, 1), 2.f, 1e-3);
+            EXPECT_NEAR(X(i, 2), 3.f, 1e-3);
+        }
+    };
+
+    {
+        CGSolver solver(A, 3, 5000, T(1e-7));
+        test_iterative_solver(
+            rx, solver, A, B, X, factor1, factor2, factor3, factor4);
+        check_solution();
+    }
+
+    {
+        PCGSolver solver(A, 3, 5000, T(1e-7));
+        test_iterative_solver(
+            rx, solver, A, B, X, factor1, factor2, factor3, factor4);
+        check_solution();
+    }
+
+#ifdef USE_CUDSS
+    {
+        cuDSSCholeskySolver solver(&A);
+        test_direct_solver(
+            rx,
+            solver,
+            A,
+            B,
+            X,
+            true,
+            [&]() { solver.pre_solve(rx, B, X); },
+            factor1,
+            factor2,
+            factor3,
+            factor4);
+        check_solution();
+    }
+#endif
+
+    A.release();
+    X.release();
+    B.release();
+}
 TEST(Solver, CGMatFree)
 {
     RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");

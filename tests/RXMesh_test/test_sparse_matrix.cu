@@ -31,7 +31,7 @@ template <typename T, uint32_t blockThreads>
 __global__ static void sparse_mat_edge_len_test(
     const rxmesh::Context      context,
     rxmesh::VertexAttribute<T> coords,
-    rxmesh::SparseMatrix<T>   sparse_mat,
+    rxmesh::SparseMatrix<T>    sparse_mat,
     T*                         arr_ref)
 {
     using namespace rxmesh;
@@ -66,10 +66,10 @@ __global__ static void sparse_mat_edge_len_test(
 
 
 template <uint32_t blockThreads, typename T>
-__global__ static void test_transpose(const rxmesh::Context    context,
+__global__ static void test_transpose(const rxmesh::Context   context,
                                       rxmesh::SparseMatrix<T> mat,
                                       rxmesh::SparseMatrix<T> trans_mat,
-                                      int*                     err_count)
+                                      int*                    err_count)
 {
     using namespace rxmesh;
 
@@ -89,11 +89,10 @@ __global__ static void test_transpose(const rxmesh::Context    context,
 }
 
 template <typename T>
-__global__ void spmat_multi_hardwired_kernel(
-    T*                       vec,
-    rxmesh::SparseMatrix<T> sparse_mat,
-    T*                       out,
-    const int                N)
+__global__ void spmat_multi_hardwired_kernel(T*                      vec,
+                                             rxmesh::SparseMatrix<T> sparse_mat,
+                                             T*                      out,
+                                             const int               N)
 {
     int   tid = threadIdx.x + blockIdx.x * blockDim.x;
     float sum = 0;
@@ -291,14 +290,14 @@ TEST(RXMeshStatic, SparseMatrixUserManaged)
 
 
     SparseMatrix mat(rows,
-                      cols,
-                      nnz,
-                      d_row_ptr,
-                      d_col_idx,
-                      d_val,
-                      h_row_ptr,
-                      h_col_idx,
-                      h_val);
+                     cols,
+                     nnz,
+                     d_row_ptr,
+                     d_col_idx,
+                     d_val,
+                     h_row_ptr,
+                     h_col_idx,
+                     h_val);
 
 
     EXPECT_EQ(rows, mat.rows());

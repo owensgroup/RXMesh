@@ -25,7 +25,7 @@ __global__ static void sparse_mat_prescan(
     using HandleT = typename InputHandle<op>::type;
     using IterT   = typename IteratorType<op>::type;
 
-    if constexpr (op == Op::V || op == Op::E || op == Op::F) {
+    if constexpr (op == Op::V || op == Op::E || op == Op::F || op == Op::T) {
         // block-diagonal matrix
         for_each<op, blockThreads>(context, [&](const HandleT& h) {
             IndexT offset =
@@ -86,7 +86,7 @@ __global__ static void sparse_mat_col_fill(
 
     using IterHandle = typename IterT::Handle;
 
-    if constexpr (op == Op::V || op == Op::E || op == Op::F) {
+    if constexpr (op == Op::V || op == Op::E || op == Op::F || op == Op::T) {
         // block-diagonal matrix
         for_each<op, blockThreads>(context, [&](const HandleT& h) {
             IndexT v_id =

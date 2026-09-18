@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "rxmesh/rxmesh_static.h"
-#include "rxmesh/util/MshLoader.h"
+#include "rxmesh/util/msh_io.h"
 #include "rxmesh/util/macros.h"
 #include "rxmesh/util/util.h"
 

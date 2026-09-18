@@ -8,7 +8,7 @@
 #include "gtest/gtest.h"
 
 #include "rxmesh/rxmesh_static.h"
-#include "rxmesh/util/MshLoader.h"
+#include "rxmesh/util/msh_io.h"
 #include "rxmesh/util/import_obj.h"
 #include "rxmesh/util/report.h"
 #include "rxmesh_test.h"

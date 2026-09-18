@@ -64,7 +64,7 @@ __global__ static void hess_matvec_scalar_kernel(
     };
 
     // Unary queries
-    if constexpr (op == Op::V || op == Op::E || op == Op::F) {
+    if constexpr (op == Op::V || op == Op::E || op == Op::F || op == Op::T) {
 
         for_each<op, blockThreads>(context, [&](const LossHandleT& fh) {
             // eval the user function
@@ -168,7 +168,7 @@ __global__ static void diff_scalar_kernel_passive(
     auto block = cooperative_groups::this_thread_block();
 
     // Unary queries
-    if constexpr (op == Op::V || op == Op::E || op == Op::F) {
+    if constexpr (op == Op::V || op == Op::E || op == Op::F || op == Op::T) {
 
         for_each<op, blockThreads>(context, [&](const LossHandleT& fh) {
             DiffHandle<PassiveT, LossHandleT> diff_handle(fh);
@@ -225,7 +225,7 @@ __global__ static void diff_scalar_kernel_active(
     auto block = cooperative_groups::this_thread_block();
 
     // Unary queries
-    if constexpr (op == Op::V || op == Op::E || op == Op::F) {
+    if constexpr (op == Op::V || op == Op::E || op == Op::F || op == Op::T) {
 
         for_each<op, blockThreads>(context, [&](const LossHandleT& fh) {
             // eval the user function
@@ -602,7 +602,7 @@ __global__ static void diff_vector_kernel_passive(
     residual.reshape(num_input_elements, InputDim);
 
     // Unary queries
-    if constexpr (op == Op::V || op == Op::E || op == Op::F) {
+    if constexpr (op == Op::V || op == Op::E || op == Op::F || op == Op::T) {
 
         for_each<op, blockThreads>(context, [&](const LossHandleT& fh) {
             DiffHandle<PassiveT, LossHandleT> diff_handle(fh);
@@ -674,7 +674,7 @@ __global__ static void diff_vector_kernel_active(
 
 
     // Unary queries
-    if constexpr (op == Op::V || op == Op::E || op == Op::F) {
+    if constexpr (op == Op::V || op == Op::E || op == Op::F || op == Op::T) {
 
         for_each<op, blockThreads>(context, [&](const LossHandleT& fh) {
             // eval the user function

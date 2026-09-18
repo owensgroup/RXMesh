@@ -91,4 +91,7 @@ using DiffEdgeHandle = DiffHandle<ActiveT, EdgeHandle>;
 template <typename ActiveT>
 using DiffFaceHandle = DiffHandle<ActiveT, FaceHandle>;
 
+template <typename ActiveT>
+using DiffTetHandle = DiffHandle<ActiveT, TetHandle>;
+
 }  // namespace rxmesh

@@ -91,18 +91,18 @@ struct cuDSSCholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
                 reorder_alg = CUDSS_ALG_1;
                 break;
             }
-            case PermuteMethod::GPUND: {
-                reorder_alg = CUDSS_ALG_DEFAULT;
-                DirectSolver<SpMatT, DenseMatOrder>::permute(rx);
-                CUDSS_ERROR(
-                    cudssDataSet(m_cudss_handle,
-                                 m_cudss_data,
-                                 CUDSS_DATA_USER_PERM,
-                                 this->m_d_permute,
-                                 size_t(m_mat->rows() * sizeof(IndexT))));
-                break;
-            }
-            case PermuteMethod::GPUMGND:
+            // case PermuteMethod::GPUND: {
+            //     reorder_alg = CUDSS_ALG_DEFAULT;
+            //     DirectSolver<SpMatT, DenseMatOrder>::permute(rx);
+            //     CUDSS_ERROR(
+            //         cudssDataSet(m_cudss_handle,
+            //                      m_cudss_data,
+            //                      CUDSS_DATA_USER_PERM,
+            //                      this->m_d_permute,
+            //                      size_t(m_mat->rows() * sizeof(IndexT))));
+            //     break;
+            // }
+            // case PermuteMethod::GPUMGND:
             default:
                 reorder_alg = CUDSS_ALG_DEFAULT;
         }
