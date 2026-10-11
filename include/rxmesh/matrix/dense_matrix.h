@@ -20,12 +20,10 @@
 
 namespace rxmesh {
 /**
- * @brief dense matrix use for device and host, inside is a array.
- * The dense matrix is initialized as col major on device.
- * We would only support col major dense matrix for now since that's what
- * cusparse and cusolver wants. However, there is a limited number of operations
- * defined on row major matrices.
- * Order define the storage order of the matrix.
+ * @brief Dense matrix used on the device and host. Column-major is the default
+ * because RXMesh's direct solvers commonly process columns as independent
+ * right-hand sides. Row-major is supported for interleaved per-element values
+ * such as autodiff degrees of freedom. 
  */
 template <typename T, int Order = Eigen::ColMajor>
 struct DenseMatrix
@@ -1370,17 +1368,19 @@ struct DenseMatrix
     __host__ void init_cudss()
     {
 #ifdef USE_CUDSS
-        // RXMesh solver paths currently consume column-major dense matrices.
-        // A row-major indexing/output view must not advertise a column-major
-        // cuDSS descriptor.
-        if constexpr (Order == Eigen::ColMajor) {
-            if (m_d_val != nullptr &&
-                (std::is_floating_point_v<T> || std::is_same_v<T, cuComplex> ||
-                 std::is_same_v<T, cuDoubleComplex>)) {
-                if (m_cudss_matrix) {
-                    CUDSS_ERROR(cudssMatrixDestroy(m_cudss_matrix));
-                    m_cudss_matrix = nullptr;
-                }
+        if (m_d_val != nullptr &&
+            (std::is_floating_point_v<T> || std::is_same_v<T, cuComplex> ||
+             std::is_same_v<T, cuDoubleComplex>)) {
+
+            if (m_cudss_matrix) {
+                CUDSS_ERROR(cudssMatrixDestroy(m_cudss_matrix));
+                m_cudss_matrix = nullptr;
+            }
+
+            // cuDSS currently accepts only column-major dense matrices. A
+            // one-column matrix has identical storage in either Eigen order.
+            // this is the flattened representation used by NewtonSolver.
+            if (Order == Eigen::ColMajor || m_num_cols == 1) {
                 CUDSS_ERROR(cudssMatrixCreateDn(&m_cudss_matrix,
                                                 m_num_rows,
                                                 m_num_cols,

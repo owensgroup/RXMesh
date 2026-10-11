@@ -244,6 +244,93 @@ TEST(Solver, cuDSSCholesky)
     X.release();
     B.release();
 }
+
+template <typename T, uint32_t blockThreads>
+__global__ static void setup_cudss_row_major_vector(
+    const Context                   context,
+    SparseMatrix<T>                 A,
+    DenseMatrix<T, Eigen::RowMajor> X,
+    DenseMatrix<T, Eigen::RowMajor> B,
+    const T                         diagonal_shift)
+{
+    auto set = [&](VertexHandle& vh, const VertexIterator& iter) {
+        B(vh, 0) = T(iter.size());
+        X(vh, 0) = T(0);
+
+        for (uint32_t i = 0; i < iter.size(); ++i) {
+            A(vh, iter[i]) = T(1);
+        }
+        A(vh, vh) = T(2 * iter.size()) + diagonal_shift;
+    };
+
+    auto                block = cooperative_groups::this_thread_block();
+    Query<blockThreads> query(context);
+    ShmemAllocator      shrd_alloc;
+    query.dispatch<Op::VV>(block, shrd_alloc, set);
+}
+
+TEST(Solver, cuDSSCholeskyRowMajorNewtonVector)
+{
+    RXMeshStatic rx(STRINGIFY(INPUT_DIR) "sphere3.obj");
+
+    using DenseMatT = DenseMatrix<float, Eigen::RowMajor>;
+
+    const uint32_t      num_vertices = rx.get_num_vertices();
+    SparseMatrix<float> A(rx, Op::VV);
+    DenseMatT           X(rx, num_vertices, 1, LOCATION_ALL);
+    DenseMatT           B(rx, num_vertices, 1, LOCATION_ALL);
+
+    // Match NewtonSolver, which reshapes its interleaved buffers immediately
+    // before passing them to the direct solver.
+    X.reshape(num_vertices, 1);
+    B.reshape(num_vertices, 1);
+    ASSERT_NE(X.get_cudss_matrix(), nullptr);
+    ASSERT_NE(B.get_cudss_matrix(), nullptr);
+
+    cuDSSCholeskySolver<SparseMatrix<float>, DenseMatT::OrderT> solver(&A);
+
+    auto solve_and_check = [&](float diagonal_shift) {
+        rx.run_kernel<256>({Op::VV},
+                           setup_cudss_row_major_vector<float, 256>,
+                           A,
+                           X,
+                           B,
+                           diagonal_shift);
+
+        solver.pre_solve(rx, B, X);
+        solver.solve(B, X);
+
+        DenseMatT Ax(rx, num_vertices, 1, LOCATION_ALL);
+        A.multiply(X, Ax);
+        B.move(DEVICE, HOST);
+        Ax.move(DEVICE, HOST);
+
+        for (int i = 0; i < Ax.rows(); ++i) {
+            EXPECT_NEAR(Ax(i), B(i), 1e-3);
+        }
+
+        Ax.release();
+    };
+
+    solve_and_check(100.f);
+
+    // NewtonSolver reshapes its row-major per-element data before and after
+    // every solve. Recreate both descriptors here before refactorization.
+    B.reshape(1, num_vertices);
+    X.reshape(1, num_vertices);
+    ASSERT_EQ(B.get_cudss_matrix(), nullptr);
+    ASSERT_EQ(X.get_cudss_matrix(), nullptr);
+    B.reshape(num_vertices, 1);
+    X.reshape(num_vertices, 1);
+    ASSERT_NE(B.get_cudss_matrix(), nullptr);
+    ASSERT_NE(X.get_cudss_matrix(), nullptr);
+
+    solve_and_check(70.f);
+
+    A.release();
+    X.release();
+    B.release();
+}
 #endif
 
 TEST(Solver, QR)

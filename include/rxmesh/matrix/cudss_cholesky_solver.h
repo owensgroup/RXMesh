@@ -51,6 +51,11 @@ struct cuDSSCholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
                            DenseMatrix<T, DenseMatOrder>& B_mat,
                            DenseMatrix<T, DenseMatOrder>& X_mat)
     {
+        // reshape() recreates a DenseMatrix descriptor, so do not retain the
+        // descriptors captured by a previous solve.
+        m_B = B_mat.get_cudss_matrix();
+        m_X = X_mat.get_cudss_matrix();
+
         if (m_first_pre_solve) {
             permute(rx, B_mat, X_mat);
             analyze_pattern();
@@ -68,10 +73,6 @@ struct cuDSSCholeskySolver : public DirectSolver<SpMatT, DenseMatOrder>
                          DenseMatrix<T, DenseMatOrder>& B_mat,
                          DenseMatrix<T, DenseMatOrder>& X_mat)
     {
-        if (m_first_pre_solve) {
-            m_B = B_mat.get_cudss_matrix();
-            m_X = X_mat.get_cudss_matrix();
-        }
         // set reorder type
         cudssAlgType_t reorder_alg;
         switch (this->m_perm) {

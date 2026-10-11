@@ -50,7 +50,9 @@ struct DiffScalarProblem
     // TODO use OptVarHandleT to define the Hessian matrix sparsity
     // right now, we always assume VV sparsity pattern but we can derive
     // different sparsity, e.g., FF
-    using HessMatT  = HessianSparseMatrix<T, VariableDim>;
+    using HessMatT = HessianSparseMatrix<T, VariableDim>;
+    // Keep each element's variables contiguous. This matches the Hessian DOF
+    // index: element_id * VariableDim + local_variable.
     using DenseMatT = DenseMatrix<T, Eigen::RowMajor>;
 
     using IndexT = typename HessMatT::IndexT;
