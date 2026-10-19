@@ -5,6 +5,7 @@
 #include "rxmesh/util/macros.h"
 
 namespace rxmesh {
+// Returns -1 when the architecture's CUDA core count is unknown.
 inline int convert_SMV_to_cores(int major, int minor)
 {
     // Taken from Nvidia helper_cuda.h to get the number of SM and cuda cores
@@ -29,13 +30,14 @@ inline int convert_SMV_to_cores(int major, int minor)
         {0x61, 128},  // Pascal Generation (SM 6.1) GP10x class
         {0x62, 128},  // Pascal Generation (SM 6.2) GP10x class
         {0x70, 64},   // Volta Generation (SM 7.0) GV100 class
-        {0x72, 64},
-        {0x75, 64},
-        {0x80, 64},
-        {0x86, 128},
-        {0x87, 128},
-        {0x89, 128},
-        {0x90, 128},
+        {0x72, 64},  {0x75, 64},  {0x80, 64},  {0x86, 128},
+        {0x87, 128}, {0x89, 128}, {0x90, 128}, {0xa0, 128},  // SM 10.0
+        {0xa1, 128},                                         // SM 10.1
+        {0xa3, 128},                                         // SM 10.3
+        {0xa7, 128},                                         // SM 10.7
+        {0xb0, 128},                                         // SM 11.0
+        {0xc0, 128},                                         // SM 12.0
+        {0xc1, 128},                                         // SM 12.1
         {-1, -1}};
 
     int index = 0;
@@ -47,14 +49,8 @@ inline int convert_SMV_to_cores(int major, int minor)
         index++;
     }
 
-    // If we don't find the values, we default use the previous one to run
-    // properly
-    RXMESH_WARN(
-        "MapSMtoCores for SM {}.{} is undefined.  Default to use {} Cores/SM\n",
-        major,
-        minor,
-        nGpuArchCoresPerSM[index - 1].Cores);
-    return nGpuArchCoresPerSM[index - 1].Cores;
+    // Unknown architecture: callers must omit the core count.
+    return -1;
 }
 
 inline cudaDeviceProp cuda_query(const int dev)
@@ -84,11 +80,19 @@ inline cudaDeviceProp cuda_query(const int dev)
         "Compute Capability: {}.{}", (int)dev_prop.major, (int)dev_prop.minor);
     RXMESH_INFO("Total amount of global memory (MB): {0:.1f}",
                 (float)dev_prop.totalGlobalMem / 1048576.0f);
-    RXMESH_INFO("{} Multiprocessors, {} CUDA Cores/MP: {} CUDA Cores",
-                dev_prop.multiProcessorCount,
-                convert_SMV_to_cores(dev_prop.major, dev_prop.minor),
-                convert_SMV_to_cores(dev_prop.major, dev_prop.minor) *
-                    dev_prop.multiProcessorCount);
+    const int cores_per_sm =
+        convert_SMV_to_cores(dev_prop.major, dev_prop.minor);
+    if (cores_per_sm > 0) {
+        RXMESH_INFO("{} Multiprocessors, {} CUDA Cores/MP: {} CUDA Cores",
+                    dev_prop.multiProcessorCount,
+                    cores_per_sm,
+                    cores_per_sm * dev_prop.multiProcessorCount);
+    } else {
+        RXMESH_WARN("{} Multiprocessors; CUDA core count unknown for SM {}.{}",
+                    dev_prop.multiProcessorCount,
+                    dev_prop.major,
+                    dev_prop.minor);
+    }
     RXMESH_INFO("Maximum # blocks per SM: {}",
                 dev_prop.maxBlocksPerMultiProcessor);
     RXMESH_INFO("ECC support: {}",

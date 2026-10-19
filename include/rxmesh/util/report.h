@@ -169,9 +169,11 @@ struct Report
         // SM
         add_member("Multiprocessors", devProp.multiProcessorCount, subdoc);
 #ifdef __NVCC__
-        add_member("CUDA Cores/MP",
-                   convert_SMV_to_cores(devProp.major, devProp.minor),
-                   subdoc);
+        const int cores_per_sm =
+            convert_SMV_to_cores(devProp.major, devProp.minor);
+        if (cores_per_sm > 0) {
+            add_member("CUDA Cores/MP", cores_per_sm, subdoc);
+        }
 #endif
 
         // Clocks

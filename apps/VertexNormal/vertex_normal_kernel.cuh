@@ -4,6 +4,8 @@
 #include "rxmesh/context.h"
 #include "rxmesh/query.h"
 
+#include <glm/gtx/norm.hpp>
+
 /**
  * vertex_normal()
  */
