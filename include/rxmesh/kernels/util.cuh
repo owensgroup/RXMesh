@@ -2,8 +2,45 @@
 #include <cuda_runtime.h>
 #include <stdint.h>
 
+#include "rxmesh/util/macros.h"
+#include "rxmesh/util/timer.h"
+
 namespace rxmesh {
 
+static __global__ void warmup_kernel(float* buffer)
+{
+    const int tid = blockDim.x * blockIdx.x + threadIdx.x;
+    float     x   = 1.0f + float(tid) * 1e-6f;
+
+    for (int i = 0; i < 8192; ++i) {
+        x = fmaf(x, 1.000001f, 0.000001f);
+    }
+    buffer[0] = x;
+}
+
+inline void warmup_gpu(float ms, cudaStream_t stream = NULL)
+{
+    int device;
+    CUDA_ERROR(cudaGetDevice(&device));
+
+    cudaDeviceProp prop{};
+    CUDA_ERROR(cudaGetDeviceProperties(&prop, device));
+
+    constexpr int threads = 256;
+    const int     blocks  = 32 * prop.multiProcessorCount;
+
+    float* buffer = nullptr;
+    CUDA_ERROR(cudaMalloc(&buffer, sizeof(float)));
+
+    GPUTimer timer(stream);
+    timer.start();
+    do {
+        warmup_kernel<<<blocks, threads, 0, stream>>>(buffer);
+        timer.stop();
+    } while (timer.elapsed_millis() < ms);
+
+    GPU_FREE(buffer);
+}
 template <typename attrT>
 __global__ void memcopy(attrT*         d_dest,
                         const attrT*   d_src,
