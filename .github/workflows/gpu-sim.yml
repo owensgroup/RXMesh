@@ -1,0 +1,79 @@
+name: GPU tests (simulated)
+
+# Optional, non-required check. Ubuntu.yml builds RXMesh but cannot run the
+# tests, since GitHub's runners have no GPU. This workflow runs a subset of the
+# gtest unit tests on a simulated NVIDIA H100 (https://github.com/pantheongpu/pantheonsim).
+# A simulator cannot reproduce hardware-specific behaviour or timing, so it
+# complements real-GPU testing and does not replace it.
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'include/**'
+      - 'tests/**'
+      - 'cmake/**'
+      - 'input/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/gpu-sim.yml'
+  pull_request:
+    paths:
+      - 'include/**'
+      - 'tests/**'
+      - 'cmake/**'
+      - 'input/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/gpu-sim.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    name: gtest on a simulated H100
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up the simulated GPU and CUDA toolkit
+        uses: pantheongpu/setup-pantheonsim@dda0c8df8d72627c295edbae525354ba2bcb1687 # v0.1.4
+        with:
+          gpu: nvidia/h100
+          cuda-toolkit: "12.6"
+
+      # 80-virtual embeds PTX only: the simulator JIT-compiles PTX and does not
+      # run SASS. It stands in for the CUDA runtime, so the shared one is linked.
+      # Polyscope (the viewer) and the apps are not needed for the unit tests.
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_CUDA_ARCHITECTURES=80-virtual
+          -DCMAKE_CUDA_RUNTIME_LIBRARY=Shared
+          -DRX_USE_POLYSCOPE=OFF -DRX_BUILD_APPS=OFF -DRX_BUILD_TESTS=ON
+
+      - name: Build the unit tests
+        run: vgpu run --preload cmake --build build --target RXMesh_test -j 4
+
+      # Tests left out:
+      #   Util.Scan, Util.AtomicMin,   the simulator stops them with an out-of-bounds error, e.g.
+      #   Util.AtomicAdd               "device memory read of 4 bytes ... runs past the end of the
+      #                                2-byte allocation" (the tests read or write past their buffer;
+      #                                a real card pads allocations, so it goes unseen)
+      #   RXMeshDynamic.TriangleRefinement  reads input/rocker-arm.obj, which the repository lacks
+      #   RXMeshStatic.TetQueries      too slow on the simulator (about 107 minutes in an earlier run)
+      # The cuDSS tests are only compiled with -DRX_USE_CUDSS=ON, so they are not in this build.
+      - name: Unit tests on the simulated GPU
+        timeout-minutes: 60
+        run: |
+          T="$(find build -name RXMesh_test -type f | head -n 1)"
+          EXCLUDED='Util.Scan:Util.AtomicMin:Util.AtomicAdd:RXMeshDynamic.TriangleRefinement:RXMeshStatic.TetQueries'
+          vgpu run "$T" --gtest_filter="-$EXCLUDED"
